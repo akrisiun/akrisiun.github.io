@@ -1,0 +1,181 @@
+﻿<!DOCTYPE html>
+<html><head><title>localFileSystem-CLI.cs</title><link rel="stylesheet" href="../../../styles.css"><script src="../../../scripts.js"></script></head>
+<body class="cB" onload="i(172);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#fcmdp/base-plugins/fs/localFileSystem-CLI.cs" target="_top">base-plugins\fs\localFileSystem-CLI.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#fcmdp" target="_top">fcmd\fcmdp.csproj</a> (fcmdp)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/* The File Commander base plugins - Local filesystem adapter
+ * The command line helper
+ * (C) The File Commander Team - https://github.com/atauenis/fcmd
+ * (C) 2014, Alexander Tauenis (atauenis@yandex.ru)
+ * (C) 2014, Evgeny Akhtimirov (wilbit@me.com)
+ * Contributors should place own signs here.
+ */</span>
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">Xwt</span>;
+<b>using</b> <span class="i n">pluginner</span>.<span class="i n">Toolkit</span>;
+
+<b>namespace</b> <span class="i n">fcmd</span>.<span class="i n">base_plugins</span>.<span class="i n">fs</span>
+{
+	<a href="../../P/4f8a45c7e31df06c.html" target="s" class="k">partial</a> <b>class</b> <a id="4f8a45c7e31df06c" href="../../R/4f8a45c7e31df06c.html" target="n" data-glyph="0,0" class="t t"><span id="cf9e296c4dbdd4a1">localFileSystem</span></a>
+    {
+<span class="k preprocess">#</span><span class="k preprocess">pragma</span> <span class="k preprocess">warning</span> <span class="k preprocess">disable</span> 0649, 0414, 0067  <span class="c">// is assigned but never used</span>
+ 
+        <b>public event</b> <span class="i n">pluginner</span>.<a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="41d1b3c6b86f5500" href="../../R/41d1b3c6b86f5500.html" target="n" data-glyph="30,1" class="i">CLIstdoutDataReceived</a>;
+        <b>public event</b> <span class="i n">pluginner</span>.<a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="e1f428104c9617eb" href="../../R/e1f428104c9617eb.html" target="n" data-glyph="30,1" class="i">CLIstderrDataReceived</a>;
+        <b>public event</b> <span class="i n">pluginner</span>.<a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="ffe2eee6b480241e" href="../../R/ffe2eee6b480241e.html" target="n" data-glyph="30,1" class="i">CLIpromptChanged</a>;
+ 
+        <b>protected void</b> <a id="5680b00d72d84843" href="../../R/5680b00d72d84843.html" target="n" data-glyph="75,1" class="i method">RaiseCLIpromptChanged</a>(<b>string</b> <span id="r0 rd" class="r0 r">data</span>)
+		{
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">WPF</span>
+<span class="e">            Application.Invoke(delegate()
+			{
+				var handler = CLIpromptChanged;
+				if (handler != null) {
+					handler(data);
+				}
+			});
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+		}
+
+		<b>protected void</b> <a id="a4672421b2308e3d" href="../../R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">RaiseCLIstderrDataReceived</a>(<b>string</b> <span id="r1 rd" class="r1 r">data</span>)
+		{
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">WPF</span>
+<span class="e">			Application.Invoke(delegate()
+			{
+				var handler = CLIstderrDataReceived;
+				if (handler != null) {
+					handler(data);
+				}
+			});
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        }
+ 
+        <a href="@0@System/A.html#f8b2e604d6f1fe04" class="t t">Process</a> <a id="3c6cc092375a357a" href="../../R/3c6cc092375a357a.html" target="n" data-glyph="46,1" class="i field">CLIproc</a> = <b>new</b> <a href="@0@System/A.html#47660cba985bdf77" class="t constructor">Process</a>();
+
+        <b>public string</b> <a id="6a644a1379b08e0f" href="../../R/6a644a1379b08e0f.html" target="n" data-glyph="72,1" class="i method">NoPrefix</a>(<b>string</b> <span id="r2 rd" class="r2 r">dir</span>)
+        {
+            <b>if</b> (<span class="r2 r">dir</span> != <b>null</b> &amp;&amp; <span class="r2 r">dir</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="localFileSystem.cs.html#ea3f0b6595e77ce0" class="i field">FilePrefix</a>))
+                <b>return</b> <span class="r2 r">dir</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="localFileSystem.cs.html#ea3f0b6595e77ce0" class="i field">FilePrefix</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+            <b>return</b> <span class="r2 r">dir</span>;
+        }
+
+        <b>public void</b> <a id="19074546e72ac085" href="../../R/19074546e72ac085.html" target="n" data-glyph="72,1" class="i method">CLIstdinWriteLine</a>(<b>string</b> <span id="r3 rd" class="r3 r">StdIn</span>)
+		{
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">WPF</span>
+<span class="e">			if (!CLIsomethingIsRunning) {
+				try
+				{
+					int ParamStart = StdIn.IndexOf(&quot; &quot;);
+
+					ProcessStartInfo psi;
+					if (ParamStart &gt;= 0)
+						psi = new ProcessStartInfo(StdIn.Substring(0, ParamStart), StdIn.Substring(ParamStart + 1));
+					else
+						psi = new ProcessStartInfo(StdIn);
+					psi.WorkingDirectory = NoPrefix(CurrentDirectory);
+					psi.RedirectStandardOutput = true;
+					psi.RedirectStandardInput = true;
+					psi.RedirectStandardError = true;
+					psi.UseShellExecute = false;
+					psi.CreateNoWindow = true;
+					CLIsomethingIsRunning = true;
+
+					CLIproc = Process.Start(psi);
+					string procname = CLIproc.ProcessName;
+					Console.WriteLine(&quot;Started: &quot; + procname);
+					RaiseCLIpromptChanged(&quot;FC: &quot; + procname + &quot;&gt;&quot;);
+					CLIproc.EnableRaisingEvents = true;
+					CLIproc.OutputDataReceived += CLIproc_OutputDataReceived;
+					CLIproc.ErrorDataReceived += CLIproc_ErrorDataReceived;
+					CLIproc.BeginOutputReadLine();
+					CLIproc.BeginErrorReadLine();
+
+					while (!CLIproc.HasExited)
+					{
+						try
+						{
+							Xwt.Application.MainLoop.DispatchPendingEvents();
+						}
+						catch {
+							//for incresing stability on systems with bad RAM
+						}
+					}
+					CLIsomethingIsRunning = false;
+					Console.WriteLine(&quot;Stopped: &quot; + procname);
+					RaiseCLIpromptChanged(&quot;FC: &quot; + CurrentDirectory.Replace(localFileSystem.FilePrefix, string.Empty) + &quot;&gt;&quot;);
+				}
+				catch (Exception ex)
+				{
+					CLIsomethingIsRunning = false;
+					bool inCmd = false;
+					try
+					{
+						//if the OS is Windows NT, try to run the command in CMD.EXE
+						if (OSVersionEx.Platform == PlatformID.Win32NT){
+							new Process {StartInfo = new ProcessStartInfo(&quot;cmd.exe&quot;, &quot;/C \&quot;&quot; + StdIn + &quot; &amp;&amp; pause\&quot;&quot;)}.Start();
+							inCmd = true;
+						}
+					}
+					catch
+					{ RaiseCLIstderrDataReceived(Localizator.GetString(&quot;CantRunEXE&quot;) + &quot;cmd.exe /C \&quot;&quot; + StdIn + &quot; &amp;&amp; pause\&quot;&quot; + &quot;\n&quot; + ex.Message); }
+					if(!inCmd)
+					RaiseCLIstderrDataReceived(Localizator.GetString (&quot;CantRunEXE&quot;) + StdIn + &quot;\n&quot; + ex.Message);
+				}
+			}
+			else {
+				CLIproc.StandardInput.WriteLine(StdIn);
+			}
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+		}
+ 
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">WPF</span>
+<span class="e">		Boolean CLIsomethingIsRunning = false;
+
+		private void CLIproc_Exited(object sender, EventArgs e)
+		{
+			CLIsomethingIsRunning = false;
+			CLIproc.EnableRaisingEvents = false;//на всякий случай :-)
+		}
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+ 
+        <b>private void</b> <a id="70e929a774eaef91" href="../../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">CLIproc_ErrorDataReceived</a>(<b>object</b> <span id="r4 rd" class="r4 r">sender</span>, <a href="@0@System/A.html#f1cfee83ea96c1cc" class="t t">DataReceivedEventArgs</a> <span id="r5 rd" class="r5 r">e</span>)
+		{
+			<b>if</b> (<a href="#3c6cc092375a357a" class="i field">CLIproc</a>.<a href="@0@System/A.html#4ee55b27a25daffb" class="i property">HasExited</a> || <span class="r5 r">e</span>.<a href="@0@System/A.html#b9b1f57e1959be86" class="i property">Data</a> == <b>null</b>) {
+				<b>return</b>;
+			}
+
+			<a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="k">var</a> <span id="r6 rd" class="r6 r">_CLIstderrDataReceived</span> = <a href="#e1f428104c9617eb" class="i">CLIstderrDataReceived</a>;
+			<b>if</b> (<span class="r6 r">_CLIstderrDataReceived</span> != <b>null</b>) {
+				<span class="r6 r">_CLIstderrDataReceived</span>(<span class="r5 r">e</span>.<a href="@0@System/A.html#b9b1f57e1959be86" class="i property">Data</a>);
+				<b>return</b>;
+			}
+
+			<span class="i n">Xwt</span>.<a href="/Xwt3/A.html#687215caac5b1b53" class="t t">Application</a>.<a href="/Xwt3/A.html#19c640ba41a65ffb" class="i method">Invoke</a>(() =&gt; <span class="i n">Xwt</span>.<a href="/Xwt3/A.html#1e0854feacd0db6d" class="t t">MessageDialog</a>.<a href="/Xwt3/A.html#345b746b6874b51e" class="i method">ShowWarning</a>(<a href="#3c6cc092375a357a" class="i field">CLIproc</a>.<a href="@0@System/A.html#7100510dd3deb937" class="i property">ProcessName</a>, <span class="r5 r">e</span>.<a href="@0@System/A.html#b9b1f57e1959be86" class="i property">Data</a>));
+		}
+
+		<b>private void</b> <a id="0fdc7299a1161aaf" href="../../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">CLIproc_OutputDataReceived</a>(<b>object</b> <span id="r7 rd" class="r7 r">sender</span>, <a href="@0@System/A.html#f1cfee83ea96c1cc" class="t t">DataReceivedEventArgs</a> <span id="r8 rd" class="r8 r">e</span>)
+		{
+			<a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="k">var</a> <span id="r9 rd" class="r9 r">_CLIstdoutDataReceived</span> = <a href="#41d1b3c6b86f5500" class="i">CLIstdoutDataReceived</a>;
+			<b>if</b> (<span class="r9 r">_CLIstdoutDataReceived</span> != <b>null</b>) {
+				<span class="r9 r">_CLIstdoutDataReceived</span>(<span class="r8 r">e</span>.<a href="@0@System/A.html#b9b1f57e1959be86" class="i property">Data</a>);
+				<b>return</b>;
+			}
+
+			<b>try</b> {
+				<a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#5ac7c4fda643413b" class="i method">WriteLine</a> (<span class="s">&quot;STDOUT of &quot;</span> + <a href="#3c6cc092375a357a" class="i field">CLIproc</a>.<a href="@0@System/A.html#7100510dd3deb937" class="i property">ProcessName</a> + <span class="s">&quot;: &quot;</span> + <span class="r8 r">e</span>.<a href="@0@System/A.html#b9b1f57e1959be86" class="i property">Data</a> + <span class="s">&quot;\n&quot;</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a>) {
+				<span class="c">/*do nothing, perhaps the data came later than the process was ended*/</span>
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

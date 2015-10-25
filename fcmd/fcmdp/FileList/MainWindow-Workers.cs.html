@@ -1,0 +1,217 @@
+﻿<!DOCTYPE html>
+<html><head><title>MainWindow-Workers.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(208);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#fcmdp/FileList/MainWindow-Workers.cs" target="_top">FileList\MainWindow-Workers.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#fcmdp" target="_top">fcmd\fcmdp.csproj</a> (fcmdp)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/* The File Commander main window
+ * Background workers
+ * (C) The File Commander Team - https://github.com/atauenis/fcmd
+ * (C) 2013-14, Alexander Tauenis (atauenis@yandex.ru)
+ * (C) 2014, Evgeny Akhtimirov (wilbit@me.com)
+ * Contributors should place own signs here.
+ */</span>
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">pluginner</span>;
+<b>using</b> <span class="i n">pluginner</span>.<span class="i n">Toolkit</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+ 
+<b>namespace</b> <span class="i n">fcmd</span>
+{
+    <b>public</b> <a href="../P/6628552ccd0b005b.html" target="s" class="k">partial</a> <b>class</b> <a id="6628552ccd0b005b" href="../R/6628552ccd0b005b.html" target="n" data-glyph="0,0" class="t t">MainWindow</a>
+    {
+        <span class="c">/* ЗАМЕТКА РАЗРАБОТЧИКУ
+		 * 
+		 * В данном файле размещаются функции для работы с файлами и каталогами.
+		 * Данные функции запускаются в отдельных от UI потоках из кода
+		 * файла MainWindow-Actions.cs . Всякая функция должна иметь
+		 * префикс Do, означающий её чисто утилитарную принадлежность.
+		 * 
+		 * Вызовы пользовательского интерфейса (XWT) должны производиться через
+		 * вызывалку Xwt.Application.Invoke(new Action(delegate { КОД ПОТОКА ИНТЕРФЕЙСА }));
+		 * в противном случае возможны глюки (вылеты WPF, зависания и лаги GTK).
+		 */</span>
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Background file copier</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&#39;</span><span class="r0 r">SourceFS</span><span class="c">&#39;</span><span class="c">&gt;</span><span class="c">Source FS.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&#39;</span><span class="r1 r">DestinationFS</span><span class="c">&#39;</span><span class="c">&gt;</span><span class="c">Destination FS.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&#39;</span><span class="r2 r">SourceURL</span><span class="c">&#39;</span><span class="c">&gt;</span><span class="c">Source file URL.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&#39;</span><span class="r3 r">DestinationURL</span><span class="c">&#39;</span><span class="c">&gt;</span><span class="c">Destination URL.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">Feedback</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">If at the destination URL a file exists, a ReplaceQuestionDialog will be shown. This argument is the place, where the user&#39;s last choose should be saved.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">AC</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The instance of AsyncCopy class that should be used to copy the file.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>protected void</b> <a id="57d90feff7fa1ed5" href="../R/57d90feff7fa1ed5.html" target="n" data-glyph="75,1" class="i method">DoCp</a>(<a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a> <span id="r0 rd" class="r0 r">SourceFS</span>, <a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a> <span id="r1 rd" class="r1 r">DestinationFS</span>, <b>string</b> <span id="r2 rd" class="r2 r">SourceURL</span>, <b>string</b> <span id="r3 rd" class="r3 r">DestinationURL</span>,
+            <b>ref</b> <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a> <span id="r4 rd" class="r4 r">Feedback</span>, <a href="Actions/AsyncCopy.cs.html#c078a9625c561f8c" class="t t">AsyncCopy</a> <span id="r5 rd" class="r5 r">AC</span>)
+        {
+            <b>if</b> (<span class="r2 r">SourceURL</span> == <span class="r3 r">DestinationURL</span>)
+            {
+                <b>string</b> <span id="r6 rd" class="r6 r">itself</span> = <a href="Localizator.cs.html#0b0c6268a53237f4" class="t t">Localizator</a>.<a href="Localizator.cs.html#546af5a79d2e88a9" class="i method">GetString</a>(<span class="s">&quot;CantCopySelf&quot;</span>);
+                <b>string</b> <span id="r7 rd" class="r7 r">toshow</span> = <b>string</b>.<a href="@0@mscorlib/A.html#7432dab173fae5fc" class="i method">Format</a>(<a href="Localizator.cs.html#0b0c6268a53237f4" class="t t">Localizator</a>.<a href="Localizator.cs.html#546af5a79d2e88a9" class="i method">GetString</a>(<span class="s">&quot;CantCopy&quot;</span>), <span class="r0 r">SourceFS</span>.<a href="/pluginner/A.html#147a0dc4280adc32" class="i method">GetMetadata</a>(<span class="r2 r">SourceURL</span>).<a href="/pluginner/A.html#52470894417ea42a" class="i field">Name</a>, <span class="r6 r">itself</span>);
+ 
+                <span class="i n">Xwt</span>.<a href="/Xwt3/A.html#687215caac5b1b53" class="t t">Application</a>.<a href="/Xwt3/A.html#19c640ba41a65ffb" class="i method">Invoke</a>(<b>delegate</b> { <span class="i n">Xwt</span>.<a href="/Xwt3/A.html#1e0854feacd0db6d" class="t t">MessageDialog</a>.<a href="/Xwt3/A.html#f9765707d4c04b4a" class="i method">ShowWarning</a>(<span class="r7 r">toshow</span>); });
+                <span class="c">//calling the msgbox in non-main threads causes some UI bugs, so push this call into main thread</span>
+                <b>return</b>;
+            }
+ 
+            <b>if</b> (<span class="r1 r">DestinationFS</span>.<a href="/pluginner/A.html#49855afefc0d3fe4" class="i method">FileExists</a>(<span class="r3 r">DestinationURL</span>))
+            {
+
+                <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a> <span id="r8 rd" class="r8 r">rpd</span> = <b>null</b>;
+                <b>bool</b> <span id="r9 rd" class="r9 r">ready</span> = <b>false</b>;
+
+                <span class="i n">Xwt</span>.<a href="/Xwt3/A.html#687215caac5b1b53" class="t t">Application</a>.<a href="/Xwt3/A.html#19c640ba41a65ffb" class="i method">Invoke</a>(
+                    <b>delegate</b>
+                    {
+                        <span class="r8 r">rpd</span> = <b>new</b> <a href="Actions/ReplaceQuestionDialog.cs.html#9fba6f30c1b77ae1" class="t constructor">ReplaceQuestionDialog</a>(<span class="r1 r">DestinationFS</span>.<a href="/pluginner/A.html#147a0dc4280adc32" class="i method">GetMetadata</a>(<span class="r3 r">DestinationURL</span>).<a href="/pluginner/A.html#52470894417ea42a" class="i field">Name</a>);
+                        <span class="r9 r">ready</span> = <b>true</b>;
+                    }
+                );
+                <b>do</b> { } <b>while</b> (!<span class="r9 r">ready</span>);
+                <span class="r9 r">ready</span> = <b>false</b>;
+ 
+                <a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="k">var</a> <span id="r10 rd" class="r10 r">ClickedButton</span> = <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#8c8539d94109a707" class="i field">Skip</a>;
+                <span class="i n">Xwt</span>.<a href="/Xwt3/A.html#687215caac5b1b53" class="t t">Application</a>.<a href="/Xwt3/A.html#19c640ba41a65ffb" class="i method">Invoke</a>(
+                    <b>delegate</b>
+                    {
+                        <span class="r10 r">ClickedButton</span> = <span class="r8 r">rpd</span>.<a href="Actions/ReplaceQuestionDialog.cs.html#2df2b6ccecfd9a11" class="i method">Run</a>();
+                        <span class="r9 r">ready</span> = <b>true</b>;
+                    }
+                );
+ 
+                <span class="c">// TODO: Wait</span>
+                <b>do</b> { } <b>while</b> (!<span class="r9 r">ready</span>);
+ 
+                <b>switch</b> (<span class="r10 r">ClickedButton</span>)
+                {
+                    <b>case</b> <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#dde3dfcc10f51ad9" class="i field">Replace</a>:
+                        <span class="c">//continue execution</span>
+                        <span class="r4 r">Feedback</span> = <span class="r8 r">rpd</span>.<a href="Actions/ReplaceQuestionDialog.cs.html#29a7ac74f089b2c9" class="i property">ChoosedButton</a>;
+                        <b>break</b>;
+                    <b>case</b> <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#eacf55066a99bd32" class="i field">ReplaceAll</a>:
+                        <span class="c">//continue execution</span>
+                        <span class="r4 r">Feedback</span> = <span class="r8 r">rpd</span>.<a href="Actions/ReplaceQuestionDialog.cs.html#29a7ac74f089b2c9" class="i property">ChoosedButton</a>;
+                        <b>break</b>;
+                    <b>case</b> <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#f300f75223c2d66a" class="i field">ReplaceOld</a>:
+                        <span class="r4 r">Feedback</span> = <span class="r8 r">rpd</span>.<a href="Actions/ReplaceQuestionDialog.cs.html#29a7ac74f089b2c9" class="i property">ChoosedButton</a>;
+                        <b>if</b> (<span class="r0 r">SourceFS</span>.<a href="/pluginner/A.html#147a0dc4280adc32" class="i method">GetMetadata</a>(<span class="r2 r">SourceURL</span>).<a href="/pluginner/A.html#80e341cd1b28e870" class="i field">LastWriteTimeUTC</a> &lt; <span class="r1 r">DestinationFS</span>.<a href="/pluginner/A.html#147a0dc4280adc32" class="i method">GetMetadata</a>(<span class="r3 r">DestinationURL</span>).<a href="/pluginner/A.html#80e341cd1b28e870" class="i field">LastWriteTimeUTC</a>)
+                        {<span class="c">/*continue execution*/</span>}
+                        <b>else</b>
+                        { <b>return</b>; }
+                        <b>break</b>;
+                    <b>case</b> <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#8c8539d94109a707" class="i field">Skip</a>:
+                        <span class="r4 r">Feedback</span> = <span class="r8 r">rpd</span>.<a href="Actions/ReplaceQuestionDialog.cs.html#29a7ac74f089b2c9" class="i property">ChoosedButton</a>;
+                        <b>return</b>;
+                    <b>case</b> <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#e97a55e786e7c8d6" class="i field">SkipAll</a>:
+                        <span class="r4 r">Feedback</span> = <span class="r8 r">rpd</span>.<a href="Actions/ReplaceQuestionDialog.cs.html#29a7ac74f089b2c9" class="i property">ChoosedButton</a>;
+                        <b>return</b>;
+                }
+            }
+ 
+            <b>try</b>
+            {
+                <span class="i n">pluginner</span>.<a href="/pluginner/A.html#e039ce3cbcc9466a" class="t t">FSEntryMetadata</a> <span id="r11 rd" class="r11 r">md</span> = <span class="r0 r">SourceFS</span>.<a href="/pluginner/A.html#147a0dc4280adc32" class="i method">GetMetadata</a>(<span class="r2 r">SourceURL</span>);
+                <span class="r11 r">md</span>.<a href="/pluginner/A.html#7dc2c0eaa63e3465" class="i field">FullURL</a> = <span class="r3 r">DestinationURL</span>;
+ 
+                <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r12 rd" class="r12 r">SrcStream</span> = <span class="r0 r">SourceFS</span>.<a href="/pluginner/A.html#85169fc318b48e0f" class="i method">GetFileStream</a>(<span class="r2 r">SourceURL</span>);
+                <span class="r1 r">DestinationFS</span>.<a href="/pluginner/A.html#dcd51d1d0c8dda2a" class="i method">Touch</a>(<span class="r11 r">md</span>);
+                <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r13 rd" class="r13 r">DestStream</span> = <span class="r1 r">DestinationFS</span>.<a href="/pluginner/A.html#85169fc318b48e0f" class="i method">GetFileStream</a>(<span class="r3 r">DestinationURL</span>, <b>true</b>);
+
+                <a href="@0@mscorlib/A.html#29b8a907100112ba" class="t t">EventWaitHandle</a> <span id="r14 rd" class="r14 r">wh</span> = <b>new</b> <a href="@0@mscorlib/A.html#2c7b85969847eaaf" class="t constructor">EventWaitHandle</a>(<b>true</b>, <a href="@0@mscorlib/A.html#a1d41e6fa0b7b76e" class="t t">EventResetMode</a>.<a href="@0@mscorlib/A.html#aed31cbbc58a204c" class="i field">ManualReset</a>);
+ 
+                <b>if</b> (<span class="r5 r">AC</span> == <b>null</b>) <span class="r5 r">AC</span> = <b>new</b> <a href="Actions/AsyncCopy.cs.html#c078a9625c561f8c" class="t constructor">AsyncCopy</a>();
+                <b>bool</b> <span id="r15 rd" class="r15 r">CpComplete</span> = <b>false</b>;
+ 
+                <span class="r5 r">AC</span>.<a href="Actions/AsyncCopy.cs.html#fff9645ee7705b04" class="i">OnComplete</a> += <span id="r16 rd" class="r16 r">result</span> =&gt; <span class="r15 r">CpComplete</span> = <b>true</b>;
+ 
+                <span class="c">//warning: due to some GTK# bugs, buffer sizes lesser than 128KB may cause</span>
+                <span class="c">//an StackOverflowException at UI update code</span>
+                <span class="r5 r">AC</span>.<a href="Actions/AsyncCopy.cs.html#60f69def4c05b393" class="i method">CopyFile</a>(<span class="r12 r">SrcStream</span>, <span class="r13 r">DestStream</span>, 131072); <span class="c">//buffer is 1/8 megabyte or 128KB</span>
+
+                <span class="r14 r">wh</span>.<a href="@0@mscorlib/A.html#8f366147dd3f5f63" class="i method">WaitOne</a>();
+                <span class="r14 r">wh</span>.<a href="@0@mscorlib/A.html#16f26027f679cb57" class="i method">Close</a>();
+                <b>do</b> { } <b>while</b> (!<span class="r15 r">CpComplete</span>); <span class="c">//don&#39;t stop this thread until the copy is finished</span>
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r17 rd" class="r17 r">ex</span>)
+            {
+                <b>if</b> (<span class="r17 r">ex</span>.<a href="@0@mscorlib/A.html#cf7a3679f8b67db4" class="i method">GetType</a>() != <b>typeof</b>(<span class="i n">System</span>.<span class="i n">Threading</span>.<a href="@0@mscorlib/A.html#1b47a5a85e0d5883" class="t t">ThreadAbortException</a>))
+                {
+                    <a href="/pluginner/A.html#5fd4a8de29bac7e7" class="t t">Utilities</a>.<a href="/pluginner/A.html#4154e45402c4c380" class="i method">ShowMessage</a>(<b>string</b>.<a href="@0@mscorlib/A.html#7432dab173fae5fc" class="i method">Format</a>(<a href="Localizator.cs.html#0b0c6268a53237f4" class="t t">Localizator</a>.<a href="Localizator.cs.html#546af5a79d2e88a9" class="i method">GetString</a>(<span class="s">&quot;CantCopy&quot;</span>), <span class="r2 r">SourceURL</span>, <span class="r17 r">ex</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>));
+                    <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#bc9961bdca1ac236" class="i method">WriteLine</a>(<span class="s">&quot;Cannot copy because of {0}({1}) at \n{2}.&quot;</span>, <span class="r17 r">ex</span>.<a href="@0@mscorlib/A.html#cf7a3679f8b67db4" class="i method">GetType</a>(), <span class="r17 r">ex</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r17 r">ex</span>.<a href="@0@mscorlib/A.html#950d763693dd32d3" class="i property">StackTrace</a>);
+                }
+            }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Copy the entrie directory</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>protected void</b> <a id="e112d6be00ce2030" href="../R/e112d6be00ce2030.html" target="n" data-glyph="75,1" class="i method">DoCpDir</a>(<b>string</b> <span id="r18 rd" class="r18 r">source</span>, <b>string</b> <span id="r19 rd" class="r19 r">destination</span>, <span class="i n">pluginner</span>.<a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a> <span id="r20 rd" class="r20 r">fsa</span>, <span class="i n">pluginner</span>.<a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a> <span id="r21 rd" class="r21 r">fsb</span>)
+        {
+            <b>if</b> (!<span class="r21 r">fsb</span>.<a href="/pluginner/A.html#c86d050760277042" class="i method">DirectoryExists</a>(<span class="r19 r">destination</span>)) { <span class="r21 r">fsb</span>.<a href="/pluginner/A.html#286656ab09733989" class="i method">CreateDirectory</a>(<span class="r19 r">destination</span>); }
+            <span class="r21 r">fsb</span>.<a href="/pluginner/A.html#53050e9ff0b5dd2d" class="i property">CurrentDirectory</a> = <span class="r19 r">destination</span>;
+ 
+            <b>foreach</b> (<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a> <span id="r22 rd" class="r22 r">di</span> <b>in</b> <span class="r20 r">fsa</span>.<a href="/pluginner/A.html#002b453f1ee47f9f" class="i property">DirectoryContent</a>)
+            {
+                <b>if</b> (<span class="r22 r">di</span>.<a href="/pluginner/A.html#fbc24940daa56d61" class="i field">TextToShow</a> == <span class="s">&quot;..&quot;</span>)
+                { <span class="c">/* don&#39;t touch the link to the parent directory */</span>}
+                <b>else if</b> (!<span class="r22 r">di</span>.<a href="/pluginner/A.html#89b4b3973a14e897" class="i field">IsDirectory</a>)
+                {
+                    <span class="c">//it is file</span>
+                    <b>string</b> <span id="r23 rd" class="r23 r">s1</span> = <span class="r22 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a>; <span class="c">//source url</span>
+                    <a href="/pluginner/A.html#e039ce3cbcc9466a" class="t t">FSEntryMetadata</a> <span id="r24 rd" class="r24 r">md1</span> = <span class="r20 r">fsa</span>.<a href="/pluginner/A.html#147a0dc4280adc32" class="i method">GetMetadata</a>(<span class="r23 r">s1</span>);
+                    <b>string</b> <span id="r25 rd" class="r25 r">s2</span> = <span class="r19 r">destination</span> + <span class="r21 r">fsb</span>.<a href="/pluginner/A.html#e10c6e92e153d997" class="i property">DirSeparator</a> + <span class="r24 r">md1</span>.<a href="/pluginner/A.html#52470894417ea42a" class="i field">Name</a>; <span class="c">//destination url</span>
+ 
+                    <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a> <span id="r26 rd" class="r26 r">Placeholder</span> = <a href="Actions/ReplaceQuestionDialog.cs.html#f9e379f97ba4081d" class="t t">ReplaceQuestionDialog</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#fd9cf1d74b7d71d2" class="t t">ClickedButton</a>.<a href="Actions/ReplaceQuestionDialog.cs.html#f349c182bb630bc9" class="i field">Cancel</a>;
+                    <a href="#57d90feff7fa1ed5" class="i method">DoCp</a>(<span class="r20 r">fsa</span>, <span class="r21 r">fsb</span>, <span class="r23 r">s1</span>, <span class="r25 r">s2</span>, <b>ref</b> <span class="r26 r">Placeholder</span>, <b>new</b> <a href="Actions/AsyncCopy.cs.html#c078a9625c561f8c" class="t constructor">AsyncCopy</a>());
+                }
+                <b>else if</b> (<span class="r22 r">di</span>.<a href="/pluginner/A.html#89b4b3973a14e897" class="i field">IsDirectory</a>)
+                {
+                    <span class="c">//it is subdirectory</span>
+                    <a href="#e112d6be00ce2030" class="i method">DoCpDir</a>(<span class="r22 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a>, <span class="r19 r">destination</span> + <span class="r21 r">fsb</span>.<a href="/pluginner/A.html#e10c6e92e153d997" class="i property">DirSeparator</a> + <span class="r22 r">di</span>.<a href="/pluginner/A.html#fbc24940daa56d61" class="i field">TextToShow</a>, <span class="r20 r">fsa</span>, <span class="r21 r">fsb</span>);
+                }
+            }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Background file remove</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">url</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">url of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">filesystem of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>protected void</b> <a id="e97b89db1533ed7c" href="../R/e97b89db1533ed7c.html" target="n" data-glyph="75,1" class="i method">DoRmFile</a>(<b>string</b> <span id="r27 rd" class="r27 r">url</span>, <span class="i n">pluginner</span>.<a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a> <span id="r28 rd" class="r28 r">fs</span>)
+        {
+            <b>try</b>
+            {
+                <span class="r28 r">fs</span>.<a href="/pluginner/A.html#dd3ff555bfd5f53a" class="i method">DeleteFile</a>(<span class="r27 r">url</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r29 rd" class="r29 r">err</span>)
+            {
+                <a href="/pluginner/A.html#5fd4a8de29bac7e7" class="t t">Utilities</a>.<a href="/pluginner/A.html#1e3ec4228b37652e" class="i method">ShowError</a>(<span class="r29 r">err</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <b>null</b>);
+            }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Background directory remove</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">url</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">url of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r31 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">filesystem of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>protected void</b> <a id="c0d2e398f571ccfc" href="../R/c0d2e398f571ccfc.html" target="n" data-glyph="75,1" class="i method">DoRmDir</a>(<b>string</b> <span id="r30 rd" class="r30 r">url</span>, <span class="i n">pluginner</span>.<a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a> <span id="r31 rd" class="r31 r">fs</span>)
+        {
+            <b>try</b>
+            {
+                <span class="r31 r">fs</span>.<a href="/pluginner/A.html#867699e34f64b7ae" class="i method">DeleteDirectory</a>(<span class="r30 r">url</span>, <b>true</b>);
+            }
+            <b>catch</b> (<span class="i n">pluginner</span>.<a href="/pluginner/A.html#1f1ca611788b290b" class="t t">ThisDirCannotBeRemovedException</a>)
+            {
+                <a href="/pluginner/A.html#5fd4a8de29bac7e7" class="t t">Utilities</a>.<a href="/pluginner/A.html#facc1883cefcdb12" class="i method">ShowWarning</a>(<b>string</b>.<a href="@0@mscorlib/A.html#ad9f5b0b214ae8f3" class="i method">Format</a>(<a href="Localizator.cs.html#0b0c6268a53237f4" class="t t">Localizator</a>.<a href="Localizator.cs.html#546af5a79d2e88a9" class="i method">GetString</a>(<span class="s">&quot;DirCantBeRemoved&quot;</span>)), <span class="r30 r">url</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r32 rd" class="r32 r">err</span>)
+            {
+                <a href="/pluginner/A.html#5fd4a8de29bac7e7" class="t t">Utilities</a>.<a href="/pluginner/A.html#1e3ec4228b37652e" class="i method">ShowError</a>(<span class="r32 r">err</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>);
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

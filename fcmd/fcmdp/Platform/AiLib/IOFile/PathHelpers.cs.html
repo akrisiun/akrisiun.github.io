@@ -1,0 +1,212 @@
+﻿<!DOCTYPE html>
+<html><head><title>PathHelpers.cs</title><link rel="stylesheet" href="../../../../styles.css"><script src="../../../../scripts.js"></script></head>
+<body class="cB" onload="i(203);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#fcmdp/Platform/AiLib/IOFile/PathHelpers.cs" target="_top">Platform\AiLib\IOFile\PathHelpers.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#fcmdp" target="_top">fcmd\fcmdp.csproj</a> (fcmdp)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+ 
+<b>namespace</b> <span class="i n">AiLib</span>.<span class="i n">IOFile</span>
+{
+    <b>public static class</b> <a id="6be975bde3644b50" href="../../../R/6be975bde3644b50.html" target="n" data-glyph="0,0" class="t t">PathHelpers</a>
+    {
+        <span class="c">// Trim trailing white spaces, tabs etc but don&#39;t be aggressive in removing everything that has UnicodeCategory of trailing space.</span>
+        <span class="c">// String.WhitespaceChars will trim more aggressively than what the underlying FS does (for ex, NTFS, FAT).    </span>
+        <b>internal static readonly char</b>[] <a id="0035eac6138381b4" href="../../../R/0035eac6138381b4.html" target="n" data-glyph="44,1" class="i field">TrimEndChars</a> =
+            { (<b>char</b>)0x9, (<b>char</b>)0xA, (<b>char</b>)0xB, (<b>char</b>)0xC, (<b>char</b>)0xD, (<b>char</b>)0x20, (<b>char</b>)0x85, (<b>char</b>)0xA0 };
+        <b>internal static readonly char</b>[] <a id="d855024ec37ee83b" href="../../../R/d855024ec37ee83b.html" target="n" data-glyph="44,1" class="i field">TrimStartChars</a> = { <span class="s">&#39; &#39;</span> };
+ 
+        <span class="c">// Array of the separator chars</span>
+        <b>internal static readonly char</b>[] <a id="dd994a7689267444" href="../../../R/../../0000000000.html" target="n" data-glyph="44,1" class="i field">DirectorySeparatorChars</a> = <b>new</b> <b>char</b>[]
+            { <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a>, <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#f17662acb2b441ae" class="i field">AltDirectorySeparatorChar</a> };
+ 
+        <span class="c">// String-representation of the directory-separator character, used when appending the character to another</span>
+        <span class="c">// string so as to avoid the boxing of the character when calling String.Concat(..., object).</span>
+        <b>internal static readonly string</b> <a id="42dbb4a8c6b2e938" href="../../../R/../../0000000000.html" target="n" data-glyph="44,1" class="i field">DirectorySeparatorCharAsString</a> = <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a>.<a href="@0@mscorlib/A.html#8da116b4ffb677f2" class="i method">ToString</a>();
+ 
+        <span class="c">// Gets the length of the root DirectoryInfo or whatever DirectoryInfo markers</span>
+        <span class="c">// are specified for the first part of the DirectoryInfo name.</span>
+        <span class="c">// </span>
+        <b>internal static int</b> <a id="272129d238f17034" href="../../../R/272129d238f17034.html" target="n" data-glyph="74,1" class="i method">GetRootLength</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r0 rd" class="r0 r">path</span>)
+        {
+            <a href="#52cc0422e076acbd" class="i method">CheckInvalidPathChars</a>(<span class="r0 r">path</span>);
+ 
+            <b>int</b> <span id="r1 rd" class="r1 r">i</span> = 0;
+            <b>int</b> <span id="r2 rd" class="r2 r">length</span> = <span class="r0 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>;
+ 
+            <b>if</b> (<span class="r2 r">length</span> &gt;= 1 &amp;&amp; (<a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r0 r">path</span>[0])))
+            {
+                <span class="c">// handles UNC names and directories off current drive&#39;s root.</span>
+                <span class="r1 r">i</span> = 1;
+                <b>if</b> (<span class="r2 r">length</span> &gt;= 2 &amp;&amp; (<a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r0 r">path</span>[1])))
+                {
+                    <span class="r1 r">i</span> = 2;
+                    <b>int</b> <span id="r3 rd" class="r3 r">n</span> = 2;
+                    <b>while</b> (<span class="r1 r">i</span> &lt; <span class="r2 r">length</span> &amp;&amp; (!<a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r0 r">path</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r1 r">i</span>]) || --<span class="r3 r">n</span> &gt; 0)) <span class="r1 r">i</span>++;
+                }
+            }
+            <b>else if</b> (<span class="r2 r">length</span> &gt;= 2 &amp;&amp; <span class="r0 r">path</span>[1] == <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#09d4ae1717c5b2cc" class="i field">VolumeSeparatorChar</a>)
+            {
+                <span class="c">// handles A:\foo.</span>
+                <span class="r1 r">i</span> = 2;
+                <b>if</b> (<span class="r2 r">length</span> &gt;= 3 &amp;&amp; (<a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r0 r">path</span>[2]))) <span class="r1 r">i</span>++;
+            }
+            <b>return</b> <span class="r1 r">i</span>;
+        }
+ 
+        <span class="c">// &quot;..&quot; can only be used if it is specified as a part of a valid File/Directory name. We disallow</span>
+        <span class="c">//  the user being able to use it to move up directories. Here are some examples eg </span>
+        <span class="c">//    Valid: a..b  abc..d</span>
+        <span class="c">//    Invalid: ..ab   ab..  ..   abc..d\abc..</span>
+        <span class="c">//</span>
+        <b>internal static void</b> <a id="38e18a3b29a069c0" href="../../../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">CheckSearchPattern</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r4 rd" class="r4 r">searchPattern</span>)
+        {
+            <b>int</b> <span id="r5 rd" class="r5 r">index</span> = 0;
+            <b>while</b> ((<span class="r5 r">index</span> = <span class="r4 r">searchPattern</span>.<a href="@0@mscorlib/A.html#3b7fbc076e08ccb8" class="i method">IndexOf</a>(<span class="s">&quot;..&quot;</span>, <span class="r5 r">index</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a>)) != -1)
+            {
+                <b>if</b> (<span class="r5 r">index</span> + 2 == <span class="r4 r">searchPattern</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>) <span class="c">// Terminal &quot;..&quot; . Files names cannot end in &quot;..&quot;</span>
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Arg_InvalidSearchPattern&quot;</span>);
+ 
+                <b>if</b> (<a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r4 r">searchPattern</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r5 r">index</span> + 2]))
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Arg_InvalidSearchPattern&quot;</span>);
+ 
+                <span class="r5 r">index</span> += 2;
+            }
+        }
+ 
+        <b>internal static void</b> <a id="52cc0422e076acbd" href="../../../R/52cc0422e076acbd.html" target="n" data-glyph="74,1" class="i method">CheckInvalidPathChars</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r6 rd" class="r6 r">path</span>, <b>bool</b> <span id="r7 rd" class="r7 r">checkAdditional</span> = <b>false</b>)
+        {
+            <b>if</b> (<span class="r6 r">path</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;path&quot;</span>);
+ 
+            <b>if</b> (<a href="#018cd520a3671444" class="t t">PathInternal</a>.<a href="#46a1b996e111f4e4" class="i method">HasIllegalCharacters</a>(<span class="r6 r">path</span>, <span class="r7 r">checkAdditional</span>))
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Argument_InvalidPathChars&quot;</span>);
+        }
+ 
+        <span class="c">// System.IO.Path has both public Combine and internal InternalCombine</span>
+        <span class="c">// members.  InternalCombine performs these extra validations on the second </span>
+        <span class="c">// argument.  This provides a convenient helper to maintain this extra</span>
+        <span class="c">// validation when porting code from Path.InternalCombine to Path.Combine.</span>
+        <b>internal static void</b> <a id="cc74a1ca62f30dd7" href="../../../R/cc74a1ca62f30dd7.html" target="n" data-glyph="74,1" class="i method">ThrowIfEmptyOrRootedPath</a>(<b>string</b> <span id="r8 rd" class="r8 r">path2</span>)
+        {
+            <b>if</b> (<span class="r8 r">path2</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;path2&quot;</span>);
+            <b>if</b> (<span class="r8 r">path2</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 0)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<span class="s">&quot;Argument_PathEmpty&quot;</span>, <span class="s">&quot;path2&quot;</span>);
+            <b>if</b> (<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#807960f08fca497d" class="i method">IsPathRooted</a>(<span class="r8 r">path2</span>))
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<span class="s">&quot;Arg_Path2IsRooted&quot;</span>, <span class="s">&quot;path2&quot;</span>);
+        }
+ 
+        <b>internal static bool</b> <a id="f598b6f378b21ea8" href="../../../R/f598b6f378b21ea8.html" target="n" data-glyph="74,1" class="i method">IsDirectorySeparator</a>(<b>char</b> <span id="r9 rd" class="r9 r">c</span>)
+        {
+            <b>return</b> (<span class="r9 r">c</span> == <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a> || <span class="r9 r">c</span> == <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#f17662acb2b441ae" class="i field">AltDirectorySeparatorChar</a>);
+        }
+ 
+        <b>internal static bool</b> <a id="a51a4f0c4c9c71a2" href="../../../R/a51a4f0c4c9c71a2.html" target="n" data-glyph="74,1" class="i method">EndsInDirectorySeparator</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r10 rd" class="r10 r">path</span>)
+        {
+            <b>return</b> <span class="r10 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0 &amp;&amp; <a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r10 r">path</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r10 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1]);
+        }
+ 
+        <b>internal static string</b> <a id="8e8a33b509fdd01f" href="../../../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">GetFullPathInternal</a>(<b>string</b> <span id="r11 rd" class="r11 r">path</span>)
+        {
+            <b>if</b> (<span class="r11 r">path</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;path&quot;</span>);
+ 
+            <b>string</b> <span id="r12 rd" class="r12 r">pathTrimmed</span> = <span class="r11 r">path</span>.<a href="@0@mscorlib/A.html#5137a6065a1c1234" class="i method">TrimStart</a>(<a href="#d855024ec37ee83b" class="i field">TrimStartChars</a>).<a href="@0@mscorlib/A.html#fc988fb267590f98" class="i method">TrimEnd</a>(<a href="#0035eac6138381b4" class="i field">TrimEndChars</a>);
+ 
+            <b>return</b> <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#1274738792cce835" class="i method">GetFullPath</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#807960f08fca497d" class="i method">IsPathRooted</a>(<span class="r12 r">pathTrimmed</span>) ? <span class="r12 r">pathTrimmed</span> : <span class="r11 r">path</span>);
+        }
+ 
+        <span class="c">// this is a lightweight version of GetDirectoryName that doesn&#39;t renormalize</span>
+        <b>internal static string</b> <a id="5bf1f2a18e1f7072" href="../../../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">GetDirectoryNameInternal</a>(<b>string</b> <span id="r13 rd" class="r13 r">path</span>)
+        {
+            <b>string</b> <span id="r14 rd" class="r14 r">directory</span>, <span id="r15 rd" class="r15 r">file</span>;
+            <a href="#491bd478ee83f541" class="i method">SplitDirectoryFile</a>(<span class="r13 r">path</span>, <b>out</b> <span class="r14 r">directory</span>, <b>out</b> <span class="r15 r">file</span>);
+ 
+            <span class="c">// file is null when we reach the root</span>
+            <b>return</b> (<span class="r15 r">file</span> == <b>null</b>) ? <b>null</b> : <span class="r14 r">directory</span>;
+        }
+ 
+        <b>internal static void</b> <a id="491bd478ee83f541" href="../../../R/491bd478ee83f541.html" target="n" data-glyph="74,1" class="i method">SplitDirectoryFile</a>(<b>string</b> <span id="r16 rd" class="r16 r">path</span>, <b>out string</b> <span id="r17 rd" class="r17 r">directory</span>, <b>out string</b> <span id="r18 rd" class="r18 r">file</span>)
+        {
+            <span class="r17 r">directory</span> = <b>null</b>;
+            <span class="r18 r">file</span> = <b>null</b>;
+ 
+            <span class="c">// assumes a validated full path</span>
+            <b>if</b> (<span class="r16 r">path</span> != <b>null</b>)
+            {
+                <b>int</b> <span id="r19 rd" class="r19 r">length</span> = <span class="r16 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>;
+                <b>int</b> <span id="r20 rd" class="r20 r">rootLength</span> = <a href="#272129d238f17034" class="i method">GetRootLength</a>(<span class="r16 r">path</span>);
+ 
+                <span class="c">// ignore a trailing slash</span>
+                <b>if</b> (<span class="r19 r">length</span> &gt; <span class="r20 r">rootLength</span> &amp;&amp; <a href="#a51a4f0c4c9c71a2" class="i method">EndsInDirectorySeparator</a>(<span class="r16 r">path</span>))
+                    <span class="r19 r">length</span>--;
+ 
+                <span class="c">// find the pivot index between end of string and root</span>
+                <b>for</b> (<b>int</b> <span id="r21 rd" class="r21 r">pivot</span> = <span class="r19 r">length</span> - 1; <span class="r21 r">pivot</span> &gt;= <span class="r20 r">rootLength</span>; <span class="r21 r">pivot</span>--)
+                {
+                    <b>if</b> (<a href="#f598b6f378b21ea8" class="i method">IsDirectorySeparator</a>(<span class="r16 r">path</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r21 r">pivot</span>]))
+                    {
+                        <span class="r17 r">directory</span> = <span class="r16 r">path</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(0, <span class="r21 r">pivot</span>);
+                        <span class="r18 r">file</span> = <span class="r16 r">path</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(<span class="r21 r">pivot</span> + 1, <span class="r19 r">length</span> - <span class="r21 r">pivot</span> - 1);
+                        <b>return</b>;
+                    }
+                }
+ 
+                <span class="c">// no pivot, return just the trimmed directory</span>
+                <span class="r17 r">directory</span> = <span class="r16 r">path</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(0, <span class="r19 r">length</span>);
+            }
+ 
+            <b>return</b>;
+        }
+ 
+        <b>internal static</b> <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a> <a id="885b37443770029c" href="../../../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">GetComparison</a>(<b>bool</b> <span id="r22 rd" class="r22 r">caseSensitive</span>)
+        {
+            <b>return</b> <span class="r22 r">caseSensitive</span> ? <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a> : <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>;
+        }
+    }
+ 
+    <b>internal static class</b> <a id="018cd520a3671444" href="../../../R/018cd520a3671444.html" target="n" data-glyph="2,0" class="t t">PathInternal</a>
+    {
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">     Returns a value indicating if the given path contains invalid characters (&quot;, </span><span class="c">&amp;lt;</span><span class="c">, </span><span class="c">&amp;gt;</span><span class="c">, | </span>
+        <span class="c">///</span><span class="c">     NUL, or any ASCII char whose integer representation is in the range of 1 through 31), </span>
+        <span class="c">///</span><span class="c">     optionally checking for ? and *.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal static bool</b> <a id="46a1b996e111f4e4" href="../../../R/46a1b996e111f4e4.html" target="n" data-glyph="74,1" class="i method">HasIllegalCharacters</a>(<b>string</b> <span id="r23 rd" class="r23 r">path</span>, <b>bool</b> <span id="r24 rd" class="r24 r">checkAdditional</span> = <b>false</b>)
+        {
+            <span class="c">// See: http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx</span>
+ 
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#1f51ef07e80c9b68" class="i method">Requires</a>(<span class="r23 r">path</span> != <b>null</b>);
+ 
+            <b>foreach</b> (<b>char</b> <span id="r25 rd" class="r25 r">c</span> <b>in</b> <span class="r23 r">path</span>)
+            {
+                <span class="c">// Note: Same as Path.InvalidPathChars, unrolled here for performance</span>
+                <b>if</b> (<span class="r25 r">c</span> == <span class="s">&#39;\&quot;&#39;</span> || <span class="r25 r">c</span> == <span class="s">&#39;&lt;&#39;</span> || <span class="r25 r">c</span> == <span class="s">&#39;&gt;&#39;</span> || <span class="r25 r">c</span> == <span class="s">&#39;|&#39;</span> || <span class="r25 r">c</span> &lt; 32)
+                    <b>return true</b>;
+ 
+                <span class="c">// used when path cannot contain search strings.</span>
+                <b>if</b> (<span class="r24 r">checkAdditional</span> &amp;&amp;
+                    (<span class="r25 r">c</span> == <span class="s">&#39;?&#39;</span> || <span class="r25 r">c</span> == <span class="s">&#39;*&#39;</span>))
+                    <b>return true</b>;
+            }
+ 
+            <b>return false</b>;
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Returns a comparison that can be used to compare file and directory names for equality.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal static</b> <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a> <a id="caccc4aeb7b8fcb0" href="../../../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">GetComparison</a>()
+        {
+            <b>return</b> <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>;
+        }
+    }
+ 
+}
+</pre></td></tr></table></div></body></html>

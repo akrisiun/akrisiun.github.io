@@ -1,0 +1,455 @@
+﻿<!DOCTYPE html>
+<html><head><title>FtpSecure.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(446);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#fcmd.ftps/FtpSecure.cs" target="_top">FtpSecure.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#fcmd.ftps" target="_top">fcmd.ftps\fcmd.ftps.csproj</a> (fcmd.ftps)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// ankr : ftp over SSL plugin</span>
+ 
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>.<span class="i n">RegularExpressions</span>;
+<b>using</b> <span class="i n">pluginner</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Net</span>.<span class="i n">Sockets</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">pluginner</span>.<span class="i n">Toolkit</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Net</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Cryptography</span>.<span class="i n">X509Certificates</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Net</span>.<span class="i n">Security</span>;
+<b>using</b> <span class="i n">Xwt</span>;
+ 
+<b>namespace</b> <span class="i n">fcmd</span>.<span class="i n">http</span>
+{
+    <b>public class</b> <a id="45245d16b3614ea5" href="R/45245d16b3614ea5.html" target="n" data-glyph="0,0" class="t t"><span id="7bfe83bb3965adc9">FtpSecure</span></a> : <a href="/pluginner/A.html#a05a46d8951816c2" class="t t">IFSPlugin</a>
+    {
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Properties
+ 
+        <span class="c">// System.Net.FtpWebRequest</span>
+        <span class="c">// old: FTPClient ftp;</span>
+        <b>protected</b> <a href="@0@System/A.html#70558d9a1045e275" class="t t">FtpWebRequest</a> <a id="e2990e912d57cef4" href="R/e2990e912d57cef4.html" target="n" data-glyph="45,1" class="i field">ftp</a>;
+        <b>protected bool</b> <a id="e81e6c5e279808b7" href="R/e81e6c5e279808b7.html" target="n" data-glyph="45,1" class="i field">IsSsl</a> = <b>true</b>;
+        <b>protected bool</b> <a id="a119adadc173fc61" href="R/a119adadc173fc61.html" target="n" data-glyph="45,1" class="i field">success</a> = <b>false</b>;
+ 
+        <b>private string</b> <a id="3452425fa68f27b9" href="R/3452425fa68f27b9.html" target="n" data-glyph="46,1" class="i field">currentDirectory</a> = <span class="s">&quot;&quot;</span>;
+        <b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a>&gt; <a id="6b403085afe797d6" href="R/6b403085afe797d6.html" target="n" data-glyph="46,1" class="i field">dirContent</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a>&gt;();
+        <b>private string</b> <a id="37d41c3e725f106b" href="R/37d41c3e725f106b.html" target="n" data-glyph="46,1" class="i field">hostname</a>;
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <a id="a9bf113eb238fd3d" href="R/a9bf113eb238fd3d.html" target="n" data-glyph="102,1" class="i property">LastError</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>private static</b> <a href="@0@System/A.html#bbe3b2eb80ae5526" class="t t">Regex</a> <a id="f1b5a1bff9ebdeb6" href="R/f1b5a1bff9ebdeb6.html" target="n" data-glyph="46,1" class="i field">FtpListDirectoryDetailsRegex</a>
+            = <b>new</b> <a href="@0@System/A.html#b3bb3375cf8e8736" class="t constructor">Regex</a>(<span class="s">@&quot;.*(?&lt;month&gt;(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))\s*(?&lt;day&gt;[0-9]*)\s*(?&lt;yearTime&gt;([0-9]|:)*)\s*(?&lt;fileName&gt;.*)&quot;</span>, <a href="@0@System/A.html#09480297afa1a686" class="t t">RegexOptions</a>.<a href="@0@System/A.html#469792903a91e65e" class="i field">Compiled</a> | <a href="@0@System/A.html#09480297afa1a686" class="t t">RegexOptions</a>.<a href="@0@System/A.html#8c4a7c494a4050d5" class="i field">IgnoreCase</a>); <span class="c">//undone: add style switching (windows, unix, etc)</span>
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Ftps specifics
+ 
+        <b>private void</b> <a id="3fac93e332309532" href="R/3fac93e332309532.html" target="n" data-glyph="76,1" class="i method">_CheckProtocol</a>(<b>string</b> <span id="r0 rd" class="r0 r">url</span>)
+        {
+            <b>if</b> (<span class="r0 r">url</span> == <b>null</b>) <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;url&quot;</span>);
+            <span class="c">//проверка на то, чтобы нечаянно через ftpfs не попытались зайти в локальную ФС, webdav, реестр и т.п. :-)</span>
+            <b>if</b> (!<span class="r0 r">url</span>.<a href="@0@mscorlib/A.html#2d51c212cb09178e" class="i method">ToLowerInvariant</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;ftp:&quot;</span>)
+                &amp;&amp; !<span class="r0 r">url</span>.<a href="@0@mscorlib/A.html#2d51c212cb09178e" class="i method">ToLowerInvariant</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;ftps:&quot;</span>))
+                <b>throw</b> <b>new</b> <a href="/pluginner/A.html#a2e835838099e8cb" class="t constructor">PleaseSwitchPluginException</a>();
+ 
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r1 rd" class="r1 r">URI</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r0 r">url</span>);
+            <b>if</b> (<span class="r1 r">URI</span>.<a href="@0@System/A.html#c230833968da7179" class="i property">Host</a> != <a href="#37d41c3e725f106b" class="i field">hostname</a>)
+                <a href="#578c024f39cdad97" class="i method">Connect</a>(<span class="r0 r">url</span>);
+        }
+ 
+        <b>protected void</b> <a id="ea7a0f5999b4a5a3" href="R/ea7a0f5999b4a5a3.html" target="n" data-glyph="75,1" class="i method">LoadDir</a>(<b>string</b> <span id="r2 rd" class="r2 r">url</span>)
+        {
+            <a href="#3452425fa68f27b9" class="i field">currentDirectory</a> = <span class="r2 r">url</span>;
+            <a href="#3fac93e332309532" class="i method">_CheckProtocol</a>(<span class="r2 r">url</span>);
+ 
+            <a href="#fb728a39b5f1e001" class="i property">RootDirectory</a> = <a href="#e51ee2645ab73ef4" class="i property">Prefix</a> + <span class="s">&quot;/&quot;</span>;
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r3 rd" class="r3 r">URI</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r2 r">url</span>);
+            <b>if</b> (<a href="#e2990e912d57cef4" class="i field">ftp</a> == <b>null</b> || !<a href="#a119adadc173fc61" class="i field">success</a>)
+                <a href="#578c024f39cdad97" class="i method">Connect</a>(<span class="r2 r">url</span>);
+ 
+            <a href="#a119adadc173fc61" class="i field">success</a> = <b>false</b>;
+            <a href="@0@System/A.html#70558d9a1045e275" class="t t">FtpWebRequest</a> <span id="r4 rd" class="r4 r">ftpRequest</span> = <a href="#45245d16b3614ea5" class="k">this</a>.<a href="#e2990e912d57cef4" class="i field">ftp</a>;
+            <span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#0e652a94501f1d9d" class="i property">Proxy</a> = <a href="@0@System/A.html#70558d9a1045e275" class="t t">FtpWebRequest</a>.<a href="@0@System/A.html#fe94a830a83cc947" class="i property">DefaultWebProxy</a>;
+ 
+            <span class="c">// http://stackoverflow.com/questions/4584789/connecting-ftp-server-with-credentials</span>
+            <b>if</b> (<span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#b19b0d60b9f041fb" class="i property">Credentials</a> == <b>null</b>
+                || (<span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#b19b0d60b9f041fb" class="i property">Credentials</a> <b>as</b> <a href="@0@System/A.html#c7cb0c0c3dd9d0b3" class="t t">NetworkCredential</a>) == <b>null</b>)
+            {
+                <a href="@0@System/A.html#c7cb0c0c3dd9d0b3" class="t t">NetworkCredential</a> <span id="r5 rd" class="r5 r">myCredentials</span> = <b>new</b> <a href="@0@System/A.html#a35c6eca48ae45b2" class="t constructor">NetworkCredential</a>(<span class="s">&quot;anonymous&quot;</span>, <span class="s">&quot;ftp@ftp.com&quot;</span>);
+                <b>if</b> (!<b>string</b>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<span class="r3 r">URI</span>.<a href="@0@System/A.html#baa093b2f0bb8c59" class="i property">UserInfo</a>))
+                {
+                    <b>string</b>[] <span id="r6 rd" class="r6 r">userParts</span> = <span class="r3 r">URI</span>.<a href="@0@System/A.html#baa093b2f0bb8c59" class="i property">UserInfo</a>.<a href="@0@mscorlib/A.html#1c4a9dc78ba38999" class="i method">Split</a>(<span class="s">&quot;:&quot;</span>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                    <span class="r5 r">myCredentials</span> = <b>new</b> <a href="@0@System/A.html#2de7ab541f3ae990" class="t constructor">NetworkCredential</a>(<span class="r6 r">userParts</span>[0], <span class="r6 r">userParts</span>[1],
+                        <span class="s">&quot;&quot;</span>); <span class="c">// System.Environment.UserDomainName);</span>
+                }
+                <span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#b19b0d60b9f041fb" class="i property">Credentials</a> = <span class="r5 r">myCredentials</span>;
+            }
+ 
+            <span class="c">// socket in Secure Socket Layer(SSL) mode, we use the class System.Net.Security.SslStream.</span>
+            <span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#2cea2701e446fb95" class="i property">EnableSsl</a> = <a href="#e81e6c5e279808b7" class="i field">IsSsl</a>;
+            <span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#72f5967b5d0a1181" class="i property">Method</a> = <a href="@0@System/A.html#e566ecae468c8e5e" class="t t">WebRequestMethods</a>.<a href="@0@System/A.html#bff76f954c94f466" class="t t">Ftp</a>.<a href="@0@System/A.html#018276e93c79fd5f" class="i field">ListDirectoryDetails</a>;
+            <a href="@0@System/A.html#ad24a6475254362e" class="t t">FtpWebResponse</a> <span id="r7 rd" class="r7 r">directoryListResponse</span> = (<a href="@0@System/A.html#ad24a6475254362e" class="t t">FtpWebResponse</a>)<span class="r4 r">ftpRequest</span>.<a href="@0@System/A.html#6eeaa627457510ec" class="i method">GetResponse</a>();
+ 
+            <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r8 rd" class="r8 r">req</span> = <b>null</b>;
+            <a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="t t">StreamReader</a> <span id="r9 rd" class="r9 r">sr</span> = <b>null</b>;
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a>&gt; <span id="r10 rd" class="r10 r">dirContent</span> = <b>null</b>;
+            <b>try</b>
+            {
+                <span class="r8 r">req</span> = <span class="r7 r">directoryListResponse</span>.<a href="@0@System/A.html#1c54ffddd919aade" class="i method">GetResponseStream</a>();
+                <span class="r9 r">sr</span> = <b>new</b> <a href="@0@mscorlib/A.html#72447927169f6b77" class="t constructor">StreamReader</a>(<span class="r8 r">req</span>);
+ 
+                <b>if</b> (<a href="#45245d16b3614ea5" class="k">this</a>.<a href="#6b403085afe797d6" class="i field">dirContent</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> &gt; 0)
+                    <a href="#45245d16b3614ea5" class="k">this</a>.<a href="#6b403085afe797d6" class="i field">dirContent</a>.<a href="@0@mscorlib/A.html#ca7bce81a50b0aeb" class="i method">Clear</a>();
+                <span class="r10 r">dirContent</span> = <a href="#45245d16b3614ea5" class="k">this</a>.<a href="#6b403085afe797d6" class="i field">dirContent</a>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <span class="r9 r">sr</span> = <b>null</b>;
+            }
+            <b>if</b> (<span class="r9 r">sr</span> == <b>null</b>)
+                <b>return</b>;
+ 
+            <span class="r10 r">dirContent</span> = <span class="r10 r">dirContent</span> ?? <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a>&gt;();
+ 
+            <span class="c">/* TODO: элемент &quot;вверх по древу&quot;
+            if (URI.PathAndQuery != &quot;/&quot;)
+            {
+                string upDirUrl = &quot;ftp://&quot; + URI.Host + &quot;:&quot; + URI.Port + URI.PathAndQuery;
+                upDirUrl = URI.AbsolutePath.Substring(0, URI.AbsolutePath.LastIndexOf(&#39;/&#39;,0,1));
+                DirItem updir = new DirItem();
+                updir.URL = upDirUrl;
+                updir.TextToShow = &quot;..&quot;;
+                updir.MIMEType = &quot;x-fcmd/up&quot;;
+                updir.IconSmall = Utilities.GetIconForMIME(&quot;x-fcmd/up&quot;);
+                directoryContent.Add(updir);
+            }*/</span>
+ 
+            <a href="#9738d13559c66b0a" class="i field">directoryListing</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+            <a href="#6fd03ea0845f690f" class="i method">ReadStream</a>(<span class="r9 r">sr</span>, <span class="r3 r">URI</span>);
+ 
+            <a href="#45245d16b3614ea5" class="k">this</a>.<a href="#6b403085afe797d6" class="i field">dirContent</a> = <span class="r10 r">dirContent</span>;
+            <span class="r8 r">req</span>.<a href="@0@mscorlib/A.html#f1b4285950a82354" class="i method">Dispose</a>();
+            <span class="r7 r">directoryListResponse</span>.<a href="@0@System/A.html#08ca34f3e09c119a" class="i method">Dispose</a>();
+            <a href="#a119adadc173fc61" class="i field">success</a> = <b>true</b>;
+        }
+ 
+        <b>private string</b> <a id="9738d13559c66b0a" href="R/9738d13559c66b0a.html" target="n" data-glyph="46,1" class="i field">directoryListing</a>;
+ 
+        <b>void</b> <a id="6fd03ea0845f690f" href="R/6fd03ea0845f690f.html" target="n" data-glyph="76,1" class="i method">ReadStream</a>(<a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="t t">StreamReader</a> <span id="r11 rd" class="r11 r">sr</span>, <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r12 rd" class="r12 r">URI</span>)
+        {
+            <b>while</b> (!<span class="r11 r">sr</span>.<a href="@0@mscorlib/A.html#27a804c872881c54" class="i property">EndOfStream</a>)
+            {
+                <b>string</b> <span id="r13 rd" class="r13 r">CurItem</span> = <span class="r11 r">sr</span>.<a href="@0@mscorlib/A.html#a4ada5f765646068" class="i method">ReadLine</a>();
+                <b>if</b> (<span class="r13 r">CurItem</span> == <b>null</b>) <b>continue</b>;
+                <a href="#9738d13559c66b0a" class="i field">directoryListing</a> += <span class="r13 r">CurItem</span> + <span class="s">&quot;\n&quot;</span>;
+ 
+                <a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a> <span id="r14 rd" class="r14 r">di</span> = <b>new</b> <a href="/pluginner/A.html#7b5301e979ad0ac7" class="t constructor">DirItem</a>();
+                <a href="@0@System/A.html#d8a604d3af777b1c" class="t t">Match</a> <span id="r15 rd" class="r15 r">m</span> = <a href="#f1b5a1bff9ebdeb6" class="i field">FtpListDirectoryDetailsRegex</a>.<a href="@0@System/A.html#7ef0f10a0d96f10f" class="i method">Match</a>(<span class="r13 r">CurItem</span>);
+                <b>string</b> <span id="r16 rd" class="r16 r">filename</span> = <span class="r15 r">m</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;fileName&quot;</span>].<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a>;
+ 
+                <b>if</b> (<span class="r15 r">m</span>.<a href="@0@System/A.html#d22878087e24a96d" class="i property">Length</a> == 0 &amp;&amp; <span class="r13 r">CurItem</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt;= 41)
+                {<span class="c">//brute FTP string parse</span>
+                    <span class="r16 r">filename</span> = <span class="r13 r">CurItem</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(39);
+ 
+                    <b>string</b> <span id="r17 rd" class="r17 r">dateOrig</span> = <span class="r13 r">CurItem</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(0, 19);
+                    <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r18 rd" class="r18 r">date</span> = <span class="r17 r">dateOrig</span>
+                           .<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;AM&quot;</span>, <span class="s">&quot;&quot;</span>)
+                           .<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;PM&quot;</span>, <span class="s">&quot;&quot;</span>)
+                           .<a href="@0@mscorlib/A.html#fc988fb267590f98" class="i method">TrimEnd</a>().<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;  &quot;</span>, <span class="s">&quot; &quot;</span>);
+                    <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#7fb854f0498e1e42" class="i method">TryParseExact</a>(<span class="r18 r">date</span>,
+                        <b>new</b> <b>string</b>[] { <span class="s">&quot;MM-dd-yy hh:mm PM&quot;</span> },
+                        <b>new</b> <span class="i n">System</span>.<span class="i n">Globalization</span>.<a href="@0@mscorlib/A.html#cb4dd1c3262abd32" class="t constructor">CultureInfo</a>(<span class="s">&quot;en-US&quot;</span>),
+                        <span class="i n">System</span>.<span class="i n">Globalization</span>.<a href="@0@mscorlib/A.html#0052cfe5031c0372" class="t t">DateTimeStyles</a>.<a href="@0@mscorlib/A.html#c5813bdd9813aef3" class="i field">None</a>,
+                        <b>out</b> <span class="r14 r">di</span>.<a href="/pluginner/A.html#8813b431ccc5b225" class="i field">Date</a>);
+                    <b>if</b> (<span class="r17 r">dateOrig</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<span class="s">&quot;PM&quot;</span>) &amp;&amp; <span class="r14 r">di</span>.<a href="/pluginner/A.html#8813b431ccc5b225" class="i field">Date</a> != <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#e7670be8111807d6" class="i field">MinValue</a>)
+                        <span class="r14 r">di</span>.<a href="/pluginner/A.html#8813b431ccc5b225" class="i field">Date</a>.<a href="@0@mscorlib/A.html#1673702782a58887" class="i method">AddHours</a>(12.0);
+ 
+                    <b>string</b> <span id="r19 rd" class="r19 r">size</span> = <span class="r13 r">CurItem</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(20, 18);
+                    <a href="@0@mscorlib/A.html#e566178cce890c36" class="t t">Int64</a>.<a href="@0@mscorlib/A.html#517dc8207c8fc99e" class="i method">TryParse</a>(<span class="r19 r">size</span>, <b>out</b> <span class="r14 r">di</span>.<a href="/pluginner/A.html#02129bce9ec56468" class="i field">Size</a>);
+                }
+ 
+                <span class="r14 r">di</span>.<a href="/pluginner/A.html#89b4b3973a14e897" class="i field">IsDirectory</a> = <span class="r13 r">CurItem</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;d&quot;</span>);
+                <span class="r14 r">di</span>.<a href="/pluginner/A.html#fbc24940daa56d61" class="i field">TextToShow</a> = <span class="r16 r">filename</span>;
+ 
+                <b>try</b>
+                {
+                    <b>if</b> (<span class="r14 r">di</span>.<a href="/pluginner/A.html#89b4b3973a14e897" class="i field">IsDirectory</a>)
+                    {
+                        <span class="r14 r">di</span>.<a href="/pluginner/A.html#a2acb756cae67d17" class="i field">IconSmall</a> = <a href="/pluginner/A.html#5fd4a8de29bac7e7" class="t t">Utilities</a>.<a href="/pluginner/A.html#6fe334e58dce3aac" class="i method">GetIconForMIME</a>(<span class="s">&quot;x-fcmd/directory&quot;</span>);
+                    }
+                    <b>else</b>
+                    {
+                        <span class="r14 r">di</span>.<a href="/pluginner/A.html#798d312904a9521a" class="i field">MIMEType</a> = <span class="r16 r">filename</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;.&#39;</span>) &gt; 0
+                            ? <a href="/pluginner/A.html#5fd4a8de29bac7e7" class="t t">Utilities</a>.<a href="/pluginner/A.html#25ec5cf1758f9e58" class="i method">GetContentType</a>(<span class="r16 r">filename</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r16 r">filename</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;.&#39;</span>) + 1))
+                            : <span class="s">&quot;application/octet-stream&quot;</span>;
+ 
+                        <span class="c">//if (Toolkit.CurrentEngine != null)</span>
+                        <span class="c">//    di.IconSmall = Utilities.GetIconForMIME(di.MIMEType);</span>
+                    }
+                    <span class="r14 r">di</span>.<a href="/pluginner/A.html#8813b431ccc5b225" class="i field">Date</a> = <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#7f7fa04f5481a0ac" class="i method">Parse</a>(
+                        <span class="r15 r">m</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;month&quot;</span>].<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a> + <span class="s">&quot; &quot;</span> + <span class="r15 r">m</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;day&quot;</span>].<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a> + <span class="s">&quot; &quot;</span> +
+                        <span class="r15 r">m</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;yearTime&quot;</span>].<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a>);
+                }
+                <span class="c">// ReSharper disable once EmptyGeneralCatchClause</span>
+                <b>catch</b> { } <span class="c">//to prevent crash if date is received in an invalid format</span>
+ 
+                <span class="r14 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a> = <span class="s">&quot;ftp://&quot;</span> + <span class="r12 r">URI</span>.<a href="@0@System/A.html#c230833968da7179" class="i property">Host</a> + <span class="s">&quot;:&quot;</span> + <span class="r12 r">URI</span>.<a href="@0@System/A.html#8d40fee6fe43f1d3" class="i property">Port</a> + <span class="r12 r">URI</span>.<a href="@0@System/A.html#c202e346f185b3eb" class="i property">PathAndQuery</a> + <span class="r16 r">filename</span>;
+                <b>if</b> (<span class="r14 r">di</span>.<a href="/pluginner/A.html#89b4b3973a14e897" class="i field">IsDirectory</a> &amp;&amp; !<span class="r14 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<span class="s">&quot;/&quot;</span>))
+                    <span class="r14 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a> += <span class="s">&quot;/&quot;</span>;
+ 
+                <b>if</b> (!<b>string</b>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<span class="r14 r">di</span>.<a href="/pluginner/A.html#fbc24940daa56d61" class="i field">TextToShow</a>))
+                    <a href="#6b403085afe797d6" class="i field">dirContent</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r14 r">di</span>);
+            }
+        }
+ 
+        <b>public void</b> <a id="578c024f39cdad97" href="R/578c024f39cdad97.html" target="n" data-glyph="72,1" class="i method">Connect</a>(<b>string</b> <span id="r20 rd" class="r20 r">url</span>)
+        {
+            <b>if</b> (<span class="r20 r">url</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<span class="s">&quot;ftps:&quot;</span>) || <span class="r20 r">url</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<span class="s">&quot;:22/&quot;</span>))
+            {
+                <a href="#e81e6c5e279808b7" class="i field">IsSsl</a> = <b>true</b>;
+                <span class="c">// url = url.Replace(&quot;ftps:&quot;, &quot;ftp:&quot;);</span>
+            }
+            <b>else</b>
+                <a href="#e81e6c5e279808b7" class="i field">IsSsl</a> = <b>false</b>;
+ 
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r21 rd" class="r21 r">adr</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r20 r">url</span>);
+            <b>if</b> (<a href="#e81e6c5e279808b7" class="i field">IsSsl</a>)
+                <span class="r21 r">adr</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="s">&quot;ftp://&quot;</span>
+                        + (<span class="r21 r">adr</span>.<a href="@0@System/A.html#baa093b2f0bb8c59" class="i property">UserInfo</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0 ? <span class="r21 r">adr</span>.<a href="@0@System/A.html#baa093b2f0bb8c59" class="i property">UserInfo</a> + <span class="s">&quot;@&quot;</span> : <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>)
+                        + <span class="r21 r">adr</span>.<a href="@0@System/A.html#c230833968da7179" class="i property">Host</a> + <span class="s">&quot;:22&quot;</span> + <span class="r21 r">adr</span>.<a href="@0@System/A.html#c202e346f185b3eb" class="i property">PathAndQuery</a>);
+ 
+            <a href="#37d41c3e725f106b" class="i field">hostname</a> = <span class="r21 r">adr</span>.<a href="@0@System/A.html#c230833968da7179" class="i property">Host</a>;
+ 
+            <a href="#3fac93e332309532" class="i method">_CheckProtocol</a>(<span class="r20 r">url</span>);
+ 
+            <span class="c">// FtpWebRequest.DefaultWebProxy </span>
+            <a href="@0@System/A.html#86ab68f9e9462330" class="t t">ServicePointManager</a>.<a href="@0@System/A.html#7d15d4dca4db604b" class="i property">ServerCertificateValidationCallback</a> = <a href="#b8c249012f0c42e3" class="i method">ServerCertificateValidationCallback</a>;
+            <a href="#e2990e912d57cef4" class="i field">ftp</a> = (<a href="@0@System/A.html#70558d9a1045e275" class="t t">FtpWebRequest</a>)<a href="@0@System/A.html#70558d9a1045e275" class="t t">FtpWebRequest</a>.<a href="@0@System/A.html#c0b6a15404a4898f" class="i method">CreateDefault</a>(<span class="r21 r">adr</span>);
+            <a href="#e2990e912d57cef4" class="i field">ftp</a>.<a href="@0@System/A.html#8af2f0456de3f560" class="i property">UsePassive</a> = <b>true</b>;
+            <a href="#37d41c3e725f106b" class="i field">hostname</a> = <span class="r21 r">adr</span>.<a href="@0@System/A.html#c230833968da7179" class="i property">Host</a>;
+        }
+ 
+        <b>private bool</b> <a id="b8c249012f0c42e3" href="R/b8c249012f0c42e3.html" target="n" data-glyph="76,1" class="i method">ServerCertificateValidationCallback</a>(<b>object</b> <span id="r22 rd" class="r22 r">sender</span>,
+            <a href="@0@mscorlib/A.html#25ce21b4ffab69ff" class="t t">X509Certificate</a> <span id="r23 rd" class="r23 r">certificate</span>, <a href="@0@System/A.html#34b9978e2fa6093b" class="t t">X509Chain</a> <span id="r24 rd" class="r24 r">chain</span>, <a href="@0@System/A.html#dcab16068caa4a83" class="t t">SslPolicyErrors</a> <span id="r25 rd" class="r25 r">sslPolicyErrors</span>)
+        {
+            <span class="c">// If the certificate is a valid, signed certificate, return true.</span>
+            <b>if</b> (<span class="r25 r">sslPolicyErrors</span> == <span class="i n">System</span>.<span class="i n">Net</span>.<span class="i n">Security</span>.<a href="@0@System/A.html#dcab16068caa4a83" class="t t">SslPolicyErrors</a>.<a href="@0@System/A.html#d8fd7320a641befc" class="i field">None</a>)
+            {
+                <b>return true</b>;
+            }
+ 
+            <span class="c">// If there are errors in the certificate chain, look at each error to determine the cause.</span>
+            <b>if</b> ((<span class="r25 r">sslPolicyErrors</span> &amp; <span class="i n">System</span>.<span class="i n">Net</span>.<span class="i n">Security</span>.<a href="@0@System/A.html#dcab16068caa4a83" class="t t">SslPolicyErrors</a>.<a href="@0@System/A.html#92bcda29f8eaed60" class="i field">RemoteCertificateChainErrors</a>) != 0)
+            {
+                <b>if</b> (<span class="r24 r">chain</span> != <b>null</b> &amp;&amp; <span class="r24 r">chain</span>.<a href="@0@System/A.html#b857d6f0686243cd" class="i property">ChainStatus</a> != <b>null</b>)
+                {
+                    <b>foreach</b> (<span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Cryptography</span>.<span class="i n">X509Certificates</span>.<a href="@0@System/A.html#eee5223ea1e0b0ff" class="t t">X509ChainStatus</a> <span id="r26 rd" class="r26 r">status</span> <b>in</b> <span class="r24 r">chain</span>.<a href="@0@System/A.html#b857d6f0686243cd" class="i property">ChainStatus</a>)
+                    {
+                        <b>if</b> ((<span class="r23 r">certificate</span>.<a href="@0@mscorlib/A.html#ab0ff5e07f224a7a" class="i property">Subject</a> == <span class="r23 r">certificate</span>.<a href="@0@mscorlib/A.html#79e72f514ae05b79" class="i property">Issuer</a>) &amp;&amp;
+                           (<span class="r26 r">status</span>.<a href="@0@System/A.html#5320bf1123b43d4b" class="i property">Status</a> == <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Cryptography</span>.<span class="i n">X509Certificates</span>.<a href="@0@System/A.html#9852a023500ee080" class="t t">X509ChainStatusFlags</a>.<a href="@0@System/A.html#ed34326d677410cc" class="i field">UntrustedRoot</a>))
+                        {
+                            <span class="c">// Self-signed certificates with an untrusted root are valid. </span>
+                            <b>continue</b>;
+                        }
+                        <b>else</b>
+                        {
+                            <b>if</b> (<span class="r26 r">status</span>.<a href="@0@System/A.html#5320bf1123b43d4b" class="i property">Status</a> != <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Cryptography</span>.<span class="i n">X509Certificates</span>.<a href="@0@System/A.html#9852a023500ee080" class="t t">X509ChainStatusFlags</a>.<a href="@0@System/A.html#8b1d9bd3bab7600d" class="i field">NoError</a>)
+                            {
+                                <span class="c">// If there are any other errors in the certificate chain, the certificate is invalid,</span>
+                                <span class="c">// so the method returns false.</span>
+                                <b>return false</b>;
+                            }
+                        }
+                    }
+                }
+ 
+                <span class="c">// When processing reaches this line, the only errors in the certificate chain are </span>
+                <span class="c">// untrusted root errors for self-signed certificates. These certificates are valid</span>
+                <span class="c">// for default Exchange server installations, so return true.</span>
+                <b>return true</b>;
+            }
+            <b>else</b>
+            {
+                <span class="c">// In all other cases, return false.</span>
+                <b>return false</b>;
+            }
+        }
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Directory content
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a>&gt; <a id="c72bc9ea597c24aa" href="R/c72bc9ea597c24aa.html" target="n" data-glyph="102,1" class="i property">DirectoryContent</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#6b403085afe797d6" class="i field">dirContent</a>; }
+        }
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<span class="i n">pluginner</span>.<a href="/pluginner/A.html#7b5301e979ad0ac7" class="t t">DirItem</a>&gt; <a id="6e71db157229b6f9" href="R/6e71db157229b6f9.html" target="n" data-glyph="72,1" class="i method">GetDirectoryContent</a>(<a href="/pluginner/A.html#fb518fd9795cef48" class="t t">FileSystemOperationStatus</a> <span id="r27 rd" class="r27 r">FSOS</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r28 rd" class="r28 r">output</span> = <a href="#6b403085afe797d6" class="i field">dirContent</a>;
+            <b>return</b> <span class="r28 r">output</span>;
+        }
+ 
+        <b>public string</b> <a id="262c95840e87c8d7" href="R/262c95840e87c8d7.html" target="n" data-glyph="102,1" class="i property">CurrentDirectory</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#3452425fa68f27b9" class="i field">currentDirectory</a>; }
+            <b>set</b> { <a href="#ea7a0f5999b4a5a3" class="i method">LoadDir</a>(<b>value</b>); }
+        }
+ 
+        <b>public string</b> <a id="e51ee2645ab73ef4" href="R/e51ee2645ab73ef4.html" target="n" data-glyph="102,1" class="i property">Prefix</a> { <b>get</b> { <b>return</b> <span class="s">&quot;ftp://&quot;</span>; } }   <span class="c">// TODO</span>
+        <b>public string</b> <a id="fb728a39b5f1e001" href="R/fb728a39b5f1e001.html" target="n" data-glyph="102,1" class="i property">RootDirectory</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>public string</b> <a id="e91ec85e0fb5f5aa" href="R/e91ec85e0fb5f5aa.html" target="n" data-glyph="72,1" class="i method">NoPrefix</a>(<b>string</b> <span id="r29 rd" class="r29 r">dir</span>)
+        {
+            <b>if</b> (<span class="r29 r">dir</span> != <b>null</b> &amp;&amp; <span class="r29 r">dir</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="#e51ee2645ab73ef4" class="i property">Prefix</a>))
+                <b>return</b> <span class="r29 r">dir</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="#e51ee2645ab73ef4" class="i property">Prefix</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+ 
+            <b>return</b> <span class="r29 r">dir</span>;
+        }
+ 
+        <b>public bool</b> <a id="358dd85f8413b762" href="R/358dd85f8413b762.html" target="n" data-glyph="72,1" class="i method">FileExists</a>(<b>string</b> <span id="r30 rd" class="r30 r">URL</span>)
+        {
+            <b>return</b> <a href="#6b403085afe797d6" class="i field">dirContent</a>.<a href="@0@System.Core/A.html#6a1af7c3d17845e3" class="i method">Any</a>(<span id="r31 rd" class="r31 r">di</span> =&gt; <span class="r31 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a> == <span class="r30 r">URL</span>);
+        }
+ 
+        <b>public bool</b> <a id="079fb6e91c2942b6" href="R/079fb6e91c2942b6.html" target="n" data-glyph="72,1" class="i method">DirectoryExists</a>(<b>string</b> <span id="r32 rd" class="r32 r">URL</span>)
+        {
+            <b>return</b> <a href="#6b403085afe797d6" class="i field">dirContent</a>.<a href="@0@System.Core/A.html#6a1af7c3d17845e3" class="i method">Any</a>(<span id="r33 rd" class="r33 r">di</span> =&gt; <span class="r33 r">di</span>.<a href="/pluginner/A.html#2b021a73f3c1e7f7" class="i field">URL</a> == <span class="r32 r">URL</span>);
+        }
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Read, Move, Delete
+ 
+        <b>public bool</b> <a id="d952904e5d8a095f" href="R/d952904e5d8a095f.html" target="n" data-glyph="72,1" class="i method">CanBeRead</a>(<b>string</b> <span id="r34 rd" class="r34 r">URL</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public</b> <a href="/pluginner/A.html#e039ce3cbcc9466a" class="t t">FSEntryMetadata</a> <a id="670465cc21275906" href="R/670465cc21275906.html" target="n" data-glyph="72,1" class="i method">GetMetadata</a>(<b>string</b> <span id="r35 rd" class="r35 r">URL</span>)
+        {
+            <b>return</b> <b>new</b> <a href="/pluginner/A.html#e039ce3cbcc9466a" class="t constructor">FSEntryMetadata</a>();
+        }
+ 
+        <b>public byte</b>[] <a id="9a59ded77781f690" href="R/9a59ded77781f690.html" target="n" data-glyph="72,1" class="i method">GetFileContent</a>(<b>string</b> <span id="r36 rd" class="r36 r">URL</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="332a7d96c09db23f" href="R/332a7d96c09db23f.html" target="n" data-glyph="72,1" class="i method">GetFileStream</a>(<b>string</b> <span id="r37 rd" class="r37 r">URL</span>, <b>bool</b> <span id="r38 rd" class="r38 r">Write</span> = <b>false</b>)
+        {
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r39 rd" class="r39 r">URI</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r37 r">URL</span>);
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#3f64c7634faf1768" class="t constructor">NotImplementedException</a>(<span class="s">&quot;no GetFileStream&quot;</span>);
+ 
+            <span class="c">//if (Write)</span>
+            <span class="c">//{</span>
+            <span class="c">//    //write mode</span>
+            <span class="c">//    NetworkStream ns = null; // new NetworkStream(ftp.GetDataSocket(), FileAccess.ReadWrite);</span>
+            <span class="c">//    return ns;</span>
+            <span class="c">//}</span>
+            <span class="c">//else</span>
+            <span class="c">//{</span>
+            <span class="c">//    //read-only mode</span>
+            <span class="c">//    NetworkStream ns = null; //new NetworkStream(ftp.GetDataSocket(), FileAccess.Read);</span>
+            <span class="c">//    //ftp.SendCommand(&quot;RETR &quot; + URI.PathAndQuery);</span>
+            <span class="c">//    return ns;</span>
+            <span class="c">//}</span>
+        }
+ 
+        <b>public void</b> <a id="98b5436cfd5a061d" href="R/98b5436cfd5a061d.html" target="n" data-glyph="72,1" class="i method">WriteFileContent</a>(<b>string</b> <span id="r40 rd" class="r40 r">URL</span>, <b>int</b> <span id="r41 rd" class="r41 r">Start</span>, <b>byte</b>[] <span id="r42 rd" class="r42 r">Content</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public void</b> <a id="e6fbde00876b1780" href="R/e6fbde00876b1780.html" target="n" data-glyph="72,1" class="i method">Touch</a>(<a href="/pluginner/A.html#e039ce3cbcc9466a" class="t t">FSEntryMetadata</a> <span id="r43 rd" class="r43 r">metadata</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public void</b> <a id="a2691f0fe632089a" href="R/a2691f0fe632089a.html" target="n" data-glyph="72,1" class="i method">Touch</a>(<b>string</b> <span id="r44 rd" class="r44 r">URL</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public void</b> <a id="a6b93bb9cfdc352c" href="R/a6b93bb9cfdc352c.html" target="n" data-glyph="72,1" class="i method">DeleteFile</a>(<b>string</b> <span id="r45 rd" class="r45 r">URL</span>)
+        {
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r46 rd" class="r46 r">URI</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r45 r">URL</span>);
+            <span class="c">//ftp.SendCommand(&quot;DELE &quot; + URI.AbsolutePath);</span>
+        }
+ 
+        <b>public void</b> <a id="f405d4a22ccba583" href="R/f405d4a22ccba583.html" target="n" data-glyph="72,1" class="i method">MoveFile</a>(<b>string</b> <span id="r47 rd" class="r47 r">oldURL</span>, <b>string</b> <span id="r48 rd" class="r48 r">newURL</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public void</b> <a id="7d485689e5910cf8" href="R/7d485689e5910cf8.html" target="n" data-glyph="72,1" class="i method">DeleteDirectory</a>(<b>string</b> <span id="r49 rd" class="r49 r">URL</span>, <b>bool</b> <span id="r50 rd" class="r50 r">TrySafe</span>)
+        {
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r51 rd" class="r51 r">URI</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r49 r">URL</span>);
+            <span class="c">//ftp.SendCommand(&quot;RMD &quot; + URI.AbsolutePath);</span>
+        }
+ 
+        <b>public void</b> <a id="36550d64a778daa3" href="R/36550d64a778daa3.html" target="n" data-glyph="72,1" class="i method">CreateDirectory</a>(<b>string</b> <span id="r52 rd" class="r52 r">URL</span>)
+        {
+            <a href="@0@System/A.html#991565dd25f47c90" class="t t">Uri</a> <span id="r53 rd" class="r53 r">URI</span> = <b>new</b> <a href="@0@System/A.html#9e1bb2fef0d1159b" class="t constructor">Uri</a>(<span class="r52 r">URL</span>);
+            <span class="c">//ftp.SendCommand(&quot;MKD &quot; + URI.AbsolutePath);</span>
+        }
+ 
+        <b>public void</b> <a id="d9a92bb49c82718e" href="R/d9a92bb49c82718e.html" target="n" data-glyph="72,1" class="i method">MoveDirectory</a>(<b>string</b> <span id="r54 rd" class="r54 r">OldURL</span>, <b>string</b> <span id="r55 rd" class="r55 r">NewURL</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+        <b>public string</b> <a id="2d82a3690e482ab1" href="R/2d82a3690e482ab1.html" target="n" data-glyph="102,1" class="i property">DirSeparator</a>
+        {
+            <b>get</b> { <b>return</b> <span class="s">&quot;/&quot;</span>; }
+        }
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+ 
+        <b>public string</b> <a id="a763c29e2ea9e178" href="R/a763c29e2ea9e178.html" target="n" data-glyph="102,1" class="i property">Name</a> { <b>get</b> { <b>return</b> <span class="s">&quot;File Transfer Protocol&quot;</span>; } }
+        <b>public string</b> <a id="335d8dae7a08d3e0" href="R/335d8dae7a08d3e0.html" target="n" data-glyph="102,1" class="i property">Version</a> { <b>get</b> { <b>return</b> <span class="i n">System</span>.<span class="i n">Reflection</span>.<a href="@0@mscorlib/A.html#73b5be5e9c2474b2" class="t t">Assembly</a>.<a href="@0@mscorlib/A.html#bd671af9926207e9" class="i method">GetExecutingAssembly</a>().<a href="@0@mscorlib/A.html#1fd23b897ffa9a75" class="i method">GetName</a>().<a href="@0@mscorlib/A.html#c36677aa25838c8c" class="i property">Version</a>.<a href="@0@mscorlib/A.html#3b32a91c30a49c52" class="i method">ToString</a>(); } }
+        <b>public string</b> <a id="da6ad0b8aec5341c" href="R/da6ad0b8aec5341c.html" target="n" data-glyph="102,1" class="i property">Author</a> { <b>get</b> { <b>return</b> <span class="s">&quot;akrisiun&quot;</span>; } }
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Not implemented
+ 
+<span class="k preprocess">#</span><span class="k preprocess">pragma</span> <span class="k preprocess">warning</span> <span class="k preprocess">disable</span> 0649, 0414  <span class="c">// is assigned but never used</span>
+        <b>public event</b> <a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="5d831b4ede01e6da" href="R/5d831b4ede01e6da.html" target="n" data-glyph="30,1" class="i">StatusChanged</a> = <b>null</b>;
+        <b>public event</b> <a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>double</b>&gt; <a id="58f03d3f0c81b66d" href="R/58f03d3f0c81b66d.html" target="n" data-glyph="30,1" class="i">ProgressChanged</a> = <b>null</b>;
+ 
+        <b>public void</b> <a id="818ea692f66e765b" href="R/818ea692f66e765b.html" target="n" data-glyph="72,1" class="i method">CLIstdinWriteLine</a>(<b>string</b> <span id="r56 rd" class="r56 r">StdIn</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+ 
+<span class="k preprocess">#</span><span class="k preprocess">pragma</span> <span class="k preprocess">warning</span> <span class="k preprocess">disable</span> 067
+        <b>public event</b> <a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="4a124eca1ce3b448" href="R/4a124eca1ce3b448.html" target="n" data-glyph="30,1" class="i">CLIstdoutDataReceived</a>;
+        <b>public event</b> <a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="8bd46d16cea8d3cc" href="R/8bd46d16cea8d3cc.html" target="n" data-glyph="30,1" class="i">CLIstderrDataReceived</a>;
+        <b>public event</b> <a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>string</b>&gt; <a id="c5d41e9a90516ab8" href="R/c5d41e9a90516ab8.html" target="n" data-glyph="30,1" class="i">CLIpromptChanged</a>;
+ 
+        <b>public int</b>[] <a id="581ca5c8ccbbbf19" href="R/581ca5c8ccbbbf19.html" target="n" data-glyph="102,1" class="i property">APICompatibility</a>
+        {
+            <b>get</b>
+            {
+                <b>int</b>[] <span id="r57 rd" class="r57 r">fapiver</span> = { 0, 1, 0, 0, 1, 0 };
+                <b>return</b> <span class="r57 r">fapiver</span>;
+            }
+        }
+ 
+        <b>public object</b> <a id="0f1458f4ca659b84" href="R/0f1458f4ca659b84.html" target="n" data-glyph="72,1" class="i method">APICallPlugin</a>(<b>string</b> <span id="r58 rd" class="r58 r">call</span>, <b>params object</b>[] <span id="r59 rd" class="r59 r">arguments</span>)
+        {
+            <b>return null</b>;
+        }
+ 
+        <b>public event</b> <a href="/pluginner/A.html#c00ff1b8d4f1ccd5" class="t t">TypedEvent</a>&lt;<b>object</b>[]&gt; <a id="addf79510b2572e3" href="R/../../0000000000.html" target="n" data-glyph="30,1" class="i">APICallHost</a>;
+ 
+        <b>public</b> <span class="i n">System</span>.<span class="i n">Configuration</span>.<a href="@0@System.Configuration/A.html#78b81739a12e78a6" class="t t">Configuration</a> <a id="c19ecdc153036c0e" href="R/c19ecdc153036c0e.html" target="n" data-glyph="102,1" class="i property">FCConfig</a>
+        {
+            <b>set</b> { <span class="c">/*not used because the plugin is internal*/</span> }
+        }
+ 
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+    }
+}</pre></td></tr></table></div></body></html>

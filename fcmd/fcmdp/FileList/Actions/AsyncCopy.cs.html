@@ -1,0 +1,123 @@
+﻿<!DOCTYPE html>
+<html><head><title>AsyncCopy.cs</title><link rel="stylesheet" href="../../../styles.css"><script src="../../../scripts.js"></script></head>
+<body class="cB" onload="i(114);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#fcmdp/FileList/Actions/AsyncCopy.cs" target="_top">FileList\Actions\AsyncCopy.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#fcmdp" target="_top">fcmd\fcmdp.csproj</a> (fcmdp)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/* The File Commander
+ * Asynchronous file copier
+ * (C) The File Commander Team - https://github.com/atauenis/fcmd
+ * (C) 2014, Alexander Tauenis (atauenis@yandex.ru)
+ * (C) 2014, Evgeny Akhtimirov (wilbit@me.com)
+ * Contributors should place own signs here.
+ */</span>
+<b>using</b> <span class="i n">System</span>;
+
+<b>namespace</b> <span class="i n">fcmd</span>
+{
+    <span class="c">//based on the algorithm from http://krez0n.org.ua/archives/820</span>
+ 
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Asynchronous file copy worker</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">// internal </span>
+    <b>public class</b> <a id="c078a9625c561f8c" href="../../R/c078a9625c561f8c.html" target="n" data-glyph="0,0" class="t t"><span id="9812114bcfd1a65c">AsyncCopy</span></a>
+    {
+        <b>public delegate void</b> <a id="df18d4004edd5326" href="../../R/df18d4004edd5326.html" target="n" data-glyph="12,1" class="t t"><span id="852d8b6e7b53fe3d">Complete</span></a>(<b>bool</b> <span id="r0 rd" class="r0 r">successfull</span>);
+        <b>public delegate void</b> <a id="28359d293cdc072a" href="../../R/28359d293cdc072a.html" target="n" data-glyph="12,1" class="t t"><span id="fa0f4a2b97cb62bd">Progress</span></a>(<b>string</b> <span id="r1 rd" class="r1 r">message</span>, <b>int</b> <span id="r2 rd" class="r2 r">percent</span>);
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">File copy complete</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public event</b> <a href="#df18d4004edd5326" class="t t">Complete</a> <a id="fff9645ee7705b04" href="../../R/fff9645ee7705b04.html" target="n" data-glyph="30,1" class="i">OnComplete</a>;
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Copy progress changed</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public event</b> <a href="#28359d293cdc072a" class="t t">Progress</a> <a id="457c6a6c592c66d5" href="../../R/457c6a6c592c66d5.html" target="n" data-glyph="30,1" class="i">OnProgress</a>;
+ 
+        <b>protected void</b> <a id="448fc1584a28c834" href="../../R/448fc1584a28c834.html" target="n" data-glyph="75,1" class="i method">RaiseOnComplete</a>(<b>bool</b> <span id="r3 rd" class="r3 r">successfull</span>)
+        {
+            <a href="#df18d4004edd5326" class="k">var</a> <span id="r4 rd" class="r4 r">handler</span> = <a href="#fff9645ee7705b04" class="i">OnComplete</a>;
+            <b>if</b> (<span class="r4 r">handler</span> != <b>null</b>)
+            {
+                <span class="r4 r">handler</span>(<span class="r3 r">successfull</span>);
+            }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The template of the messages about the process status</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="ee55d7ae8d3ca2bf" href="../../R/ee55d7ae8d3ca2bf.html" target="n" data-glyph="102,1" class="i property">ReportMessage</a> { <b>get</b>; <b>set</b>; }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Copy a file asynchronus</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">sourceStream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The IO Stream containing the source data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">destinationStream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The IO Stream, that should receive the data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">BufferLenght</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="60f69def4c05b393" href="../../R/60f69def4c05b393.html" target="n" data-glyph="72,1" class="i method">CopyFile</a>(<span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r5 rd" class="r5 r">sourceStream</span>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r6 rd" class="r6 r">destinationStream</span>, <b>int</b> <span id="r7 rd" class="r7 r">BufferLenght</span> = 16)
+        {
+            <b>if</b> (<a href="#ee55d7ae8d3ca2bf" class="i property">ReportMessage</a> == <b>null</b>) <a href="#ee55d7ae8d3ca2bf" class="i property">ReportMessage</a> = <span class="s">&quot;Copied: {0}KB / {1}KB ({2}%)&quot;</span>;
+ 
+            <b>try</b>
+            {
+                <a href="@0@mscorlib/A.html#3933aebb80415ce0" class="t t">Byte</a>[] <span id="r8 rd" class="r8 r">streamBuffer</span> = <b>new</b> <a href="@0@mscorlib/A.html#3933aebb80415ce0" class="t t">Byte</a>[<span class="r7 r">BufferLenght</span>];
+                <b>long</b> <span id="r9 rd" class="r9 r">totalBytesRead</span> = 0;
+                <b>int</b> <span id="r10 rd" class="r10 r">numReads</span> = 0;
+ 
+                <b>using</b> (<span class="r5 r">sourceStream</span>)
+                {
+                    <b>long</b> <span id="r11 rd" class="r11 r">sLenght</span> = <span class="r5 r">sourceStream</span>.<a href="@0@mscorlib/A.html#48b7e39cfd844dc5" class="i property">Length</a>;
+                    <b>using</b> (<span class="r6 r">destinationStream</span>)
+                    {
+                        <b>while</b> (<b>true</b>) <span class="c">//the loop will stop only when the EOF has been reached</span>
+                        {
+                            <span class="r10 r">numReads</span>++;
+                            <b>int</b> <span id="r12 rd" class="r12 r">bytesRead</span> = <span class="r5 r">sourceStream</span>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r8 r">streamBuffer</span>, 0, <span class="r7 r">BufferLenght</span>);
+ 
+                            <b>if</b> (<span class="r12 r">bytesRead</span> == 0)
+                            {
+                                <a href="#7adac644e9e46b8a" class="i method">Report</a>(<span class="r11 r">sLenght</span>, <span class="r11 r">sLenght</span>);
+                                <b>break</b>;
+                            }
+ 
+                            <span class="r6 r">destinationStream</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r8 r">streamBuffer</span>, 0, <span class="r12 r">bytesRead</span>);
+                            <span class="r9 r">totalBytesRead</span> += <span class="r12 r">bytesRead</span>;
+ 
+                            <span class="c">//If the number of reads is a multiple of 10, send a report to UI</span>
+                            <b>if</b> (<span class="r10 r">numReads</span> % 10 == 0)
+                            {
+                                <a href="#7adac644e9e46b8a" class="i method">Report</a>(<span class="r9 r">totalBytesRead</span>, <span class="r11 r">sLenght</span>);
+                            }
+ 
+                            <span class="c">//Has the loop reached the end of the file?</span>
+                            <b>if</b> (<span class="r12 r">bytesRead</span> &lt; <span class="r7 r">BufferLenght</span>)
+                            {
+                                <a href="#7adac644e9e46b8a" class="i method">Report</a>(<span class="r9 r">totalBytesRead</span>, <span class="r11 r">sLenght</span>);
+                                <b>break</b>;
+                            }
+                        }
+                    }
+                }
+ 
+                <a href="#448fc1584a28c834" class="i method">RaiseOnComplete</a>(<b>true</b>);
+            }
+            <b>catch</b>
+            {
+                <a href="#448fc1584a28c834" class="i method">RaiseOnComplete</a>(<b>false</b>);
+                <b>throw</b>;
+            }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Report the current status to the user</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">totalBytesRead</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">How much is copied</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">sLenght</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">How much should be copied</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>private void</b> <a id="7adac644e9e46b8a" href="../../R/7adac644e9e46b8a.html" target="n" data-glyph="76,1" class="i method">Report</a>(<b>long</b> <span id="r13 rd" class="r13 r">totalBytesRead</span>, <b>long</b> <span id="r14 rd" class="r14 r">sLenght</span>)
+        {
+            <b>string</b> <span id="r15 rd" class="r15 r">message</span> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+            <b>double</b> <span id="r16 rd" class="r16 r">HowMuchDone</span> = (<b>double</b>)((<b>double</b>)<span class="r13 r">totalBytesRead</span> / (<b>double</b>)<span class="r14 r">sLenght</span>);
+            <span class="r15 r">message</span> = <b>string</b>.<a href="@0@mscorlib/A.html#6e5f254563fed78e" class="i method">Format</a>(<a href="#ee55d7ae8d3ca2bf" class="i property">ReportMessage</a>,
+                     <span class="r13 r">totalBytesRead</span> / 1024,
+                     <span class="r14 r">sLenght</span> / 1024,
+                     (<b>int</b>)(<span class="r16 r">HowMuchDone</span> * 100));
+ 
+            <a href="#28359d293cdc072a" class="k">var</a> <span id="r17 rd" class="r17 r">onProgress</span> = <a href="#457c6a6c592c66d5" class="i">OnProgress</a>;
+            <b>if</b> (<span class="r17 r">onProgress</span> != <b>null</b> &amp;&amp; !<b>double</b>.<a href="@0@mscorlib/A.html#b3843db5f359a0fd" class="i method">IsNaN</a>(<span class="r16 r">HowMuchDone</span>))
+                <span class="r17 r">onProgress</span>(<span class="r15 r">message</span>, (<b>int</b>)(<span class="r16 r">HowMuchDone</span> * 100));
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

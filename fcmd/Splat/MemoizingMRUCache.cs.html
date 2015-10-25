@@ -1,0 +1,174 @@
+﻿<!DOCTYPE html>
+<html><head><title>MemoizingMRUCache.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(165);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#Splat/MemoizingMRUCache.cs" target="_top">MemoizingMRUCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#Splat" target="_top">reactive\spat\Splat.Net45.csproj</a> (Splat)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+
+<b>namespace</b> <span class="i n">Splat</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> This data structure is a representation of a memoizing cache - i.e. a</span>
+    <span class="c">///</span><span class="c"> class that will evaluate a function, but keep a cache of recently</span>
+    <span class="c">///</span><span class="c"> evaluated parameters.</span>
+    <span class="c">///</span>
+    <span class="c">///</span><span class="c"> Since this is a memoizing cache, it is important that this function be a</span>
+    <span class="c">///</span><span class="c"> &quot;pure&quot; function in the mathematical sense - that a key *always* maps to</span>
+    <span class="c">///</span><span class="c"> a corresponding return value.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r t">TParam</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The type of the parameter to the calculation function.</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r t">TVal</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The type of the value returned by the calculation</span>
+    <span class="c">///</span><span class="c"> function.</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="327e1c08f0e34ed8" href="R/327e1c08f0e34ed8.html" target="n" data-glyph="0,0" class="t t">MemoizingMRUCache</a>&lt;<span id="r0 rd t" class="r0 r t">TParam</span>, <span id="r1 rd t" class="r1 r t">TVal</span>&gt;
+    {
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#8adbe0476ca899db" class="t t">Func</a>&lt;<span class="r0 r t">TParam</span>, <b>object</b>, <span class="r1 r t">TVal</span>&gt; <a id="6c01f43af37c3027" href="R/6c01f43af37c3027.html" target="n" data-glyph="46,1" class="i field">calculationFunction</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#486d58da4553e12d" class="t t">Action</a>&lt;<span class="r1 r t">TVal</span>&gt; <a id="44c821a6509369dd" href="R/44c821a6509369dd.html" target="n" data-glyph="46,1" class="i field">releaseFunction</a>;
+        <b>private readonly int</b> <a id="32f8b9a61ae99526" href="R/32f8b9a61ae99526.html" target="n" data-glyph="46,1" class="i field">maxCacheSize</a>;
+
+        <b>private</b> <a href="@0@System/A.html#df5a6c7b6b60da4f" class="t t">LinkedList</a>&lt;<span class="r0 r t">TParam</span>&gt; <a id="75cf4f4ec8630a07" href="R/75cf4f4ec8630a07.html" target="n" data-glyph="46,1" class="i field">cacheMRUList</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<span class="r0 r t">TParam</span>, <a href="@0@mscorlib/A.html#1806cf6634f5a371" class="t t">Tuple</a>&lt;<a href="@0@System/A.html#08181ebdd4cdf907" class="t t">LinkedListNode</a>&lt;<span class="r0 r t">TParam</span>&gt;, <span class="r1 r t">TVal</span>&gt;&gt; <a id="9a0d05f5d9faf4e1" href="R/9a0d05f5d9faf4e1.html" target="n" data-glyph="46,1" class="i field">cacheEntries</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Constructor</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">calculationFunc</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The function whose results you want to cache,</span>
+        <span class="c">///</span><span class="c"> which is provided the key value, and an Tag object that is</span>
+        <span class="c">///</span><span class="c"> user-defined</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">maxSize</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The size of the cache to maintain, after which old</span>
+        <span class="c">///</span><span class="c"> items will start to be thrown out.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">onRelease</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A function to call when a result gets</span>
+        <span class="c">///</span><span class="c"> evicted from the cache (i.e. because Invalidate was called or the</span>
+        <span class="c">///</span><span class="c"> cache is full)</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="46004b4c87f111bc" href="R/46004b4c87f111bc.html" target="n" data-glyph="72,1" class="i constructor">MemoizingMRUCache</a>(<a href="@0@mscorlib/A.html#8adbe0476ca899db" class="t t">Func</a>&lt;<span class="r0 r t">TParam</span>, <b>object</b>, <span class="r1 r t">TVal</span>&gt; <span id="r2 rd" class="r2 r">calculationFunc</span>, <b>int</b> <span id="r3 rd" class="r3 r">maxSize</span>, <a href="@0@mscorlib/A.html#486d58da4553e12d" class="t t">Action</a>&lt;<span class="r1 r t">TVal</span>&gt; <span id="r4 rd" class="r4 r">onRelease</span> = <b>null</b>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#1f51ef07e80c9b68" class="i method">Requires</a>(<span class="r2 r">calculationFunc</span> != <b>null</b>);
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#1f51ef07e80c9b68" class="i method">Requires</a>(<span class="r3 r">maxSize</span> &gt; 0);
+
+            <a href="#6c01f43af37c3027" class="i field">calculationFunction</a> = <span class="r2 r">calculationFunc</span>;
+            <a href="#44c821a6509369dd" class="i field">releaseFunction</a> = <span class="r4 r">onRelease</span>;
+            <a href="#32f8b9a61ae99526" class="i field">maxCacheSize</a> = <span class="r3 r">maxSize</span>;
+            <a href="#dc36d97a6728f7b8" class="i method">InvalidateAll</a>();
+        }
+
+        <b>public</b> <span class="r1 r t">TVal</span> <a id="232696a4937f5303" href="R/232696a4937f5303.html" target="n" data-glyph="72,1" class="i method">Get</a>(<span class="r0 r t">TParam</span> <span id="r5 rd" class="r5 r">key</span>) { <b>return</b> <a href="#c68c3ea5e6f85a72" class="i method">Get</a>(<span class="r5 r">key</span>, <b>null</b>); }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Evaluates the function provided, returning the cached value if possible</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">key</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The value to pass to the calculation function.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">context</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An additional optional user-specific parameter.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <span class="r1 r t">TVal</span> <a id="c68c3ea5e6f85a72" href="R/c68c3ea5e6f85a72.html" target="n" data-glyph="72,1" class="i method">Get</a>(<span class="r0 r t">TParam</span> <span id="r6 rd" class="r6 r">key</span>, <b>object</b> <span id="r7 rd" class="r7 r">context</span> = <b>null</b>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#1f51ef07e80c9b68" class="i method">Requires</a>(<span class="r6 r">key</span> != <b>null</b>);
+
+            <b>if</b> (<a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#22fd7cd7408aed6e" class="i method">ContainsKey</a>(<span class="r6 r">key</span>)) {
+                <a href="@0@mscorlib/A.html#1806cf6634f5a371" class="k">var</a> <span id="r8 rd" class="r8 r">found</span> = <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r6 r">key</span>];
+                <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#bf8f7858b06e2728" class="i method">Remove</a>(<span class="r8 r">found</span>.<a href="@0@mscorlib/A.html#d1922db1cf9dcd03" class="i property">Item1</a>);
+                <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#fb7d84c27adcced4" class="i method">AddFirst</a>(<span class="r8 r">found</span>.<a href="@0@mscorlib/A.html#d1922db1cf9dcd03" class="i property">Item1</a>);
+                <b>return</b> <span class="r8 r">found</span>.<a href="@0@mscorlib/A.html#85ddc983cace902c" class="i property">Item2</a>;
+            }
+
+            <span class="r1 r t">var</span> <span id="r9 rd" class="r9 r">result</span> = <a href="#6c01f43af37c3027" class="i field">calculationFunction</a>(<span class="r6 r">key</span>, <span class="r7 r">context</span>);
+
+            <a href="@0@System/A.html#08181ebdd4cdf907" class="k">var</a> <span id="r10 rd" class="r10 r">node</span> = <b>new</b> <a href="@0@System/A.html#5d1171707ea51fd4" class="t constructor">LinkedListNode</a>&lt;<span class="r0 r t">TParam</span>&gt;(<span class="r6 r">key</span>);
+            <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#fb7d84c27adcced4" class="i method">AddFirst</a>(<span class="r10 r">node</span>);
+            <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r6 r">key</span>] = <b>new</b> <a href="@0@mscorlib/A.html#ee1efa9bd0176f36" class="t constructor">Tuple</a>&lt;<a href="@0@System/A.html#08181ebdd4cdf907" class="t t">LinkedListNode</a>&lt;<span class="r0 r t">TParam</span>&gt;, <span class="r1 r t">TVal</span>&gt;(<span class="r10 r">node</span>, <span class="r9 r">result</span>);
+            <a href="#460832074eadec0f" class="i method">maintainCache</a>();
+
+            <b>return</b> <span class="r9 r">result</span>;
+        }
+
+        <b>public bool</b> <a id="b0f042eaa3f40606" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">TryGet</a>(<span class="r0 r t">TParam</span> <span id="r11 rd" class="r11 r">key</span>, <b>out</b> <span class="r1 r t">TVal</span> <span id="r12 rd" class="r12 r">result</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#1f51ef07e80c9b68" class="i method">Requires</a>(<span class="r11 r">key</span> != <b>null</b>);
+
+            <a href="@0@mscorlib/A.html#1806cf6634f5a371" class="t t">Tuple</a>&lt;<a href="@0@System/A.html#08181ebdd4cdf907" class="t t">LinkedListNode</a>&lt;<span class="r0 r t">TParam</span>&gt;, <span class="r1 r t">TVal</span>&gt; <span id="r13 rd" class="r13 r">output</span>;
+            <a href="@0@mscorlib/A.html#f1b135ff6c380b37" class="k">var</a> <span id="r14 rd" class="r14 r">ret</span> = <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#2e5bc6d8c0f21e67" class="i method">TryGetValue</a>(<span class="r11 r">key</span>, <b>out</b> <span class="r13 r">output</span>);
+            <b>if</b> (<span class="r14 r">ret</span> &amp;&amp; <span class="r13 r">output</span> != <b>null</b>) {
+                <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#bf8f7858b06e2728" class="i method">Remove</a>(<span class="r13 r">output</span>.<a href="@0@mscorlib/A.html#d1922db1cf9dcd03" class="i property">Item1</a>);
+                <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#fb7d84c27adcced4" class="i method">AddFirst</a>(<span class="r13 r">output</span>.<a href="@0@mscorlib/A.html#d1922db1cf9dcd03" class="i property">Item1</a>);
+                <span class="r12 r">result</span> = <span class="r13 r">output</span>.<a href="@0@mscorlib/A.html#85ddc983cace902c" class="i property">Item2</a>;
+            } <b>else</b> {
+                <span class="r12 r">result</span> = <b>default</b>(<span class="r1 r t">TVal</span>);
+            }
+            <b>return</b> <span class="r14 r">ret</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Ensure that the next time this key is queried, the calculation</span>
+        <span class="c">///</span><span class="c"> function will be called.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="6d660f98eae15b8a" href="R/6d660f98eae15b8a.html" target="n" data-glyph="72,1" class="i method">Invalidate</a>(<span class="r0 r t">TParam</span> <span id="r15 rd" class="r15 r">key</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#1f51ef07e80c9b68" class="i method">Requires</a>(<span class="r15 r">key</span> != <b>null</b>);
+
+            <b>if</b> (!<a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#22fd7cd7408aed6e" class="i method">ContainsKey</a>(<span class="r15 r">key</span>))
+                <b>return</b>;
+
+            <a href="@0@mscorlib/A.html#1806cf6634f5a371" class="k">var</a> <span id="r16 rd" class="r16 r">to_remove</span> = <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r15 r">key</span>];
+            <b>if</b> (<a href="#44c821a6509369dd" class="i field">releaseFunction</a> != <b>null</b>)
+                <a href="#44c821a6509369dd" class="i field">releaseFunction</a>(<span class="r16 r">to_remove</span>.<a href="@0@mscorlib/A.html#85ddc983cace902c" class="i property">Item2</a>);
+
+            <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#bf8f7858b06e2728" class="i method">Remove</a>(<span class="r16 r">to_remove</span>.<a href="@0@mscorlib/A.html#d1922db1cf9dcd03" class="i property">Item1</a>);
+            <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#a6db5ffdec557169" class="i method">Remove</a>(<span class="r15 r">key</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Invalidate all items in the cache</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="dc36d97a6728f7b8" href="R/dc36d97a6728f7b8.html" target="n" data-glyph="72,1" class="i method">InvalidateAll</a>()
+        {
+            <b>if</b> (<a href="#44c821a6509369dd" class="i field">releaseFunction</a> == <b>null</b> || <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a> == <b>null</b>) {
+                <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a> = <b>new</b> <a href="@0@System/A.html#c882be11e9fb76b2" class="t constructor">LinkedList</a>&lt;<span class="r0 r t">TParam</span>&gt;();
+                <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<span class="r0 r t">TParam</span>, <a href="@0@mscorlib/A.html#1806cf6634f5a371" class="t t">Tuple</a>&lt;<a href="@0@System/A.html#08181ebdd4cdf907" class="t t">LinkedListNode</a>&lt;<span class="r0 r t">TParam</span>&gt;, <span class="r1 r t">TVal</span>&gt;&gt;();
+                <b>return</b>;
+            }
+
+            <b>if</b> (<a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#12b9bba2a1f9c3e2" class="i property">Count</a> == 0)
+                <b>return</b>;
+
+            <span class="c">/*             We have to remove them one-by-one to call the release function
+             * We ToArray() this so we don&#39;t get a &quot;modifying collection while
+             * enumerating&quot; exception. */</span>
+            <b>foreach</b> (<span class="r0 r t">var</span> <span id="r17 rd" class="r17 r">v</span> <b>in</b> <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#9a3c0cb5c149c9f7" class="i property">Keys</a>.<a href="@0@System.Core/A.html#783a052330e7d48d" class="i method">ToArray</a>()) { <a href="#6d660f98eae15b8a" class="i method">Invalidate</a>(<span class="r17 r">v</span>); }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Returns all values currently in the cache</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<span class="r1 r t">TVal</span>&gt; <a id="08e3f5adea2e5adf" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">CachedValues</a>()
+        {
+            <b>return</b> <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@System.Core/A.html#5c652c53e80df013" class="i method">Select</a>(<span id="r18 rd" class="r18 r">x</span> =&gt; <span class="r18 r">x</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a>.<a href="@0@mscorlib/A.html#85ddc983cace902c" class="i property">Item2</a>);
+        }
+
+        <b>void</b> <a id="460832074eadec0f" href="R/460832074eadec0f.html" target="n" data-glyph="76,1" class="i method">maintainCache</a>()
+        {
+            <b>while</b> (<a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#dc93ffb6a4a268f2" class="i property">Count</a> &gt; <a href="#32f8b9a61ae99526" class="i field">maxCacheSize</a>) {
+                <span class="r0 r t">var</span> <span id="r19 rd" class="r19 r">to_remove</span> = <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#4b27871fcf47d19c" class="i property">Last</a>.<a href="@0@System/A.html#ab8931f084807c6d" class="i property">Value</a>;
+                <b>if</b> (<a href="#44c821a6509369dd" class="i field">releaseFunction</a> != <b>null</b>)
+                    <a href="#44c821a6509369dd" class="i field">releaseFunction</a>(<a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r19 r">to_remove</span>].<a href="@0@mscorlib/A.html#85ddc983cace902c" class="i property">Item2</a>);
+
+                <a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#a6db5ffdec557169" class="i method">Remove</a>(<a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#4b27871fcf47d19c" class="i property">Last</a>.<a href="@0@System/A.html#ab8931f084807c6d" class="i property">Value</a>);
+                <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#0e7b076060fbabfc" class="i method">RemoveLast</a>();
+            }
+        }
+
+        [<a href="@0@mscorlib/A.html#221b966eee1a17f0" class="t constructor">ContractInvariantMethod</a>]
+        <b>void</b> <a id="c461e9ff8578a26a" href="R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">Invariants</a>()
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#bf15b6e0c6eaf02e" class="i method">Invariant</a>(<a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#12b9bba2a1f9c3e2" class="i property">Count</a> == <a href="#75cf4f4ec8630a07" class="i field">cacheMRUList</a>.<a href="@0@System/A.html#dc93ffb6a4a268f2" class="i property">Count</a>);
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#bf15b6e0c6eaf02e" class="i method">Invariant</a>(<a href="#9a0d05f5d9faf4e1" class="i field">cacheEntries</a>.<a href="@0@mscorlib/A.html#12b9bba2a1f9c3e2" class="i property">Count</a> &lt;= <a href="#32f8b9a61ae99526" class="i field">maxCacheSize</a>);
+        }
+    }
+}
+
+<span class="c">// vim: tw=120 ts=4 sw=4 et :</span></pre></td></tr></table></div></body></html>
