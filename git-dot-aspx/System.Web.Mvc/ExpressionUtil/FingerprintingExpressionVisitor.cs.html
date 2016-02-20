@@ -1,0 +1,308 @@
+﻿<!DOCTYPE html>
+<html><head><title>FingerprintingExpressionVisitor.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(299);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/ExpressionUtil/FingerprintingExpressionVisitor.cs" target="_top">ExpressionUtil\FingerprintingExpressionVisitor.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>.<span class="i n">Expressions</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">ExpressionUtil</span>
+{
+    <span class="c">// This is a visitor which produces a fingerprint of an expression. It doesn&#39;t</span>
+    <span class="c">// rewrite the expression in a form which can be compiled and cached.</span>
+ 
+    <b>internal sealed class</b> <a id="273d5554cc1cd9c0" href="../R/273d5554cc1cd9c0.html" target="n" data-glyph="2,0" class="t t">FingerprintingExpressionVisitor</a> : <a href="@0@System.Core/A.html#f0615a823a9efe36" class="t t">ExpressionVisitor</a>
+    {
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>object</b>&gt; <a id="4c784274eedd7232" href="../R/4c784274eedd7232.html" target="n" data-glyph="46,1" class="i field">_seenConstants</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>object</b>&gt;();
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@System.Core/A.html#f4308bded2e9d66a" class="t t">ParameterExpression</a>&gt; <a id="2a1eaad04e64b5de" href="../R/2a1eaad04e64b5de.html" target="n" data-glyph="46,1" class="i field">_seenParameters</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="@0@System.Core/A.html#f4308bded2e9d66a" class="t t">ParameterExpression</a>&gt;();
+        <b>private readonly</b> <a href="ExpressionFingerprintChain.cs.html#99d46ed2d1c6354d" class="t t">ExpressionFingerprintChain</a> <a id="3d8103c1ffb256f4" href="../R/3d8103c1ffb256f4.html" target="n" data-glyph="46,1" class="i field">_currentChain</a> = <b>new</b> <a href="ExpressionFingerprintChain.cs.html#99d46ed2d1c6354d" class="t constructor">ExpressionFingerprintChain</a>();
+        <b>private bool</b> <a id="49886579515fd061" href="../R/49886579515fd061.html" target="n" data-glyph="46,1" class="i field">_gaveUp</a>;
+ 
+        <b>private</b> <a id="c2685d0b90cb7d64" href="../R/c2685d0b90cb7d64.html" target="n" data-glyph="76,1" class="i constructor">FingerprintingExpressionVisitor</a>()
+        {
+        }
+ 
+        <b>private</b> <span class="r0 r t">T</span> <a id="3a3751f65ddca7c1" href="../R/3a3751f65ddca7c1.html" target="n" data-glyph="76,1" class="i method">GiveUp</a>&lt;<span id="r0 rd t" class="r0 r t">T</span>&gt;(<span class="r0 r t">T</span> <span id="r1 rd" class="r1 r">node</span>)
+        {
+            <span class="c">// We don&#39;t understand this node, so just quit.</span>
+ 
+            <a href="#49886579515fd061" class="i field">_gaveUp</a> = <b>true</b>;
+            <b>return</b> <span class="r1 r">node</span>;
+        }
+ 
+        <span class="c">// Returns the fingerprint chain + captured constants list for this expression, or null</span>
+        <span class="c">// if the expression couldn&#39;t be fingerprinted.</span>
+        <b>public static</b> <a href="ExpressionFingerprintChain.cs.html#99d46ed2d1c6354d" class="t t">ExpressionFingerprintChain</a> <a id="c54e0b6962409bb3" href="../R/c54e0b6962409bb3.html" target="n" data-glyph="72,1" class="i method">GetFingerprintChain</a>(<a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <span id="r2 rd" class="r2 r">expr</span>, <b>out</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>object</b>&gt; <span id="r3 rd" class="r3 r">capturedConstants</span>)
+        {
+            <a href="#273d5554cc1cd9c0" class="t t">FingerprintingExpressionVisitor</a> <span id="r4 rd" class="r4 r">visitor</span> = <b>new</b> <a href="#c2685d0b90cb7d64" class="t constructor">FingerprintingExpressionVisitor</a>();
+            <span class="r4 r">visitor</span>.<a href="#2f4752086f492433" class="i method">Visit</a>(<span class="r2 r">expr</span>);
+ 
+            <b>if</b> (<span class="r4 r">visitor</span>.<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <span class="r3 r">capturedConstants</span> = <b>null</b>;
+                <b>return null</b>;
+            }
+            <b>else</b>
+            {
+                <span class="r3 r">capturedConstants</span> = <span class="r4 r">visitor</span>.<a href="#4c784274eedd7232" class="i field">_seenConstants</a>;
+                <b>return</b> <span class="r4 r">visitor</span>.<a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>;
+            }
+        }
+ 
+        <b>public override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="2f4752086f492433" href="../R/2f4752086f492433.html" target="n" data-glyph="72,1" class="i method">Visit</a>(<a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <span id="r5 rd" class="r5 r">node</span>)
+        {
+            <b>if</b> (<span class="r5 r">node</span> == <b>null</b>)
+            {
+                <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>null</b>);
+                <b>return null</b>;
+            }
+            <b>else</b>
+            {
+                <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#fd021c4965d900f0" class="i method">Visit</a>(<span class="r5 r">node</span>);
+            }
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="28df4235df9de5f9" href="../R/28df4235df9de5f9.html" target="n" data-glyph="75,1" class="i method">VisitBinary</a>(<a href="@0@System.Core/A.html#f1f4bde6b61efaa0" class="t t">BinaryExpression</a> <span id="r6 rd" class="r6 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r6 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="BinaryExpressionFingerprint.cs.html#04ad7dfe90c8ca32" class="t constructor">BinaryExpressionFingerprint</a>(<span class="r6 r">node</span>.<a href="@0@System.Core/A.html#70a7ede4faadee85" class="i property">NodeType</a>, <span class="r6 r">node</span>.<a href="@0@System.Core/A.html#575f8f01a8a61fc4" class="i property">Type</a>, <span class="r6 r">node</span>.<a href="@0@System.Core/A.html#7ca07d64b32cc117" class="i property">Method</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#be169db158be0127" class="i method">VisitBinary</a>(<span class="r6 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="25b116873fcfea8c" href="../R/25b116873fcfea8c.html" target="n" data-glyph="75,1" class="i method">VisitBlock</a>(<a href="@0@System.Core/A.html#951103753db68030" class="t t">BlockExpression</a> <span id="r7 rd" class="r7 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r7 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#b3b74945c73887f5" class="t t">CatchBlock</a> <a id="718d8f69e6b7c0ef" href="../R/718d8f69e6b7c0ef.html" target="n" data-glyph="75,1" class="i method">VisitCatchBlock</a>(<a href="@0@System.Core/A.html#b3b74945c73887f5" class="t t">CatchBlock</a> <span id="r8 rd" class="r8 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r8 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="ce9d3a819965323d" href="../R/ce9d3a819965323d.html" target="n" data-glyph="75,1" class="i method">VisitConditional</a>(<a href="@0@System.Core/A.html#df1fc73732cbaf7c" class="t t">ConditionalExpression</a> <span id="r9 rd" class="r9 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r9 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="ConditionalExpressionFingerprint.cs.html#14526946e4fc3cab" class="t constructor">ConditionalExpressionFingerprint</a>(<span class="r9 r">node</span>.<a href="@0@System.Core/A.html#1a88163ebd46a5ba" class="i property">NodeType</a>, <span class="r9 r">node</span>.<a href="@0@System.Core/A.html#3612f22fe101f9dc" class="i property">Type</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#fea5d656389142c2" class="i method">VisitConditional</a>(<span class="r9 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="d1934551e134a2e0" href="../R/d1934551e134a2e0.html" target="n" data-glyph="75,1" class="i method">VisitConstant</a>(<a href="@0@System.Core/A.html#c3ac4c4d7e847ad9" class="t t">ConstantExpression</a> <span id="r10 rd" class="r10 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r10 r">node</span>;
+            }
+ 
+            <a href="#4c784274eedd7232" class="i field">_seenConstants</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r10 r">node</span>.<a href="@0@System.Core/A.html#d18072aa45164344" class="i property">Value</a>);
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="ConstantExpressionFingerprint.cs.html#15bd02d3ede5e101" class="t constructor">ConstantExpressionFingerprint</a>(<span class="r10 r">node</span>.<a href="@0@System.Core/A.html#2c176f638bbe69c3" class="i property">NodeType</a>, <span class="r10 r">node</span>.<a href="@0@System.Core/A.html#73880f3ee3d94ee0" class="i property">Type</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#20a145d8c1934c26" class="i method">VisitConstant</a>(<span class="r10 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="8bb42f6a004704a2" href="../R/8bb42f6a004704a2.html" target="n" data-glyph="75,1" class="i method">VisitDebugInfo</a>(<a href="@0@System.Core/A.html#64b885ef54732a2b" class="t t">DebugInfoExpression</a> <span id="r11 rd" class="r11 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r11 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="152314cab5f1c2c1" href="../R/152314cab5f1c2c1.html" target="n" data-glyph="75,1" class="i method">VisitDefault</a>(<a href="@0@System.Core/A.html#0e13588a43bf75d9" class="t t">DefaultExpression</a> <span id="r12 rd" class="r12 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r12 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="DefaultExpressionFingerprint.cs.html#7911506596687c4b" class="t constructor">DefaultExpressionFingerprint</a>(<span class="r12 r">node</span>.<a href="@0@System.Core/A.html#abe69a2536b0a544" class="i property">NodeType</a>, <span class="r12 r">node</span>.<a href="@0@System.Core/A.html#8234a5968e7ee9c5" class="i property">Type</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#1af46eb94f11334b" class="i method">VisitDefault</a>(<span class="r12 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="3e2327da36375464" href="../R/3e2327da36375464.html" target="n" data-glyph="75,1" class="i method">VisitDynamic</a>(<a href="@0@System.Core/A.html#28fad1e7e61266b0" class="t t">DynamicExpression</a> <span id="r13 rd" class="r13 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r13 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#ba122c4e8381540b" class="t t">ElementInit</a> <a id="6251d58e749de907" href="../R/6251d58e749de907.html" target="n" data-glyph="75,1" class="i method">VisitElementInit</a>(<a href="@0@System.Core/A.html#ba122c4e8381540b" class="t t">ElementInit</a> <span id="r14 rd" class="r14 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r14 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="e92642f4ab60a0c0" href="../R/e92642f4ab60a0c0.html" target="n" data-glyph="75,1" class="i method">VisitExtension</a>(<a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <span id="r15 rd" class="r15 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r15 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="b6e386abae0208bb" href="../R/b6e386abae0208bb.html" target="n" data-glyph="75,1" class="i method">VisitGoto</a>(<a href="@0@System.Core/A.html#cfc5928a5bef2683" class="t t">GotoExpression</a> <span id="r16 rd" class="r16 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r16 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="688e948e6c24531f" href="../R/688e948e6c24531f.html" target="n" data-glyph="75,1" class="i method">VisitIndex</a>(<a href="@0@System.Core/A.html#cf1340b0944e12de" class="t t">IndexExpression</a> <span id="r17 rd" class="r17 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r17 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="IndexExpressionFingerprint.cs.html#25b6e5affd4f9dff" class="t constructor">IndexExpressionFingerprint</a>(<span class="r17 r">node</span>.<a href="@0@System.Core/A.html#1665f2e26eb0fa02" class="i property">NodeType</a>, <span class="r17 r">node</span>.<a href="@0@System.Core/A.html#6c2e2508b9043b51" class="i property">Type</a>, <span class="r17 r">node</span>.<a href="@0@System.Core/A.html#006b42d881291129" class="i property">Indexer</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#56c4074ce47f2112" class="i method">VisitIndex</a>(<span class="r17 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="ce17505c6fa680cc" href="../R/ce17505c6fa680cc.html" target="n" data-glyph="75,1" class="i method">VisitInvocation</a>(<a href="@0@System.Core/A.html#be055a377b05e5f4" class="t t">InvocationExpression</a> <span id="r18 rd" class="r18 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r18 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="4a62131550396c99" href="../R/4a62131550396c99.html" target="n" data-glyph="75,1" class="i method">VisitLabel</a>(<a href="@0@System.Core/A.html#f0d7b9b7ccee17d7" class="t t">LabelExpression</a> <span id="r19 rd" class="r19 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r19 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#11bdfde392c165a5" class="t t">LabelTarget</a> <a id="daa2f20e3f92b9fa" href="../R/daa2f20e3f92b9fa.html" target="n" data-glyph="75,1" class="i method">VisitLabelTarget</a>(<a href="@0@System.Core/A.html#11bdfde392c165a5" class="t t">LabelTarget</a> <span id="r20 rd" class="r20 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r20 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="11830c5a4c67f5c2" href="../R/11830c5a4c67f5c2.html" target="n" data-glyph="75,1" class="i method">VisitLambda</a>&lt;<span id="r21 rd t" class="r21 r t">T</span>&gt;(<a href="@0@System.Core/A.html#51d6d604b8c53dc8" class="t t">Expression</a>&lt;<span class="r21 r t">T</span>&gt; <span id="r22 rd" class="r22 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r22 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="LambdaExpressionFingerprint.cs.html#68462e77b437505b" class="t constructor">LambdaExpressionFingerprint</a>(<span class="r22 r">node</span>.<a href="@0@System.Core/A.html#4ee2b5fbd38f7aac" class="i property">NodeType</a>, <span class="r22 r">node</span>.<a href="@0@System.Core/A.html#765d4b29ca2abdc1" class="i property">Type</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#b0166cab7679fbdf" class="i method">VisitLambda</a>&lt;<span class="r21 r t">T</span>&gt;(<span class="r22 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="dbcc01d89a9fe37d" href="../R/dbcc01d89a9fe37d.html" target="n" data-glyph="75,1" class="i method">VisitListInit</a>(<a href="@0@System.Core/A.html#50616bfbb6d1e5ba" class="t t">ListInitExpression</a> <span id="r23 rd" class="r23 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r23 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="75551fb868cd581f" href="../R/75551fb868cd581f.html" target="n" data-glyph="75,1" class="i method">VisitLoop</a>(<a href="@0@System.Core/A.html#fe208b250c580a72" class="t t">LoopExpression</a> <span id="r24 rd" class="r24 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r24 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="c2343550ce2312d0" href="../R/c2343550ce2312d0.html" target="n" data-glyph="75,1" class="i method">VisitMember</a>(<a href="@0@System.Core/A.html#8760a057e74485a8" class="t t">MemberExpression</a> <span id="r25 rd" class="r25 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r25 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="MemberExpressionFingerprint.cs.html#c8c5729eaed35048" class="t constructor">MemberExpressionFingerprint</a>(<span class="r25 r">node</span>.<a href="@0@System.Core/A.html#ea984b3e6220706e" class="i property">NodeType</a>, <span class="r25 r">node</span>.<a href="@0@System.Core/A.html#575f8f01a8a61fc4" class="i property">Type</a>, <span class="r25 r">node</span>.<a href="@0@System.Core/A.html#464f3eb0ff158aae" class="i property">Member</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#9cf0db10b049b123" class="i method">VisitMember</a>(<span class="r25 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#c67a91436f3cd621" class="t t">MemberAssignment</a> <a id="a8137b06655d918d" href="../R/a8137b06655d918d.html" target="n" data-glyph="75,1" class="i method">VisitMemberAssignment</a>(<a href="@0@System.Core/A.html#c67a91436f3cd621" class="t t">MemberAssignment</a> <span id="r26 rd" class="r26 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r26 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#2793006984c44acc" class="t t">MemberBinding</a> <a id="c61a210227c6146d" href="../R/c61a210227c6146d.html" target="n" data-glyph="75,1" class="i method">VisitMemberBinding</a>(<a href="@0@System.Core/A.html#2793006984c44acc" class="t t">MemberBinding</a> <span id="r27 rd" class="r27 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r27 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="3a83486ab2d19d51" href="../R/3a83486ab2d19d51.html" target="n" data-glyph="75,1" class="i method">VisitMemberInit</a>(<a href="@0@System.Core/A.html#1858cffd21b64145" class="t t">MemberInitExpression</a> <span id="r28 rd" class="r28 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r28 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#db2ef98342fcccaf" class="t t">MemberListBinding</a> <a id="ddb67f66530e4396" href="../R/ddb67f66530e4396.html" target="n" data-glyph="75,1" class="i method">VisitMemberListBinding</a>(<a href="@0@System.Core/A.html#db2ef98342fcccaf" class="t t">MemberListBinding</a> <span id="r29 rd" class="r29 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r29 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#183b30e950611e65" class="t t">MemberMemberBinding</a> <a id="8657040a5b9f8bf5" href="../R/8657040a5b9f8bf5.html" target="n" data-glyph="75,1" class="i method">VisitMemberMemberBinding</a>(<a href="@0@System.Core/A.html#183b30e950611e65" class="t t">MemberMemberBinding</a> <span id="r30 rd" class="r30 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r30 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="8a3ad9e53164cb10" href="../R/8a3ad9e53164cb10.html" target="n" data-glyph="75,1" class="i method">VisitMethodCall</a>(<a href="@0@System.Core/A.html#9769c0ae4c630fa2" class="t t">MethodCallExpression</a> <span id="r31 rd" class="r31 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r31 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="MethodCallExpressionFingerprint.cs.html#f88c0744cd937d35" class="t constructor">MethodCallExpressionFingerprint</a>(<span class="r31 r">node</span>.<a href="@0@System.Core/A.html#ece5aa72bfc051e7" class="i property">NodeType</a>, <span class="r31 r">node</span>.<a href="@0@System.Core/A.html#185c9e25a9f1e8f1" class="i property">Type</a>, <span class="r31 r">node</span>.<a href="@0@System.Core/A.html#775e246f1f1cf3a7" class="i property">Method</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#1cc1c82c4d2a41e2" class="i method">VisitMethodCall</a>(<span class="r31 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="357b33bc91acafd5" href="../R/357b33bc91acafd5.html" target="n" data-glyph="75,1" class="i method">VisitNew</a>(<a href="@0@System.Core/A.html#1d8501cdde70b9f4" class="t t">NewExpression</a> <span id="r32 rd" class="r32 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r32 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="c50e93b80f6118cb" href="../R/c50e93b80f6118cb.html" target="n" data-glyph="75,1" class="i method">VisitNewArray</a>(<a href="@0@System.Core/A.html#ec7d9165f472ab07" class="t t">NewArrayExpression</a> <span id="r33 rd" class="r33 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r33 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="a7a40373333202e5" href="../R/a7a40373333202e5.html" target="n" data-glyph="75,1" class="i method">VisitParameter</a>(<a href="@0@System.Core/A.html#f4308bded2e9d66a" class="t t">ParameterExpression</a> <span id="r34 rd" class="r34 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r34 r">node</span>;
+            }
+ 
+            <b>int</b> <span id="r35 rd" class="r35 r">parameterIndex</span> = <a href="#2a1eaad04e64b5de" class="i field">_seenParameters</a>.<a href="@0@mscorlib/A.html#242756beb6e8749e" class="i method">IndexOf</a>(<span class="r34 r">node</span>);
+            <b>if</b> (<span class="r35 r">parameterIndex</span> &lt; 0)
+            {
+                <span class="c">// first time seeing this parameter</span>
+                <span class="r35 r">parameterIndex</span> = <a href="#2a1eaad04e64b5de" class="i field">_seenParameters</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>;
+                <a href="#2a1eaad04e64b5de" class="i field">_seenParameters</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r34 r">node</span>);
+            }
+ 
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="ParameterExpressionFingerprint.cs.html#2ef62b7fb1cfbb30" class="t constructor">ParameterExpressionFingerprint</a>(<span class="r34 r">node</span>.<a href="@0@System.Core/A.html#ea8b34555c18dfc2" class="i property">NodeType</a>, <span class="r34 r">node</span>.<a href="@0@System.Core/A.html#a90d30bc93f67d4d" class="i property">Type</a>, <span class="r35 r">parameterIndex</span>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#e66110f8312b9815" class="i method">VisitParameter</a>(<span class="r34 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="e51a085130d251d9" href="../R/e51a085130d251d9.html" target="n" data-glyph="75,1" class="i method">VisitRuntimeVariables</a>(<a href="@0@System.Core/A.html#ef56fcba38996562" class="t t">RuntimeVariablesExpression</a> <span id="r36 rd" class="r36 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r36 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="2801d22ecc7c93d2" href="../R/2801d22ecc7c93d2.html" target="n" data-glyph="75,1" class="i method">VisitSwitch</a>(<a href="@0@System.Core/A.html#3c4bfa23028646e8" class="t t">SwitchExpression</a> <span id="r37 rd" class="r37 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r37 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#29b1dc69af4d1ea2" class="t t">SwitchCase</a> <a id="ed82bfc63b3e412a" href="../R/ed82bfc63b3e412a.html" target="n" data-glyph="75,1" class="i method">VisitSwitchCase</a>(<a href="@0@System.Core/A.html#29b1dc69af4d1ea2" class="t t">SwitchCase</a> <span id="r38 rd" class="r38 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r38 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="473322383e11a178" href="../R/473322383e11a178.html" target="n" data-glyph="75,1" class="i method">VisitTry</a>(<a href="@0@System.Core/A.html#124c7f73253fbe0f" class="t t">TryExpression</a> <span id="r39 rd" class="r39 r">node</span>)
+        {
+            <b>return</b> <a href="#3a3751f65ddca7c1" class="i method">GiveUp</a>(<span class="r39 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="26104f1df1b0f431" href="../R/26104f1df1b0f431.html" target="n" data-glyph="75,1" class="i method">VisitTypeBinary</a>(<a href="@0@System.Core/A.html#a3f457389b892746" class="t t">TypeBinaryExpression</a> <span id="r40 rd" class="r40 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r40 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="TypeBinaryExpressionFingerprint.cs.html#0bd34d0ea4868ff1" class="t constructor">TypeBinaryExpressionFingerprint</a>(<span class="r40 r">node</span>.<a href="@0@System.Core/A.html#d3eaa1f6115a6bb8" class="i property">NodeType</a>, <span class="r40 r">node</span>.<a href="@0@System.Core/A.html#23e6a02a92e23db5" class="i property">Type</a>, <span class="r40 r">node</span>.<a href="@0@System.Core/A.html#3a6fc4ad5192a8f1" class="i property">TypeOperand</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#dcee59a1d89b0073" class="i method">VisitTypeBinary</a>(<span class="r40 r">node</span>);
+        }
+ 
+        <b>protected override</b> <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a> <a id="a3ecdfcdf39bae8d" href="../R/a3ecdfcdf39bae8d.html" target="n" data-glyph="75,1" class="i method">VisitUnary</a>(<a href="@0@System.Core/A.html#249779eee7261f1f" class="t t">UnaryExpression</a> <span id="r41 rd" class="r41 r">node</span>)
+        {
+            <b>if</b> (<a href="#49886579515fd061" class="i field">_gaveUp</a>)
+            {
+                <b>return</b> <span class="r41 r">node</span>;
+            }
+            <a href="#3d8103c1ffb256f4" class="i field">_currentChain</a>.<a href="ExpressionFingerprintChain.cs.html#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="UnaryExpressionFingerprint.cs.html#ff23af008a05d024" class="t constructor">UnaryExpressionFingerprint</a>(<span class="r41 r">node</span>.<a href="@0@System.Core/A.html#92188889c72f3b36" class="i property">NodeType</a>, <span class="r41 r">node</span>.<a href="@0@System.Core/A.html#f556e61e780cb28d" class="i property">Type</a>, <span class="r41 r">node</span>.<a href="@0@System.Core/A.html#fb1c9ecae33a99cc" class="i property">Method</a>));
+            <b>return</b> <a href="@0@System.Core/A.html#f0615a823a9efe36" class="k">base</a>.<a href="@0@System.Core/A.html#3443abc0a420ded3" class="i method">VisitUnary</a>(<span class="r41 r">node</span>);
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,441 @@
+﻿<!DOCTYPE html>
+<html><head><title>AspxProcRender.cs</title><link rel="stylesheet" href="../../../styles.css"><script src="../../../scripts.js"></script></head>
+<body class="cB" onload="i(432);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#MvcHttp/Render/Aspx/AspxProcRender.cs" target="_top">Render\Aspx\AspxProcRender.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#MvcHttp" target="_top">MvcHttp\MvcHttp.csproj</a> (MvcHttp)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// SqlProcRender.cs Puslapio &quot;gabaliuko&quot; gamyba, gaunat XML is Sql proceduros/XSLT transformacija i HTML</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Net</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Xml</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Xml</span>.<span class="i n">Xsl</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Xml</span>.<span class="i n">XPath</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Xml</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Configuration</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Data</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Data</span>.<span class="i n">SqlClient</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">ComponentModel</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">AiLib</span>.<span class="i n">Render</span>;
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">NET40</span> &amp;&amp; !<span class="i">NET45</span>
+<span class="e">    using prek.data;
+    using AiLib.Entity;
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">WEB</span>
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">UI</span>;
+<b>using</b> <span class="i n">AiLib</span>.<span class="i n">Web</span>;
+<span class="k preprocess">#</span><span class="k preprocess">else</span>
+<span class="e">    using AiLib.IISHost;
+    using RazorEngine.Text;
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+<b>namespace</b> <span class="i n">AiLib</span>.<span class="i n">Render</span>
+{
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">WEB</span> <span class="c">// !NET40 &amp;&amp; !NET45</span>
+    <b>public interface</b> <a id="73db51a472182f53" href="../../R/73db51a472182f53.html" target="n" data-glyph="48,0" class="t t">ILastError</a>
+    {
+        <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <a id="97877f94659152a7" href="../../R/97877f94659152a7.html" target="n" data-glyph="102,1" class="i property">LastError</a> { <b>get</b>; <b>set</b>; }
+    }
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+    <b>public struct</b> <a id="d75014c846a38174" href="../../R/d75014c846a38174.html" target="n" data-glyph="108,0" class="t t"><span id="56b5fbb68bbcc50d">Bin</span></a>
+    {
+        <b>public const string</b> <a id="20c010a9a0229011" href="../../R/20c010a9a0229011.html" target="n" data-glyph="6,1" class="i field">Version</a> = <span class="s">&quot;2.0.3&quot;</span>;
+    }
+
+    <span class="c">/*  
+        Web.Config:
+
+                &lt;add tagPrefix = &quot;snWeb&quot; namespace=&quot;AiLib.Render&quot; assembly=&quot;AiLib.MvcHttp&quot; /&gt;
+            &lt;/controls&gt;
+        &lt;/pages&gt;
+        &lt;httpHandlers&gt;
+            &lt;clear /&gt;
+            &lt;add path = &quot;*.cshtml&quot; type=&quot;System.Web.DefaultHttpHandler&quot; validate=&quot;true&quot; verb=&quot;*&quot; /&gt;
+            &lt;add path = &quot;*.aspx&quot; type=&quot;System.Web.UI.PageHandlerFactory&quot; validate=&quot;true&quot; verb=&quot;*&quot; /&gt;
+    */</span>
+
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c">		Summary description for sqlxml.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">WEB</span>
+    [<a href="@0@System.Web/A.html#62dc36d1a5b8db27" class="t constructor">ToolboxData</a>(<span class="s">&quot;&lt;{0}:AspxProcRender runat=\&quot;server\&quot; SqlProc=\&quot;\&quot; SqlParam=\&quot;\&quot; /&gt;&quot;</span>)]
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+    <span class="c">// [Designer(typeof(SqlProcRenderDesigner))]</span>
+    <b>public class</b> <a id="3dda630eb4a57529" href="../../R/3dda630eb4a57529.html" target="n" data-glyph="0,0" class="t t"><span id="e05ed8dd3b186d5c">AspxProcRender</span></a> : <a href="../RenderXslt.cs.html#27b2219e8a2f093b" class="t t">RenderXsltBase</a>, <a href="../Base/IRenderXslt.cs.html#1ef29dc3ef6ac0d7" class="t t">IRenderXslt</a>, <a href="../Base/IRenderBase.cs.html#bfb676d99db009f3" class="t t">IRenderBase</a>, <a href="#73db51a472182f53" class="t t">ILastError</a>
+    {
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Params_Section                    // SqlXml params
+
+        <b>protected string</b> <a id="7cfd78dadb126198" href="../../R/7cfd78dadb126198.html" target="n" data-glyph="45,1" class="i field">dirXslt</a> = <span class="s">&quot;&quot;</span>;
+        <b>public</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <a id="1ed569a6fe3f8ee0" href="../../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">DirXslt</a>          <span class="c">// Xlst subdirectory value</span>
+        {
+            <b>set</b>
+            {
+                <a href="#e1b93d1d15241f35" class="i method">TraceWrite</a>(<span class="s">&quot;sqlxml&quot;</span>, <span class="s">&quot;set DirXslt: value=&quot;</span> + <b>value</b>);
+                <a href="#7cfd78dadb126198" class="i field">dirXslt</a> = <b>value</b>;
+            }
+            <b>get</b> { <b>return</b> <a href="#7cfd78dadb126198" class="i field">dirXslt</a>; }
+        }
+
+        <b>protected string</b> <a id="31bae204d8a49c5f" href="../../R/31bae204d8a49c5f.html" target="n" data-glyph="45,1" class="i field">sqlproc</a> = <span class="s">&quot;&quot;</span>;
+        <b>public</b> <b>new</b> <b>string</b> <a id="53478e87c28298b4" href="../../R/53478e87c28298b4.html" target="n" data-glyph="102,1" class="i property">SqlProc</a>
+        {
+            <b>set</b> { <a href="#31bae204d8a49c5f" class="i field">sqlproc</a> = <b>value</b>; }
+            <b>get</b> { <b>return</b> <a href="#31bae204d8a49c5f" class="i field">sqlproc</a>; }
+        }
+
+        <b>protected string</b> <a id="33935518ed4d4395" href="../../R/33935518ed4d4395.html" target="n" data-glyph="45,1" class="i field">sqlParam</a> = <span class="s">&quot;&quot;</span>;
+        <b>public string</b> <a id="0a38e30f20b7517c" href="../../R/0a38e30f20b7517c.html" target="n" data-glyph="102,1" class="i property">SqlParam</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#33935518ed4d4395" class="i field">sqlParam</a>; }
+            <b>set</b> { <a href="#33935518ed4d4395" class="i field">sqlParam</a> = <b>value</b>; }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="c">// public HttpContext Context { get { return HttpContext.Current; } }</span>
+        <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a> <a href="../Base/IRenderXslt.cs.html#2cbe58122adfdcb5" class="t t">IRenderXsltBase</a>.<a href="../Base/IRenderXslt.cs.html#a326b3a050e0566f" class="i property">Context</a> { <b>get</b> { <b>return</b> <a href="../RenderXslt.cs.html#27b2219e8a2f093b" class="k">base</a>.<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>; } }
+
+        <b>public</b> <b>new</b> <b>int</b> <a id="6590393082d3e59f" href="../../R/6590393082d3e59f.html" target="n" data-glyph="102,1" class="i property">UserID</a>
+        {
+            <b>get</b>
+            {
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">NET40</span> &amp;&amp; !<span class="i">NET45</span>
+<span class="e">                if (this.Context != null)
+                {
+                    try
+                    {
+                        UserInfo user = this.Context.Session[UserInfo.SESSION_KEY] as prek.data.UserInfo;
+                        if (user != null) return user.UserId;
+                    }
+                    catch (Exception) { }
+                }
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+                <b>return</b> 0;
+            }
+        }
+
+        <b>public virtual string</b> <a id="5329a3c725ebb703" href="../../R/5329a3c725ebb703.html" target="n" data-glyph="72,1" class="i method">GetParamSql</a>(<b>string</b> <span id="r0 rd" class="r0 r">key</span>)
+        {
+            <b>if</b> (<a href="#c2db2f458753a337" class="i property">SqlParamDict</a> == <b>null</b>) <b>return null</b>;
+            <b>string</b> <span id="r1 rd" class="r1 r">val</span> = <span class="s">&quot;&quot;</span>;
+            <b>if</b> (<a href="#c2db2f458753a337" class="i property">SqlParamDict</a>.<a href="@0@mscorlib/A.html#2e5bc6d8c0f21e67" class="i method">TryGetValue</a>(<span class="r0 r">key</span>, <b>out</b> <span class="r1 r">val</span>))
+                <b>return</b> <span class="r1 r">val</span>;
+            <b>return</b> <span class="s">&quot;&quot;</span>;
+        }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <b>string</b>&gt; <a id="c2db2f458753a337" href="../../R/c2db2f458753a337.html" target="n" data-glyph="102,1" class="i property">SqlParamDict</a> { <b>get</b>; <b>set</b>; }
+
+        <b>public virtual</b> <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <a id="67524025f3090e9b" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SqlProcParameters</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@System.Data/A.html#f00e50d65755ab48" class="t t">SqlParameter</a>&gt; <span id="r2 rd" class="r2 r">listSqlParam</span>)
+        {
+            <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <span id="r3 rd" class="r3 r">xmlDoc</span> = <a href="../SqlXmlDoc.cs.html#d9da41d8ade6a18a" class="t t">SqlXmlDoc</a>.<a href="../SqlXmlDoc.cs.html#22eedad4905c5f83" class="i method">SqlProcParameters</a>(<a href="#3dda630eb4a57529" class="k">this</a>, <span class="r2 r">listSqlParam</span>, <span class="s">&quot;Root&quot;</span>);
+            <b>return</b> <span class="r3 r">xmlDoc</span>;
+        }
+
+        <b>private string</b> <a id="2e302c977533374f" href="../../R/2e302c977533374f.html" target="n" data-glyph="46,1" class="i field">xsltFileFull</a> = <b>null</b>;
+
+        <b>public string</b> <a id="82d17c458fbd1e5f" href="../../R/82d17c458fbd1e5f.html" target="n" data-glyph="72,1" class="i method">Render</a>(<a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r4 rd" class="r4 r">writer</span>)
+        {
+            <a href="#55cb7123df17d076" class="i method">RenderHtml</a>(<span class="r4 r">writer</span>, <a href="#688517ae2e911336" class="i method">Prepare</a>());
+            <b>return string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+        }
+
+        <b>public override void</b> <a id="9168d9fbbe2658e0" href="../../R/9168d9fbbe2658e0.html" target="n" data-glyph="72,1" class="i method">RenderControl</a>(<a href="@0@System.Web/A.html#671c476a45af082b" class="t t">HtmlTextWriter</a> <span id="r5 rd" class="r5 r">writer</span>)
+        {
+            <span class="c">// nobase: base.RenderControl(writer);</span>
+
+            <b>if</b> (<span class="i n">AiLib</span>.<a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#18e952a853483cae" class="i property">doc</a> == <b>null</b>)
+                <span class="i n">AiLib</span>.<a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#6327956e10dcfa8b" class="i method">LoadXml</a>();
+
+            <b>if</b> (<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>.<a href="@0@System.Web/A.html#b2ccd250d87c70c7" class="i property">QueryString</a>.<a href="../../Web/HttpStatic.cs.html#5b7755fc13f7e814" class="i method">Get</a>&lt;<b>string</b>&gt;(<span class="s">&quot;lang&quot;</span>) == <span class="s">&quot;en&quot;</span>
+                || <a href="../../Web/SegmentLang.cs.html#1560d52eea3e70e5" class="t t">SegmentLang</a>.<a href="../../Web/SegmentLang.cs.html#217ca99a5e7e96ae" class="i field">Instance</a> != <b>null</b> &amp;&amp; <a href="../../Web/SegmentLang.cs.html#1560d52eea3e70e5" class="t t">SegmentLang</a>.<a href="../../Web/SegmentLang.cs.html#217ca99a5e7e96ae" class="i field">Instance</a>.<a href="../../Web/SegmentLang.cs.html#2d6e49f5e44f98ac" class="i property">Lang</a> == <span class="s">&quot;EN&quot;</span>)
+                <span class="i n">AiLib</span>.<a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#ba8d1287514e7d36" class="i property">Lang</a> = <span class="s">&quot;en&quot;</span>; <span class="c">// lowercase !!!</span>
+            <b>if</b> (<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>.<a href="@0@System.Web/A.html#b2ccd250d87c70c7" class="i property">QueryString</a>.<a href="../../Web/HttpStatic.cs.html#5b7755fc13f7e814" class="i method">Get</a>&lt;<b>string</b>&gt;(<span class="s">&quot;lang&quot;</span>) == <span class="s">&quot;lt&quot;</span>)
+                <span class="i n">AiLib</span>.<a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#ba8d1287514e7d36" class="i property">Lang</a> = <span class="s">&quot;lt&quot;</span>;
+
+            <a href="#e1b93d1d15241f35" class="i method">TraceWrite</a>(<span class="s">&quot;Trans .TransFile={0} Lang={1} TrLang={2}&quot;</span>, <span class="i n">AiLib</span>.<a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#bf453df97361c528" class="i property">TransFile</a>, <a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#ba8d1287514e7d36" class="i property">Lang</a>, <a href="../../Trans.cs.html#264811a697a64aa9" class="t t">Trans</a>.<a href="../../Trans.cs.html#e594c8997f806734" class="i property">TrLang</a> ?? <span class="s">&quot;-&quot;</span>);
+
+            <a href="#916529a089ccf3a4" class="i method">Render</a>(<span class="r5 r">writer</span>);
+        }
+
+        <b>public virtual void</b> <a id="55cb7123df17d076" href="../../R/55cb7123df17d076.html" target="n" data-glyph="72,1" class="i method">RenderHtml</a>(<a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r6 rd" class="r6 r">writer</span>, <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <span id="r7 rd" class="r7 r">xmlDoc</span>)
+        {
+            <span class="c">// Transform XLST validation</span>
+            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r8 rd" class="r8 r">virtualDir</span> = <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Hosting</span>.<a href="@0@System.Web/A.html#f12b2fb72be7982c" class="t t">HostingEnvironment</a>.<a href="@0@System.Web/A.html#5c349191566e3f2c" class="i property">ApplicationPhysicalPath</a>;
+            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r9 rd" class="r9 r">fileXslt</span> = <a href="../RenderXslt.cs.html#89b2dbfed38b128a" class="i property">Xslt</a>.<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;/&quot;</span>, <span class="s">&quot;\\&quot;</span>);
+            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r10 rd" class="r10 r">path</span> = (<span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#f9128b02ffd0d3ea" class="i method">GetDirectoryName</a>(<a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>.<a href="@0@System.Web/A.html#5fdd09fb7be129b0" class="i property">Path</a>
+                        .<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;/&quot;</span>, <span class="s">&quot;\\&quot;</span>)) + <span class="s">&quot;\\&quot;</span>).<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">@&quot;\\&quot;</span>, <span class="s">@&quot;\&quot;</span>);
+
+            <b>if</b> (<span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<span class="r8 r">virtualDir</span> + <span class="r10 r">path</span> + <span class="r9 r">fileXslt</span>))
+                <a href="#2e302c977533374f" class="i field">xsltFileFull</a> = <span class="r8 r">virtualDir</span> + <span class="r10 r">path</span> + <span class="r9 r">fileXslt</span>;
+            <b>else</b>
+                <a href="#2e302c977533374f" class="i field">xsltFileFull</a> = <span class="r8 r">virtualDir</span> + <span class="r9 r">fileXslt</span>;
+
+            <a href="#2e302c977533374f" class="i field">xsltFileFull</a> = <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#1274738792cce835" class="i method">GetFullPath</a>(<a href="#2e302c977533374f" class="i field">xsltFileFull</a>);
+
+            <a href="@0@System/A.html#c63a0f19b2d4db69" class="t t">Trace</a>.<a href="@0@System/A.html#238ca55adb745644" class="i method">Write</a>(<span class="s">&quot;Transform ID=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a>, <span class="s">&quot;xslt=&quot;</span> + <a href="#2e302c977533374f" class="i field">xsltFileFull</a>);
+
+            <a href="@0@System.Xml/A.html#1b112afa09394eca" class="t t">XsltArgumentList</a> <span id="r11 rd" class="r11 r">xslArg</span> = <b>new</b> <a href="@0@System.Xml/A.html#5ef6fd930b8d6481" class="t constructor">XsltArgumentList</a>();
+            <a href="@0@System.Xml/A.html#6463d1c17244ac3d" class="t t">XslCompiledTransform</a> <span id="r12 rd" class="r12 r">trans</span> = <b>new</b> <a href="@0@System.Xml/A.html#a182430e79a1337e" class="t constructor">XslCompiledTransform</a>();
+
+            <b>if</b> (<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a> != <b>null</b> &amp;&amp; <a href="../RenderXslt.cs.html#89b2dbfed38b128a" class="i property">Xslt</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0 &amp;&amp; <a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<a href="#2e302c977533374f" class="i field">xsltFileFull</a>))
+            {
+                <b>string</b> <span id="r13 rd" class="r13 r">serverUrl</span> = <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>.<a href="@0@System.Web/A.html#98945de8f620647a" class="i property">Url</a>.<a href="@0@System/A.html#e73925be401b9bcb" class="i property">Scheme</a> + <span class="s">&quot;://&quot;</span> + <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>.<a href="@0@System.Web/A.html#98945de8f620647a" class="i property">Url</a>.<a href="@0@System/A.html#fefd01d5e9e625db" class="i property">Authority</a> + <span class="s">&quot;/&quot;</span>;
+
+                <a href="../XsltIncludeResolver.cs.html#3ab87291b63d288e" class="t t">XsltIncludeResolver</a> <span id="r14 rd" class="r14 r">resolver</span> = <b>new</b> <a href="../XsltIncludeResolver.cs.html#6648726ec660ca4a" class="t constructor">XsltIncludeResolver</a>(<span class="r13 r">serverUrl</span>);  <span class="c">// for &lt;xsl:include&gt;</span>
+                <span class="r12 r">trans</span>.<a href="@0@System.Xml/A.html#b85b76823882aedd" class="i method">Load</a>(<a href="#2e302c977533374f" class="i field">xsltFileFull</a>, <a href="@0@System.Xml/A.html#6d07c31e8f208759" class="t t">XsltSettings</a>.<a href="@0@System.Xml/A.html#cb46791277ca48e3" class="i property">TrustedXslt</a>, <span class="r14 r">resolver</span> <b>as</b> <a href="@0@System.Xml/A.html#e0bf236f771e4926" class="t t">XmlUrlResolver</a>);
+            }
+            <b>else</b>
+            {
+                <a href="@0@System.Xml/A.html#086471e5cca0825f" class="k">var</a> <span id="r15 rd" class="r15 r">reader</span> = <a href="@0@System.Xml/A.html#086471e5cca0825f" class="t t">XmlReader</a>.<a href="@0@System.Xml/A.html#787de8fa146fb641" class="i method">Create</a>(<span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#7a7d1c864bec521e" class="i method">OpenRead</a>(<a href="#2e302c977533374f" class="i field">xsltFileFull</a>));
+                <span class="r12 r">trans</span>.<a href="@0@System.Xml/A.html#e3115345751a1b3b" class="i method">Load</a>(<span class="r16 r">stylesheet</span>: <span class="r15 r">reader</span>);
+            }
+
+            <a href="@0@System/A.html#c63a0f19b2d4db69" class="t t">Trace</a>.<a href="@0@System/A.html#238ca55adb745644" class="i method">Write</a>(<span class="s">&quot;Transform ID=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a>, <span class="s">&quot;XSLT Parse Test OK.&quot;</span> + <a href="#2e302c977533374f" class="i field">xsltFileFull</a>);
+
+            <a href="#5ff225e8939379eb" class="i method">AddRequestInfo</a>(<span class="r11 r">xslArg</span>);
+
+            <b>if</b> (<a href="../RenderXslt.cs.html#b7e3f5e73ef547a2" class="i field">isDebug</a> &lt;= 1)
+                <span class="r12 r">trans</span>.<a href="@0@System.Xml/A.html#4a4437a3602009f8" class="i method">Transform</a>(<span class="r7 r">xmlDoc</span>, <span class="r11 r">xslArg</span>, <span class="r6 r">writer</span>);
+        }
+
+        <b>public virtual void</b> <a id="5ff225e8939379eb" href="../../R/5ff225e8939379eb.html" target="n" data-glyph="72,1" class="i method">AddRequestInfo</a>(<a href="@0@System.Xml/A.html#1b112afa09394eca" class="t t">XsltArgumentList</a> <span id="r17 rd" class="r17 r">xslArg</span>)
+        {
+            <span class="c">// Add an object to convert</span>
+            <a href="../RequestInfo.cs.html#67586cf23b82e26e" class="t t">RequestInfo</a> <span id="r18 rd" class="r18 r">info</span> = <b>null</b>;
+            <b>if</b> (<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a> != <b>null</b>)
+                <span class="r18 r">info</span> = <b>new</b> <a href="../RequestInfo.cs.html#4a3df20fe2dd8531" class="t constructor">RequestInfo</a>(<a href="#3dda630eb4a57529" class="k">this</a>, <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>);
+            <b>else</b>
+                <span class="r18 r">info</span> = <b>new</b> <a href="../RequestInfo.cs.html#4a3df20fe2dd8531" class="t constructor">RequestInfo</a>(<a href="#3dda630eb4a57529" class="k">this</a>, <b>null</b>);
+
+            <span class="r17 r">xslArg</span>.<a href="@0@System.Xml/A.html#37b3fa99fe77c3b1" class="i method">AddExtensionObject</a>(<span class="s">&quot;urn:request-info&quot;</span>, <span class="r18 r">info</span>);
+        }
+
+        <b>public</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Specialized</span>.<a href="@0@System/A.html#43778f3f0bc795d4" class="t t">NameValueCollection</a> <a id="7f4491e1895838ec" href="../../R/7f4491e1895838ec.html" target="n" data-glyph="102,1" class="i property">QueryString</a>
+        { <b>get</b> { <b>return</b> <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>.<a href="@0@System.Web/A.html#b2ccd250d87c70c7" class="i property">QueryString</a>; } }
+
+        <b>public override void</b> <a id="e1b93d1d15241f35" href="../../R/e1b93d1d15241f35.html" target="n" data-glyph="72,1" class="i method">TraceWrite</a>(<b>string</b> <span id="r19 rd" class="r19 r">format</span>, <b>params object</b>[] <span id="r20 rd" class="r20 r">parm</span>)
+        {
+            <a href="@0@System.Web/A.html#844b035d2e1fa083" class="k">var</a> <span id="r21 rd" class="r21 r">trace</span> = <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a> == <b>null</b> ? <b>null</b> : <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#f0605f3479a543a2" class="i property">Trace</a>;
+            <b>if</b> (<span class="r21 r">trace</span> == <b>null</b>) <b>return</b>;
+            <span class="r21 r">trace</span>.<a href="@0@System.Web/A.html#f6d04725507dc0a3" class="i method">Write</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#ad9f5b0b214ae8f3" class="i method">Format</a>(<span class="r19 r">format</span>, <span class="r20 r">parm</span>));
+        }
+
+        <b>public</b> <b>new</b> <b>string</b> <a id="57e4129d1d3ba98c" href="../../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">IsDebug</a> { <b>get</b> { <b>return</b> <a href="../RenderXslt.cs.html#b7e3f5e73ef547a2" class="i field">isDebug</a>.<a href="@0@mscorlib/A.html#8d6f2d8bc0589463" class="i method">ToString</a>(); } <b>set</b> { <a href="../RenderXslt.cs.html#b7e3f5e73ef547a2" class="i field">isDebug</a> = <a href="@0@mscorlib/A.html#225942ed7b7a3252" class="t t">Int32</a>.<a href="@0@mscorlib/A.html#a438016f815a35c3" class="i method">Parse</a>(<b>value</b>); } }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">WEB</span> <span class="c">// using System.Web</span>
+
+        <span class="c">// protected internal override void</span>
+        <b>protected</b> <b>new</b> <b>virtual void</b> <a id="916529a089ccf3a4" href="../../R/916529a089ccf3a4.html" target="n" data-glyph="75,1" class="i method">Render</a>(<a href="@0@System.Web/A.html#671c476a45af082b" class="t t">HtmlTextWriter</a> <span id="r22 rd" class="r22 r">writer</span>)
+        {
+            <a href="#e1b93d1d15241f35" class="i method">TraceWrite</a>(<b>string</b>.<a href="@0@mscorlib/A.html#7432dab173fae5fc" class="i method">Format</a>(<span class="s">&quot;V{0} sqlxml.ID={1}&quot;</span>, <a href="#d75014c846a38174" class="t t">Bin</a>.<a href="#20c010a9a0229011" class="i field">Version</a>, <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a>)
+                      , <b>string</b>.<a href="@0@mscorlib/A.html#7432dab173fae5fc" class="i method">Format</a>(<span class="s">&quot;proc={0} xslt={1}&quot;</span>, <a href="#3dda630eb4a57529" class="k">this</a>.<a href="#53478e87c28298b4" class="i property">SqlProc</a>, <a href="#3dda630eb4a57529" class="k">this</a>.<a href="../RenderXslt.cs.html#89b2dbfed38b128a" class="i property">Xslt</a>));
+
+            <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r23 rd" class="r23 r">Request</span> = <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>;
+            <b>if</b> (<span class="r23 r">Request</span> == <b>null</b>)
+            {
+                <a href="#e1b93d1d15241f35" class="i method">TraceWrite</a>(<span class="s">&quot;sqlxml=&quot;</span> + <a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a>, <span class="s">&quot;&lt;no Request&gt;&quot;</span>);
+                <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;Error: No request&quot;</span>);
+                <b>return</b>;
+            }
+
+            <a href="@0@System.Web/A.html#844b035d2e1fa083" class="t t">TraceContext</a> <span id="r24 rd" class="r24 r">Trace</span> = <a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a>.<a href="@0@System.Web/A.html#f0605f3479a543a2" class="i property">Trace</a>;
+
+            <span class="c">// General client request info values </span>
+            <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;IPAddress&quot;</span>, <span class="r23 r">Request</span>.<a href="@0@System.Web/A.html#ef16ce1dfbb74ecb" class="i property">UserHostAddress</a>);
+            <b>if</b> (<span class="r23 r">Request</span>.<a href="@0@System.Web/A.html#c5420ab3fc7fd039" class="i property">UrlReferrer</a> != <b>null</b>) <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;Referrer&quot;</span>, <span class="r23 r">Request</span>.<a href="@0@System.Web/A.html#c5420ab3fc7fd039" class="i property">UrlReferrer</a>.<a href="@0@System/A.html#bf3caa11ab73e433" class="i method">ToString</a>());
+            <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;Url&quot;</span>, <span class="r23 r">Request</span>.<a href="@0@System.Web/A.html#98945de8f620647a" class="i property">Url</a>.<a href="@0@System/A.html#bf3caa11ab73e433" class="i method">ToString</a>());
+            <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;SqlProc&quot;</span>, <a href="#53478e87c28298b4" class="i property">SqlProc</a>);
+            <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;SqlParam&quot;</span>, <a href="#0a38e30f20b7517c" class="i property">SqlParam</a> ?? <span class="s">&quot;-&quot;</span>);
+
+            <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <span id="r25 rd" class="r25 r">tStart</span> = <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>;
+
+            <span class="c">//</span>
+            <span class="c">// Create argument list to pass to XSLT</span>
+
+            <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <span id="r26 rd" class="r26 r">xmlDoc</span> = <b>null</b>;
+            <b>try</b>
+            {
+                <span class="r26 r">xmlDoc</span> = <a href="#688517ae2e911336" class="i method">Prepare</a>();
+                <a href="#55cb7123df17d076" class="i method">RenderHtml</a>(<span class="r22 r">writer</span>, <span class="r26 r">xmlDoc</span>);
+                <span class="c">// Debug: xmlDoc.CreateNavigator().OuterXml</span>
+
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r27 rd" class="r27 r">exp</span>)
+            {
+                <a href="../RenderXslt.cs.html#a455aca6b84d5c5f" class="i property">Log</a>.<a href="../Base/IRenderXslt.cs.html#3c2094aefcbd9eb0" class="i method">Write</a>(<span class="s">&quot;SqlProcRender.&quot;</span> + <a href="#d75014c846a38174" class="t t">Bin</a>.<a href="#20c010a9a0229011" class="i field">Version</a> + <span class="s">&quot; SqlProc=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="#53478e87c28298b4" class="i property">SqlProc</a>
+                        + <span class="s">&quot; exception : &quot;</span> + <span class="r27 r">exp</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>
+                        + <span class="s">&quot;\n Url=&quot;</span> + <span class="r23 r">Request</span>.<a href="@0@System.Web/A.html#98945de8f620647a" class="i property">Url</a> + <span class="s">&quot;\n ip=&quot;</span> + <span class="r23 r">Request</span>.<a href="@0@System.Web/A.html#ef16ce1dfbb74ecb" class="i property">UserHostAddress</a>
+                        + <span class="s">&quot; sqlxml.id=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a> + <span class="s">&quot; XSLT=&quot;</span> + <a href="#7cfd78dadb126198" class="i field">dirXslt</a> + <a href="../RenderXslt.cs.html#89b2dbfed38b128a" class="i property">Xslt</a>);
+
+                <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r28 rd" class="r28 r">message</span> = <span class="r27 r">exp</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>;
+                <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r29 rd" class="r29 r">stack</span> = <span class="r27 r">exp</span>.<a href="@0@mscorlib/A.html#950d763693dd32d3" class="i property">StackTrace</a>.<a href="@0@mscorlib/A.html#56cb688f4f1dc9e4" class="i method">PadRight</a>(400).<a href="@0@mscorlib/A.html#fc988fb267590f98" class="i method">TrimEnd</a>();
+                <b>if</b> (<span class="r27 r">exp</span>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a> != <b>null</b>)
+                {
+                    <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="k">var</a> <span id="r30 rd" class="r30 r">ex2</span> = <span class="r27 r">exp</span>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a>;
+                    <span class="r28 r">message</span> += <span class="s">&quot; | &quot;</span> + <span class="r30 r">ex2</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>;
+                    <span class="r29 r">stack</span> = <span class="r30 r">ex2</span>.<a href="@0@mscorlib/A.html#950d763693dd32d3" class="i property">StackTrace</a>.<a href="@0@mscorlib/A.html#56cb688f4f1dc9e4" class="i method">PadRight</a>(400).<a href="@0@mscorlib/A.html#fc988fb267590f98" class="i method">TrimEnd</a>();
+                    <b>if</b> (<span class="r30 r">ex2</span>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a> != <b>null</b>)
+                        <span class="r28 r">message</span> += <span class="s">&quot; | &quot;</span> + <span class="r30 r">ex2</span>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>;
+                }
+
+                <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;XSLT ID=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a>, <span class="s">&quot;Error: &quot;</span> + <span class="r28 r">message</span> + <span class="s">&quot;\n&quot;</span> + <span class="r29 r">stack</span> + <span class="s">&quot;\n&quot;</span>
+                        + <span class="s">&quot; XSLT=&quot;</span> + <a href="#7cfd78dadb126198" class="i field">dirXslt</a> + <a href="../RenderXslt.cs.html#89b2dbfed38b128a" class="i property">Xslt</a> + <span class="s">&quot; )&quot;</span>);
+                <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;&lt;/br&gt;&lt;span class=\&quot;error\&quot;&gt;Render.&quot;</span> + <a href="#d75014c846a38174" class="t t">Bin</a>.<a href="#20c010a9a0229011" class="i field">Version</a>
+                        + <span class="s">&quot; Xml Error: &quot;</span> + <span class="r28 r">message</span>.<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;|&quot;</span>, <span class="s">&quot;&lt;br/&gt;&quot;</span>)
+                        + <span class="s">&quot; (ID=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a> + <span class="s">&quot; XSLT=&quot;</span> + <a href="#7cfd78dadb126198" class="i field">dirXslt</a> + <a href="../RenderXslt.cs.html#89b2dbfed38b128a" class="i property">Xslt</a> + <span class="s">&quot; )&lt;/span&gt;&quot;</span>);
+                <b>return</b>;
+            }
+
+            <b>if</b> (<span class="r26 r">xmlDoc</span> != <b>null</b>)
+            {
+                <b>if</b> (<a href="../RenderXslt.cs.html#b7e3f5e73ef547a2" class="i field">isDebug</a> &gt; 0)
+                {
+                    <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;&lt;br/&gt;&quot;</span>);
+                    <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;&lt;br/&gt;xmlDoc&lt;br/&gt;&lt;code&gt;&lt;pre&gt;&quot;</span>);
+                    <b>if</b> (<a href="../RenderXslt.cs.html#b7e3f5e73ef547a2" class="i field">isDebug</a> == 3)      <span class="c">// for Chrome/Mozilla browser output</span>
+                        <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="r26 r">xmlDoc</span>.<a href="@0@System.Xml/A.html#4d3d8de6f175f08d" class="i method">CreateNavigator</a>().<a href="@0@System.Xml/A.html#b979dbb1e71832e5" class="i property">OuterXml</a>);
+                    <b>else</b>                   <span class="c">// IE debug output</span>
+                        <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<a href="@0@System.Web/A.html#830b8c414c23ea63" class="t t">HttpUtility</a>.<a href="@0@System.Web/A.html#8fc355b1e6c7e374" class="i method">HtmlEncode</a>(<span class="r26 r">xmlDoc</span>.<a href="@0@System.Xml/A.html#4d3d8de6f175f08d" class="i method">CreateNavigator</a>().<a href="@0@System.Xml/A.html#b979dbb1e71832e5" class="i property">OuterXml</a>));
+
+                    <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;&lt;/pre&gt;&lt;/code&gt;&quot;</span>);
+                    <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;&lt;br/&gt;xsltFileFull=&quot;</span> + <a href="#2e302c977533374f" class="i field">xsltFileFull</a> + <span class="s">&quot;&lt;br/&gt;&lt;code&gt;&lt;pre&gt;&quot;</span>);
+                    <b>if</b> (<a href="../RenderXslt.cs.html#b7e3f5e73ef547a2" class="i field">isDebug</a> == 3)
+                        <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#8a84c56a62fd8d45" class="i method">ReadAllText</a>(<a href="#2e302c977533374f" class="i field">xsltFileFull</a>).<a href="@0@mscorlib/A.html#efa5e6c14683e022" class="i method">ToString</a>());
+                    <b>else</b>                   <span class="c">// IE debug output </span>
+                        <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<a href="@0@System.Web/A.html#830b8c414c23ea63" class="t t">HttpUtility</a>.<a href="@0@System.Web/A.html#8fc355b1e6c7e374" class="i method">HtmlEncode</a>(<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#8a84c56a62fd8d45" class="i method">ReadAllText</a>(<a href="#2e302c977533374f" class="i field">xsltFileFull</a>).<a href="@0@mscorlib/A.html#efa5e6c14683e022" class="i method">ToString</a>()));
+                    <span class="r22 r">writer</span>.<a href="@0@System.Web/A.html#c09eb67c587a1880" class="i method">Write</a>(<span class="s">&quot;&lt;/code&gt;&lt;/pre&gt;&quot;</span>);
+                }
+
+                <span class="r24 r">Trace</span>.<a href="@0@System.Web/A.html#d7f229bbf1e51ef6" class="i method">Write</a>(<span class="s">&quot;V&quot;</span> + <a href="#d75014c846a38174" class="t t">Bin</a>.<a href="#20c010a9a0229011" class="i field">Version</a> + <span class="s">&quot; SqmlXml.ID=&quot;</span> + <a href="#3dda630eb4a57529" class="k">this</a>.<a href="@0@System.Web/A.html#83d275ee34e4380d" class="i property">ID</a>, <span class="s">&quot;Finish Render&quot;</span>);
+            }
+
+        }
+
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Prepare XmlDoc
+
+        <b>public virtual</b> <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <a id="688517ae2e911336" href="../../R/688517ae2e911336.html" target="n" data-glyph="72,1" class="i method">Prepare</a>(<b>bool</b> <span id="r31 rd" class="r31 r">isClear</span> = <b>true</b>)
+        {
+            <b>if</b> (<span class="r31 r">isClear</span> &amp;&amp; <a href="../RenderXslt.cs.html#6e6b8d36c7f70e80" class="i field">keyParam</a> != <b>null</b>) <a href="../RenderXslt.cs.html#6e6b8d36c7f70e80" class="i field">keyParam</a>.<a href="@0@mscorlib/A.html#36b30e4c0708a88c" class="i method">Clear</a>();
+            <b>return</b> <a href="#db1a00cffdf6f168" class="i property">XmlDoc</a>;
+        }
+
+        <b>public virtual void</b> <a id="36f3488e522f1204" href="../../R/36f3488e522f1204.html" target="n" data-glyph="72,1" class="i method">ParseSqlParam</a>(<a href="@0@System.Data/A.html#f00e50d65755ab48" class="t t">SqlParameter</a> <span id="r32 rd" class="r32 r">prm</span>)
+        {
+            <b>if</b> (<span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#5d9f7c4d890fcaf5" class="i property">ParameterName</a>.<a href="@0@mscorlib/A.html#b98069ccbe2d3960" class="i method">Equals</a>(<span class="s">&quot;site&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>)
+                &amp;&amp; <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#a34912fb58c46757" class="i property">Value</a>.<a href="@0@mscorlib/A.html#ff31a6bf27c58f89" class="i method">ToString</a>()))
+                <span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#a34912fb58c46757" class="i property">Value</a> = <span class="i n">AiLib</span>.<span class="i n">Web</span>.<a href="../../Web/Segment.cs.html#701d093cab6c6ef4" class="t t">Segment</a>.<a href="../../Web/Segment.cs.html#293d0a86ce2b0d20" class="i field">Instance</a>.<a href="../../Web/Segment.cs.html#d0e424330b189188" class="i property">Site</a>;
+            <b>if</b> (<span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#5d9f7c4d890fcaf5" class="i property">ParameterName</a>.<a href="@0@mscorlib/A.html#b98069ccbe2d3960" class="i method">Equals</a>(<span class="s">&quot;Lang&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>)
+                &amp;&amp; <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#a34912fb58c46757" class="i property">Value</a>.<a href="@0@mscorlib/A.html#ff31a6bf27c58f89" class="i method">ToString</a>()))
+                <span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#a34912fb58c46757" class="i property">Value</a> = <span class="i n">AiLib</span>.<span class="i n">Web</span>.<a href="../../Web/SegmentLang.cs.html#1560d52eea3e70e5" class="t t">SegmentLang</a>.<a href="../../Web/SegmentLang.cs.html#217ca99a5e7e96ae" class="i field">Instance</a>.<a href="../../Web/SegmentLang.cs.html#2d6e49f5e44f98ac" class="i property">Lang</a>;
+
+            <b>if</b> (<span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#5d9f7c4d890fcaf5" class="i property">ParameterName</a>.<a href="@0@mscorlib/A.html#b98069ccbe2d3960" class="i method">Equals</a>(<span class="s">&quot;FirmID&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>)
+                &amp;&amp; <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#a34912fb58c46757" class="i property">Value</a>.<a href="@0@mscorlib/A.html#ff31a6bf27c58f89" class="i method">ToString</a>()))
+                <span class="r32 r">prm</span>.<a href="@0@System.Data/A.html#a34912fb58c46757" class="i property">Value</a> = <span class="i n">AiLib</span>.<span class="i n">Web</span>.<a href="../../Web/SegmentLang.cs.html#1560d52eea3e70e5" class="t t">SegmentLang</a>.<a href="../../Web/SegmentLang.cs.html#217ca99a5e7e96ae" class="i field">Instance</a>.<a href="../../Web/SegmentLang.cs.html#9f767652c2859dc7" class="i property">FirmID</a>;
+        }
+
+        <b>public</b> <a href="@0@System.Xml/A.html#3202036e069f797b" class="t t">XPathNavigator</a> <a id="9f5594169eee89dd" href="../../R/9f5594169eee89dd.html" target="n" data-glyph="72,1" class="i method">Navigator</a>() { <b>return</b> <a href="#db1a00cffdf6f168" class="i property">XmlDoc</a>.<a href="@0@System.Xml/A.html#4d3d8de6f175f08d" class="i method">CreateNavigator</a>(); }
+        <b>public</b> <a href="@0@System.Xml/A.html#3202036e069f797b" class="t t">XPathNavigator</a> <a id="bb703adebc2aad0d" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SelectSingleNode</a>(<b>string</b> <span id="r33 rd" class="r33 r">xpath</span>)
+        {
+            <b>return</b> <a href="#db1a00cffdf6f168" class="i property">XmlDoc</a> == <b>null</b> ? <b>null</b> : <a href="#9f5594169eee89dd" class="i method">Navigator</a>().<a href="@0@System.Xml/A.html#7ea73e08c261996a" class="i method">SelectSingleNode</a>(<span class="r33 r">xpath</span>);
+        }
+        <b>public string</b> <a id="230cd6300f8a06a8" href="../../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">OuterXml</a> { <b>get</b> { <b>return</b> <a href="#472e655ab0b00804" class="i field">xmlDoc</a> == <b>null</b> ? <b>null</b> : <a href="#9f5594169eee89dd" class="i method">Navigator</a>().<a href="@0@System.Xml/A.html#b979dbb1e71832e5" class="i property">OuterXml</a>; } }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <a id="7a1797482bdd5ad2" href="../../R/7a1797482bdd5ad2.html" target="n" data-glyph="102,1" class="i property">LastError</a> { <b>get</b>; <b>set</b>; }
+
+        <b>protected</b> <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <a id="472e655ab0b00804" href="../../R/472e655ab0b00804.html" target="n" data-glyph="45,1" class="i field">xmlDoc</a> = <b>null</b>;
+        <b>public virtual</b> <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a> <a id="db1a00cffdf6f168" href="../../R/db1a00cffdf6f168.html" target="n" data-glyph="102,1" class="i property">XmlDoc</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#472e655ab0b00804" class="i field">xmlDoc</a> == <b>null</b>)
+                {
+                    <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r34 rd" class="r34 r">sqlParam</span> = <a href="#3dda630eb4a57529" class="k">this</a>.<a href="#0a38e30f20b7517c" class="i property">SqlParam</a>;
+                    <a href="#472e655ab0b00804" class="i field">xmlDoc</a> = <a href="../SqlXmlDoc.cs.html#d9da41d8ade6a18a" class="t t">SqlXmlDoc</a>.<a href="../SqlXmlDoc.cs.html#91a9dd89d3d9eb85" class="i method">SqlProcExecute</a>(<a href="#3dda630eb4a57529" class="k">this</a>,
+                           <span class="r34 r">sqlParam</span>, <a href="../RenderXslt.cs.html#5f56edfc9dab3395" class="i field">listParam</a>, <a href="../RenderXslt.cs.html#f703dae010d047bd" class="i field">listParamNum</a>, <a href="../RenderXslt.cs.html#ea77816172f0a481" class="i field">prmAdd</a>, <a href="../RenderXslt.cs.html#8252252d0e7b3c0c" class="i field">prmApp</a>
+                           , <a href="../RenderXslt.cs.html#e6c561f781a9e2be" class="i field">formParam</a>, <a href="../RenderXslt.cs.html#cc38db5731e96e3b" class="i field">formParamNum</a>, <span class="s">&quot;Root&quot;</span>
+                           , (<span id="r35 rd" class="r35 r">prm</span>) =&gt; <a href="#36f3488e522f1204" class="i method">ParseSqlParam</a>(<span class="r35 r">prm</span>));
+                }
+                <b>return</b> <a href="#472e655ab0b00804" class="i field">xmlDoc</a>;
+            }
+            <b>set</b> { <a href="#472e655ab0b00804" class="i field">xmlDoc</a> = <b>value as</b> <a href="@0@System.Xml/A.html#c95222d6a80fe203" class="t t">XPathDocument</a>; }
+        }
+
+        <b>public void</b> <a id="31c43b871aba6867" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetXmlDoc</a>(<a href="@0@System.Xml.Linq/A.html#3354dac0913e417b" class="t t">XDocument</a> <span id="r36 rd" class="r36 r">doc</span>)
+        {
+            <a href="#472e655ab0b00804" class="i field">xmlDoc</a> = <b>new</b> <a href="@0@System.Xml/A.html#652670cc1cf42ced" class="t constructor">XPathDocument</a>(<span class="r36 r">doc</span>.<a href="@0@System.Xml.Linq/A.html#2b2d3649280c50b8" class="i method">CreateReader</a>());
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">WEB</span>
+        <b>public virtual string</b> <a id="72d916432d431944" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetHtml</a>()
+        {
+            <a href="#688517ae2e911336" class="i method">Prepare</a>();
+            <b>using</b> (<a href="@0@System.Web/A.html#671c476a45af082b" class="k">var</a> <span id="r37 rd" class="r37 r">writer</span> = <b>new</b> <a href="@0@System.Web/A.html#faa19b53a1506c77" class="t constructor">HtmlTextWriter</a>(<b>new</b> <a href="@0@mscorlib/A.html#23770c70900ea7f0" class="t constructor">StringWriter</a>()))
+            {
+                <b>if</b> (<a href="@0@System.Web/A.html#1dd96e333c27f3c6" class="i property">Context</a> != <b>null</b>)
+                    <a href="#916529a089ccf3a4" class="i method">Render</a>(<span class="r37 r">writer</span>);
+                <b>else</b>
+                {
+                    <a href="#55cb7123df17d076" class="i method">RenderHtml</a>(<span class="r37 r">writer</span>, <a href="#db1a00cffdf6f168" class="i property">XmlDoc</a>);
+                }
+                <b>return</b> <span class="r37 r">writer</span>.<a href="@0@System.Web/A.html#0f97f4be44eece41" class="i property">InnerWriter</a>.<a href="@0@mscorlib/A.html#ff31a6bf27c58f89" class="i method">ToString</a>();
+            }
+        }
+<span class="k preprocess">#</span><span class="k preprocess">else</span>
+<span class="e">        public virtual RazorEngine.Text.RawString GetHtml()
+        {
+            var writer = new StringWriter();  // new StreamWriter(
+            Prepare();
+            RenderHtml(writer, XmlDoc);
+            
+            //var task = AiLib.IISHost.HeliosApplication.Current.RenderHtml(writer, null);
+            //task.Wait();
+            return new RawString(writer.ToString());
+        }
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+    }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> !<span class="i">NET40</span> &amp;&amp; !<span class="i">NET45</span>
+<span class="e">    public class SqlProcRenderDesigner : System.Web.UI.Design.ControlDesigner
+    {
+
+        public override string GetDesignTimeHtml()
+        {
+            string str = &quot;&lt;div style=\&quot;border: 1px solid silver;\&quot;&gt;[&quot; + Bin.Version + &quot; SqlXml]&quot;;
+
+            SqlProcRender con = base.Component as SqlProcRender;
+            if (con != null)
+                str += string.Format(&quot;.ID={0}&lt;/br&gt;&lt;nobr&gt;&quot;, con.ID)
+                        + string.Format(&quot;SqlProc={0} &quot;, con.SqlProc)
+                        + string.Format(&quot;Xslt=&lt;a href=\&quot;{0}\&quot;&gt;{0}&lt;/a&gt;&quot;, con.Xslt)
+                        + &quot;&lt;/nobr&gt;&quot;;
+            str += &quot;&lt;/div&gt;&quot;;
+            return str;
+        }
+
+        public override void Initialize(IComponent component)
+        {
+            // if (!(component is SqlProcRender)) throw new ArgumentException();
+            base.Initialize(component);
+        }
+
+    }
+</span><span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+}
+</pre></td></tr></table></div></body></html>

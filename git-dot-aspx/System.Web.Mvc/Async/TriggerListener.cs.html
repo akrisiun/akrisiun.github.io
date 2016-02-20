@@ -1,0 +1,77 @@
+﻿<!DOCTYPE html>
+<html><head><title>TriggerListener.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(68);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/Async/TriggerListener.cs" target="_top">Async\TriggerListener.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Async</span>
+{
+    <span class="c">// This class is used to wait for triggers and a continuation. When the continuation has been provded</span>
+    <span class="c">// and all triggers have been fired, the continuation is called. Similar to WaitHandle.WaitAll().</span>
+    <span class="c">// New instances of this type are initially in the inactive state; activation is enabled by a call</span>
+    <span class="c">// to Activate().</span>
+ 
+    <span class="c">// This class is thread-safe.</span>
+ 
+    <b>internal sealed class</b> <a id="99c4cd76cf8de105" href="../R/99c4cd76cf8de105.html" target="n" data-glyph="2,0" class="t t">TriggerListener</a>
+    {
+        <b>private readonly</b> <a href="Trigger.cs.html#2a5340a8884f6704" class="t t">Trigger</a> <a id="717b0adbcda6f099" href="../R/717b0adbcda6f099.html" target="n" data-glyph="46,1" class="i field">_activateTrigger</a>;
+        <b>private readonly</b> <a href="SingleEntryGate.cs.html#21510469ae833d53" class="t t">SingleEntryGate</a> <a id="f332b4932990c243" href="../R/f332b4932990c243.html" target="n" data-glyph="46,1" class="i field">_continuationFiredGate</a> = <b>new</b> <a href="SingleEntryGate.cs.html#21510469ae833d53" class="t constructor">SingleEntryGate</a>();
+        <b>private readonly</b> <a href="Trigger.cs.html#2a5340a8884f6704" class="t t">Trigger</a> <a id="e6090dad270dc657" href="../R/e6090dad270dc657.html" target="n" data-glyph="46,1" class="i field">_setContinuationTrigger</a>;
+        <b>private volatile</b> <a href="@0@mscorlib/A.html#9147ae6f76643aae" class="t t">Action</a> <a id="d1e59d7fb5388cf4" href="../R/d1e59d7fb5388cf4.html" target="n" data-glyph="46,1" class="i field">_continuation</a>;
+        <b>private int</b> <a id="6f0d220e724a71db" href="../R/6f0d220e724a71db.html" target="n" data-glyph="46,1" class="i field">_outstandingTriggers</a>;
+ 
+        <b>public</b> <a id="52cb66ad259be262" href="../R/52cb66ad259be262.html" target="n" data-glyph="72,1" class="i constructor">TriggerListener</a>()
+        {
+            <a href="#717b0adbcda6f099" class="i field">_activateTrigger</a> = <a href="#8a1219a4261f38e9" class="i method">CreateTrigger</a>();
+            <a href="#e6090dad270dc657" class="i field">_setContinuationTrigger</a> = <a href="#8a1219a4261f38e9" class="i method">CreateTrigger</a>();
+        }
+ 
+        <b>public void</b> <a id="ba0eb74bc126aca4" href="../R/ba0eb74bc126aca4.html" target="n" data-glyph="72,1" class="i method">Activate</a>()
+        {
+            <a href="#717b0adbcda6f099" class="i field">_activateTrigger</a>.<a href="Trigger.cs.html#1a87e91258f3b41e" class="i method">Fire</a>();
+        }
+ 
+        <b>public</b> <a href="Trigger.cs.html#2a5340a8884f6704" class="t t">Trigger</a> <a id="8a1219a4261f38e9" href="../R/8a1219a4261f38e9.html" target="n" data-glyph="72,1" class="i method">CreateTrigger</a>()
+        {
+            <a href="@0@mscorlib/A.html#8792520ddc6dadcb" class="t t">Interlocked</a>.<a href="@0@mscorlib/A.html#09bb1e21afd76cf2" class="i method">Increment</a>(<b>ref</b> <a href="#6f0d220e724a71db" class="i field">_outstandingTriggers</a>);
+ 
+            <a href="SingleEntryGate.cs.html#21510469ae833d53" class="t t">SingleEntryGate</a> <span id="r0 rd" class="r0 r">triggerFiredGate</span> = <b>new</b> <a href="SingleEntryGate.cs.html#21510469ae833d53" class="t constructor">SingleEntryGate</a>();
+            <b>return</b> <b>new</b> <a href="Trigger.cs.html#a9fddadc7e8fc114" class="t constructor">Trigger</a>(() =&gt;
+            {
+                <b>if</b> (<span class="r0 r">triggerFiredGate</span>.<a href="SingleEntryGate.cs.html#c1c757b472051395" class="i method">TryEnter</a>())
+                {
+                    <a href="#be9b78baa809151d" class="i method">HandleTriggerFired</a>();
+                }
+            });
+        }
+ 
+        <b>private void</b> <a id="be9b78baa809151d" href="../R/be9b78baa809151d.html" target="n" data-glyph="76,1" class="i method">HandleTriggerFired</a>()
+        {
+            <b>if</b> (<a href="@0@mscorlib/A.html#8792520ddc6dadcb" class="t t">Interlocked</a>.<a href="@0@mscorlib/A.html#862b9b279a981510" class="i method">Decrement</a>(<b>ref</b> <a href="#6f0d220e724a71db" class="i field">_outstandingTriggers</a>) == 0)
+            {
+                <b>if</b> (<a href="#f332b4932990c243" class="i field">_continuationFiredGate</a>.<a href="SingleEntryGate.cs.html#c1c757b472051395" class="i method">TryEnter</a>())
+                {
+                    <a href="#d1e59d7fb5388cf4" class="i field">_continuation</a>();
+                }
+            }
+        }
+ 
+        <b>public void</b> <a id="a87bedb86f2d6c78" href="../R/a87bedb86f2d6c78.html" target="n" data-glyph="72,1" class="i method">SetContinuation</a>(<a href="@0@mscorlib/A.html#9147ae6f76643aae" class="t t">Action</a> <span id="r1 rd" class="r1 r">continuation</span>)
+        {
+            <b>if</b> (<span class="r1 r">continuation</span> != <b>null</b>)
+            {
+                <a href="#d1e59d7fb5388cf4" class="i field">_continuation</a> = <span class="r1 r">continuation</span>;
+                <a href="#e6090dad270dc657" class="i field">_setContinuationTrigger</a>.<a href="Trigger.cs.html#1a87e91258f3b41e" class="i method">Fire</a>();
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

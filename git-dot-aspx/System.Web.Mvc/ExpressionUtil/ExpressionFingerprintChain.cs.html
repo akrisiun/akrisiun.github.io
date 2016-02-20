@@ -1,0 +1,97 @@
+﻿<!DOCTYPE html>
+<html><head><title>ExpressionFingerprintChain.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(88);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/ExpressionUtil/ExpressionFingerprintChain.cs" target="_top">ExpressionUtil\ExpressionFingerprintChain.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">ExpressionUtil</span>
+{
+    <span class="c">// Expression fingerprint chain class</span>
+    <span class="c">// Contains information used for generalizing, comparing, and recreating Expression instances</span>
+    <span class="c">//</span>
+    <span class="c">// Since Expression objects are immutable and are recreated for every invocation of an expression</span>
+    <span class="c">// helper method, they can&#39;t be compared directly. Fingerprinting Expression objects allows</span>
+    <span class="c">// information about them to be abstracted away, and the fingerprints can be directly compared.</span>
+    <span class="c">// Consider the process of fingerprinting that all values (parameters, constants, etc.) are hoisted</span>
+    <span class="c">// and replaced with dummies. What remains can be decomposed into a sequence of operations on specific</span>
+    <span class="c">// types and specific inputs.</span>
+    <span class="c">//</span>
+    <span class="c">// Some sample fingerprints chains:</span>
+    <span class="c">//</span>
+    <span class="c">// 2 + 4 -&gt; OP_ADD, CONST:int, NULL, CONST:int</span>
+    <span class="c">// 2 + 8 -&gt; OP_ADD, CONST:int, NULL, CONST:int</span>
+    <span class="c">// 2.0 + 4.0 -&gt; OP_ADD, CONST:double, NULL, CONST:double</span>
+    <span class="c">//</span>
+    <span class="c">// 2 + 4 and 2 + 8 have the same fingerprint, but 2.0 + 4.0 has a different fingerprint since its</span>
+    <span class="c">// underlying types differ. Note that this looks a bit like prefix notation and is a side effect</span>
+    <span class="c">// of how the ExpressionVisitor class recurses into expressions. (Occasionally there will be a NULL</span>
+    <span class="c">// in the fingerprint chain, which depending on context can denote a static member, a null Conversion</span>
+    <span class="c">// in a BinaryExpression, and so forth.)</span>
+    <span class="c">//</span>
+    <span class="c">// &quot;Hello &quot; + &quot;world&quot; -&gt; OP_ADD, CONST:string, NULL, CONST:string</span>
+    <span class="c">// &quot;Hello &quot; + {model} -&gt; OP_ADD, CONST:string, NULL, PARAM_0:string</span>
+    <span class="c">//</span>
+    <span class="c">// These string concatenations have different fingerprints since the inputs are provided differently:</span>
+    <span class="c">// one is a constant, the other is a parameter.</span>
+    <span class="c">//</span>
+    <span class="c">// ({model} ?? &quot;sample&quot;).Length -&gt; MEMBER_ACCESS(String.Length), OP_COALESCE, PARAM_0:string, NULL, CONST:string</span>
+    <span class="c">// ({model} ?? &quot;other sample&quot;).Length -&gt; MEMBER_ACCESS(String.Length), OP_COALESCE, PARAM_0:string, NULL, CONST:string</span>
+    <span class="c">//</span>
+    <span class="c">// These expressions have the same fingerprint since all constants of the same underlying type are</span>
+    <span class="c">// treated equally.</span>
+    <span class="c">//</span>
+    <span class="c">// It&#39;s also important that the fingerprints don&#39;t reference the actual Expression objects that were</span>
+    <span class="c">// used to generate them, as the fingerprints will be cached, and caching a fingerprint that references</span>
+    <span class="c">// an Expression will root the Expression (and any objects it references).</span>
+ 
+    <b>internal sealed class</b> <a id="99d46ed2d1c6354d" href="../R/99d46ed2d1c6354d.html" target="n" data-glyph="2,0" class="t t"><span id="1b2de5533f0389fb">ExpressionFingerprintChain</span></a> : <a href="@0@mscorlib/A.html#91a17479daaada86" class="t t">IEquatable</a>&lt;<a href="#99d46ed2d1c6354d" class="t t">ExpressionFingerprintChain</a>&gt;
+    {
+        <b>public readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="ExpressionFingerprint.cs.html#bfa8b837ca4284a7" class="t t">ExpressionFingerprint</a>&gt; <a id="9616d6c384c48d59" href="../R/9616d6c384c48d59.html" target="n" data-glyph="42,1" class="i field">Elements</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="ExpressionFingerprint.cs.html#bfa8b837ca4284a7" class="t t">ExpressionFingerprint</a>&gt;();
+ 
+        <b>public bool</b> <a id="bc15372504e6278f" href="../R/bc15372504e6278f.html" target="n" data-glyph="72,1" class="i method">Equals</a>(<a href="#99d46ed2d1c6354d" class="t t">ExpressionFingerprintChain</a> <span id="r0 rd" class="r0 r">other</span>)
+        {
+            <span class="c">// Two chains are considered equal if two elements appearing in the same index in</span>
+            <span class="c">// each chain are equal (value equality, not referential equality).</span>
+ 
+            <b>if</b> (<span class="r0 r">other</span> == <b>null</b>)
+            {
+                <b>return false</b>;
+            }
+ 
+            <b>if</b> (<a href="#99d46ed2d1c6354d" class="k">this</a>.<a href="#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> != <span class="r0 r">other</span>.<a href="#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+            {
+                <b>return false</b>;
+            }
+ 
+            <b>for</b> (<b>int</b> <span id="r1 rd" class="r1 r">i</span> = 0; <span class="r1 r">i</span> &lt; <a href="#99d46ed2d1c6354d" class="k">this</a>.<a href="#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r1 r">i</span>++)
+            {
+                <b>if</b> (!<a href="@0@mscorlib/A.html#f2a579c50b414717" class="i method">Equals</a>(<a href="#99d46ed2d1c6354d" class="k">this</a>.<a href="#9616d6c384c48d59" class="i field">Elements</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r1 r">i</span>], <span class="r0 r">other</span>.<a href="#9616d6c384c48d59" class="i field">Elements</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r1 r">i</span>]))
+                {
+                    <b>return false</b>;
+                }
+            }
+ 
+            <b>return true</b>;
+        }
+ 
+        <b>public override bool</b> <a id="1c86e61492c084d5" href="../R/1c86e61492c084d5.html" target="n" data-glyph="72,1" class="i method">Equals</a>(<b>object</b> <span id="r2 rd" class="r2 r">obj</span>)
+        {
+            <b>return</b> <a href="#bc15372504e6278f" class="i method">Equals</a>(<span class="r2 r">obj</span> <b>as</b> <a href="#99d46ed2d1c6354d" class="t t">ExpressionFingerprintChain</a>);
+        }
+ 
+        <b>public override int</b> <a id="852f2fc17ce50f55" href="../R/852f2fc17ce50f55.html" target="n" data-glyph="72,1" class="i method">GetHashCode</a>()
+        {
+            <a href="HashCodeCombiner.cs.html#e0c0eb40bf93325e" class="t t">HashCodeCombiner</a> <span id="r3 rd" class="r3 r">combiner</span> = <b>new</b> <a href="HashCodeCombiner.cs.html#e0c0eb40bf93325e" class="t constructor">HashCodeCombiner</a>();
+            <a href="#9616d6c384c48d59" class="i field">Elements</a>.<a href="@0@mscorlib/A.html#0e5a9cf0a310b9e5" class="i method">ForEach</a>(<span class="r3 r">combiner</span>.<a href="HashCodeCombiner.cs.html#d9c4b1540539dfdc" class="i method">AddFingerprint</a>);
+            <b>return</b> <span class="r3 r">combiner</span>.<a href="HashCodeCombiner.cs.html#9c506fbf29b98243" class="i property">CombinedHash</a>;
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

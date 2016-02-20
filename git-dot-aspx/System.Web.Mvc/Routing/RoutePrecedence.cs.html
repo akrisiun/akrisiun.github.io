@@ -1,0 +1,94 @@
+﻿<!DOCTYPE html>
+<html><head><title>RoutePrecedence.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(85);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/Routing/RoutePrecedence.cs" target="_top">Routing\RoutePrecedence.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+ 
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">using TParsedRoute = System.Web.Http.Routing.HttpParsedRoute;
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+<b>using</b> <span class="t">TParsedRoute</span> = <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>.<a href="ParsedRoute.cs.html#6ea51e8b718874c9" class="t t">ParsedRoute</a>;
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+ 
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">namespace System.Web.Http.Routing
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+{
+    <b>internal static class</b> <a id="4846a9b313f25078" href="../R/4846a9b313f25078.html" target="n" data-glyph="2,0" class="t t">RoutePrecedence</a>
+    {
+        <span class="c">// Segments have the following order:</span>
+        <span class="c">// 1 - Literal segments</span>
+        <span class="c">// 2 - Constrained parameter segments / Multi-part segments</span>
+        <span class="c">// 3 - Unconstrained parameter segments</span>
+        <span class="c">// 4 - Constrained wildcard parameter segments</span>
+        <span class="c">// 5 - Unconstrained wildcard parameter segments</span>
+        <b>internal static int</b> <a id="9079006bc99fa0a4" href="../R/9079006bc99fa0a4.html" target="n" data-glyph="74,1" class="i method">ComputeDigit</a>(<a href="PathContentSegment.cs.html#a801b6f9c495fc73" class="t t">PathContentSegment</a> <span id="r0 rd" class="r0 r">segment</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r1 rd" class="r1 r">constraints</span>)
+        {
+            <b>if</b> (<span class="r0 r">segment</span>.<a href="PathContentSegment.cs.html#e54734d42dafd02b" class="i property">Subsegments</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> &gt; 1)
+            {
+                <span class="c">// Multi-part segments should appear after literal segments but before parameter segments</span>
+                <b>return</b> 2;
+            }
+ 
+            <a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a> <span id="r2 rd" class="r2 r">subsegment</span> = <span class="r0 r">segment</span>.<a href="PathContentSegment.cs.html#e54734d42dafd02b" class="i property">Subsegments</a>[0];
+            <span class="c">// Literal segments always go first</span>
+            <b>if</b> (<span class="r2 r">subsegment</span> <b>is</b> <a href="PathLiteralSubsegment.cs.html#75c4dd30122b0a72" class="t t">PathLiteralSubsegment</a>)
+            {
+                <b>return</b> 1;
+            }
+            <b>else</b>
+            {
+                <a href="PathParameterSubsegment.cs.html#d0364375f370473f" class="t t">PathParameterSubsegment</a> <span id="r3 rd" class="r3 r">parameterSegment</span> = <span class="r2 r">subsegment</span> <b>as</b> <a href="PathParameterSubsegment.cs.html#d0364375f370473f" class="t t">PathParameterSubsegment</a>;
+                <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r3 r">parameterSegment</span> != <b>null</b>);
+                <b>int</b> <span id="r4 rd" class="r4 r">order</span> = <span class="r3 r">parameterSegment</span>.<a href="PathParameterSubsegment.cs.html#dde26cf1300848a3" class="i property">IsCatchAll</a> ? 5 : 3;
+ 
+                <span class="c">// If there is a route constraint for the parameter, reduce order by 1</span>
+                <span class="c">// Constrained parameters end up with order 2, Constrained catch alls end up with order 4</span>
+                <b>if</b> (<span class="r1 r">constraints</span> != <b>null</b> &amp;&amp; <span class="r1 r">constraints</span>.<a href="@0@mscorlib/A.html#6105ae1e7c0835eb" class="i method">ContainsKey</a>(<span class="r3 r">parameterSegment</span>.<a href="PathParameterSubsegment.cs.html#de05fa77af7b6984" class="i property">ParameterName</a>))
+                {
+                    <span class="r4 r">order</span>--;
+                }
+ 
+                <b>return</b> <span class="r4 r">order</span>;
+            }
+        }
+ 
+        <b>public static decimal</b> <a id="efe0d6a30958c0e1" href="../R/efe0d6a30958c0e1.html" target="n" data-glyph="72,1" class="i method">Compute</a>(<a href="ParsedRoute.cs.html#6ea51e8b718874c9" class="t t">TParsedRoute</a> <span id="r5 rd" class="r5 r">parsedRoute</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r6 rd" class="r6 r">constraints</span>)
+        {
+            <span class="c">// Each precedence digit corresponds to one decimal place. For example, 3 segments with precedences 2, 1,</span>
+            <span class="c">// and 4 results in a combined precedence of 2.14 (decimal).</span>
+            <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="PathContentSegment.cs.html#a801b6f9c495fc73" class="t t">PathContentSegment</a>&gt; <span id="r7 rd" class="r7 r">segments</span> = <span class="r5 r">parsedRoute</span>.<a href="ParsedRoute.cs.html#c674c26c0534a033" class="i property">PathSegments</a>.<a href="@0@System.Core/A.html#4ba4a3f8a5530e33" class="i method">OfType</a>&lt;<a href="PathContentSegment.cs.html#a801b6f9c495fc73" class="t t">PathContentSegment</a>&gt;().<a href="@0@System.Core/A.html#783a052330e7d48d" class="i method">ToArray</a>();
+ 
+            <b>decimal</b> <span id="r8 rd" class="r8 r">precedence</span> = 0;
+            <b>uint</b> <span id="r9 rd" class="r9 r">divisor</span> = 1; <span class="c">// The first digit occupies the one&#39;s place.</span>
+ 
+            <b>for</b> (<b>int</b> <span id="r10 rd" class="r10 r">i</span> = 0; <span class="r10 r">i</span> &lt; <span class="r7 r">segments</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>; <span class="r10 r">i</span>++)
+            {
+                <a href="PathContentSegment.cs.html#a801b6f9c495fc73" class="t t">PathContentSegment</a> <span id="r11 rd" class="r11 r">segment</span> = <span class="r7 r">segments</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r10 r">i</span>];
+ 
+                <b>int</b> <span id="r12 rd" class="r12 r">digit</span> = <a href="#9079006bc99fa0a4" class="i method">ComputeDigit</a>(<span class="r11 r">segment</span>, <span class="r6 r">constraints</span>);
+                <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r12 r">digit</span> &gt;= 0 &amp;&amp; <span class="r12 r">digit</span> &lt; 10);
+ 
+                <span class="r8 r">precedence</span> = <span class="r8 r">precedence</span> + <a href="@0@mscorlib/A.html#1b2858baf311cbf9" class="t t">Decimal</a>.<a href="@0@mscorlib/A.html#65b4a084045cca3d" class="i method">Divide</a>(<span class="r12 r">digit</span>, <span class="r9 r">divisor</span>);
+ 
+                <span class="c">// The next digit occupies the subsequent place (always after the decimal point and growing to the</span>
+                <span class="c">// right).</span>
+                <span class="r9 r">divisor</span> *= 10;
+            }
+ 
+            <b>return</b> <span class="r8 r">precedence</span>;
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

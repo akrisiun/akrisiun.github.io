@@ -1,0 +1,158 @@
+﻿<!DOCTYPE html>
+<html><head><title>InlineRouteTemplateParser.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(149);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/Routing/InlineRouteTemplateParser.cs" target="_top">Routing\InlineRouteTemplateParser.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>.<span class="i n">RegularExpressions</span>;
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">using System.Web.Http.Routing.Constraints;
+using ErrorResources = System.Web.Http.Properties.SRResources;
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>.<span class="i n">Constraints</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Routing</span>;
+<b>using</b> <span class="t">ErrorResources</span> = <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>.<a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>;
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+ 
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">namespace System.Web.Http.Routing
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> This class is used by the AttributeRouting mapper, during configuration,</span>
+    <span class="c">///</span><span class="c"> to parse and strip defaults and constraints from the template.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>internal class</b> <a id="18bb3e4ad2da3351" href="../R/18bb3e4ad2da3351.html" target="n" data-glyph="2,0" class="t t"><span id="e5fbbc04ac4cd78c">InlineRouteTemplateParser</span></a>
+    {
+        <span class="c">// One or more characters, matches &quot;id&quot;</span>
+        <b>private const string</b> <a id="31aab32e0f73ac82" href="../R/31aab32e0f73ac82.html" target="n" data-glyph="10,1" class="i field">ParameterNameRegex</a> = <span class="s">@&quot;(?&lt;parameterName&gt;.+?)&quot;</span>;
+ 
+        <span class="c">// Zero or more inline constraints that start with a colon followed by zero or more characters</span>
+        <span class="c">// Optionally the constraint can have arguments within parentheses - necessary to capture characters like &quot;:&quot; and &quot;}&quot;</span>
+        <span class="c">// Matches &quot;:int&quot;, &quot;:length(2)&quot;, &quot;:regex(\})&quot;, &quot;:regex(:)&quot; zero or more times</span>
+        <b>private const string</b> <a id="7004154010a1c444" href="../R/7004154010a1c444.html" target="n" data-glyph="10,1" class="i field">ConstraintRegex</a> = <span class="s">@&quot;(:(?&lt;constraint&gt;.*?(\(.*?\))?))*&quot;</span>;
+ 
+        <span class="c">// Optional &quot;?&quot; for optional parameters or a default value with an equal sign followed by zero or more characters</span>
+        <span class="c">// Matches &quot;?&quot;, &quot;=&quot;, &quot;=abc&quot;</span>
+        <b>private const string</b> <a id="59b8241b05a5a872" href="../R/59b8241b05a5a872.html" target="n" data-glyph="10,1" class="i field">DefaultValueRegex</a> = <span class="s">@&quot;(?&lt;defaultValue&gt;\?|(=.*?))?&quot;</span>;
+ 
+        <b>private static readonly</b> <a href="@0@System/A.html#bbe3b2eb80ae5526" class="t t">Regex</a> <a id="c0c2e818dc87437c" href="../R/c0c2e818dc87437c.html" target="n" data-glyph="46,1" class="i field">_parameterRegex</a> = <b>new</b> <a href="@0@System/A.html#b3bb3375cf8e8736" class="t constructor">Regex</a>(
+            <span class="s">&quot;{&quot;</span> + <a href="#31aab32e0f73ac82" class="i field">ParameterNameRegex</a> + <a href="#7004154010a1c444" class="i field">ConstraintRegex</a> + <a href="#59b8241b05a5a872" class="i field">DefaultValueRegex</a> + <span class="s">&quot;}&quot;</span>,
+            <a href="@0@System/A.html#09480297afa1a686" class="t t">RegexOptions</a>.<a href="@0@System/A.html#469792903a91e65e" class="i field">Compiled</a>);
+ 
+        <b>public static string</b> <a id="49222cc3663efb1c" href="../R/49222cc3663efb1c.html" target="n" data-glyph="72,1" class="i method">ParseRouteTemplate</a>(<b>string</b> <span id="r0 rd" class="r0 r">routeTemplate</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r1 rd" class="r1 r">defaults</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r2 rd" class="r2 r">constraints</span>, <a href="IInlineConstraintResolver.cs.html#bb49cfd74949aa7d" class="t t">IInlineConstraintResolver</a> <span id="r3 rd" class="r3 r">constraintResolver</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r1 r">defaults</span> != <b>null</b>);
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r2 r">constraints</span> != <b>null</b>);
+ 
+            <a href="@0@System/A.html#7376f85d6ff213d1" class="t t">MatchCollection</a> <span id="r4 rd" class="r4 r">parameterMatches</span> = <a href="#c0c2e818dc87437c" class="i field">_parameterRegex</a>.<a href="@0@System/A.html#eee0fd08a857f828" class="i method">Matches</a>(<span class="r0 r">routeTemplate</span>);
+ 
+            <b>foreach</b> (<a href="@0@System/A.html#d8a604d3af777b1c" class="t t">Match</a> <span id="r5 rd" class="r5 r">parameterMatch</span> <b>in</b> <span class="r4 r">parameterMatches</span>)
+            {
+                <b>string</b> <span id="r6 rd" class="r6 r">parameterName</span> = <span class="r5 r">parameterMatch</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;parameterName&quot;</span>].<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a>;
+                <span class="c">// We may need to strip out the initial wildcard used for wildcard parameters</span>
+                <b>if</b> (<span class="r6 r">parameterName</span>.<a href="@0@mscorlib/A.html#1c787ba07a7b11ab" class="i method">StartsWith</a>(<span class="s">&quot;*&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>))
+                {
+                    <span class="r6 r">parameterName</span> = <span class="r6 r">parameterName</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1);
+                }
+ 
+                <span class="c">// Add the default value if present</span>
+                <a href="@0@System/A.html#800cd6e3cb366db4" class="t t">Group</a> <span id="r7 rd" class="r7 r">defaultValueGroup</span> = <span class="r5 r">parameterMatch</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;defaultValue&quot;</span>];
+                <b>object</b> <span id="r8 rd" class="r8 r">defaultValue</span> = <a href="#40dcacb413e27754" class="i method">GetDefaultValue</a>(<span class="r7 r">defaultValueGroup</span>);
+                <b>if</b> (<span class="r8 r">defaultValue</span> != <b>null</b>)
+                {
+                    <span class="r1 r">defaults</span>.<a href="@0@mscorlib/A.html#380bc69e46a83183" class="i method">Add</a>(<span class="r6 r">parameterName</span>, <span class="r8 r">defaultValue</span>);
+                }
+ 
+                <span class="c">// Register inline constraints if present</span>
+                <a href="@0@System/A.html#800cd6e3cb366db4" class="t t">Group</a> <span id="r9 rd" class="r9 r">constraintGroup</span> = <span class="r5 r">parameterMatch</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a><a href="@0@System/A.html#5317b443a52cfc71">[</a><span class="s">&quot;constraint&quot;</span>];
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">                bool isOptional = defaultValue == RouteParameter.Optional;
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+                <b>bool</b> <span id="r10 rd" class="r10 r">isOptional</span> = <span class="r8 r">defaultValue</span> == <a href="../UrlParameter.cs.html#856578a2f13cdeb2" class="t t">UrlParameter</a>.<a href="../UrlParameter.cs.html#282b5a406f86e1ae" class="i field">Optional</a>;
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+                <a href="@0@System.Web/A.html#0320d01d2db87bf3" class="k">var</a> <span id="r11 rd" class="r11 r">constraint</span> = <a href="#c5cdb4b263dc70b6" class="i method">GetInlineConstraint</a>(<span class="r9 r">constraintGroup</span>, <span class="r10 r">isOptional</span>, <span class="r3 r">constraintResolver</span>);
+                <b>if</b> (<span class="r11 r">constraint</span> != <b>null</b>)
+                {
+                    <span class="r2 r">constraints</span>.<a href="@0@mscorlib/A.html#380bc69e46a83183" class="i method">Add</a>(<span class="r6 r">parameterName</span>, <span class="r11 r">constraint</span>);
+                }
+            }
+ 
+            <span class="c">// Replaces parameter matches with just the parameter name in braces</span>
+            <span class="c">// Strips out the optional &#39;?&#39;, default value, inline constraints</span>
+            <b>return</b> <a href="#c0c2e818dc87437c" class="i field">_parameterRegex</a>.<a href="@0@System/A.html#1f2acfa32796faaa" class="i method">Replace</a>(<span class="r0 r">routeTemplate</span>, <span class="s">@&quot;{${parameterName}}&quot;</span>);
+        }
+ 
+        <b>private static object</b> <a id="40dcacb413e27754" href="../R/40dcacb413e27754.html" target="n" data-glyph="76,1" class="i method">GetDefaultValue</a>(<a href="@0@System/A.html#800cd6e3cb366db4" class="t t">Group</a> <span id="r12 rd" class="r12 r">defaultValueGroup</span>)
+        {
+            <b>if</b> (<span class="r12 r">defaultValueGroup</span>.<a href="@0@System/A.html#6e96d62f437bdbb7" class="i property">Success</a>)
+            {
+                <b>string</b> <span id="r13 rd" class="r13 r">defaultValueMatch</span> = <span class="r12 r">defaultValueGroup</span>.<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a>;
+                <b>if</b> (<span class="r13 r">defaultValueMatch</span> == <span class="s">&quot;?&quot;</span>)
+                {
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">                    return RouteParameter.Optional;
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+                    <b>return</b> <a href="../UrlParameter.cs.html#856578a2f13cdeb2" class="t t">UrlParameter</a>.<a href="../UrlParameter.cs.html#282b5a406f86e1ae" class="i field">Optional</a>;
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+                }
+                <b>else</b>
+                {
+                    <span class="c">// Strip out the equal sign at the beginning</span>
+                    <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r13 r">defaultValueMatch</span>.<a href="@0@mscorlib/A.html#1c787ba07a7b11ab" class="i method">StartsWith</a>(<span class="s">&quot;=&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a>));
+                    <b>return</b> <span class="r13 r">defaultValueMatch</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1);
+                }
+            }
+            <b>return null</b>;
+        }
+ 
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">        private static IHttpRouteConstraint GetInlineConstraint(Group constraintGroup, bool isOptional, IInlineConstraintResolver constraintResolver)
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+        <b>private static</b> <a href="@0@System.Web/A.html#0320d01d2db87bf3" class="t t">IRouteConstraint</a> <a id="c5cdb4b263dc70b6" href="../R/c5cdb4b263dc70b6.html" target="n" data-glyph="76,1" class="i method">GetInlineConstraint</a>(<a href="@0@System/A.html#800cd6e3cb366db4" class="t t">Group</a> <span id="r14 rd" class="r14 r">constraintGroup</span>, <b>bool</b> <span id="r15 rd" class="r15 r">isOptional</span>, <a href="IInlineConstraintResolver.cs.html#bb49cfd74949aa7d" class="t t">IInlineConstraintResolver</a> <span id="r16 rd" class="r16 r">constraintResolver</span>)
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        {
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">            List&lt;IHttpRouteConstraint&gt; parameterConstraints = new List&lt;IHttpRouteConstraint&gt;();
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@System.Web/A.html#0320d01d2db87bf3" class="t t">IRouteConstraint</a>&gt; <span id="r17 rd" class="r17 r">parameterConstraints</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="@0@System.Web/A.html#0320d01d2db87bf3" class="t t">IRouteConstraint</a>&gt;();
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+            <b>foreach</b> (<a href="@0@System/A.html#98a52e6ee2014292" class="t t">Capture</a> <span id="r18 rd" class="r18 r">constraintCapture</span> <b>in</b> <span class="r14 r">constraintGroup</span>.<a href="@0@System/A.html#f84a391c15fb3f2e" class="i property">Captures</a>)
+            {
+                <b>string</b> <span id="r19 rd" class="r19 r">inlineConstraint</span> = <span class="r18 r">constraintCapture</span>.<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a>;
+                <a href="@0@System.Web/A.html#0320d01d2db87bf3" class="k">var</a> <span id="r20 rd" class="r20 r">constraint</span> = <span class="r16 r">constraintResolver</span>.<a href="IInlineConstraintResolver.cs.html#a9fe23a56530b622" class="i method">ResolveConstraint</a>(<span class="r19 r">inlineConstraint</span>);
+                <b>if</b> (<span class="r20 r">constraint</span> == <b>null</b>)
+                {
+                    <b>throw</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#7eb4e8b5bb002742" class="i method">InvalidOperation</a>(<a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#ccb1d94b2a1dc7d1" class="i property">HttpRouteBuilder_CouldNotResolveConstraint</a>, <span class="r16 r">constraintResolver</span>.<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a>, <span class="r19 r">inlineConstraint</span>);
+                }
+                <span class="r17 r">parameterConstraints</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r20 r">constraint</span>);
+            }
+ 
+            <b>if</b> (<span class="r17 r">parameterConstraints</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> &gt; 0)
+            {
+                <a href="@0@System.Web/A.html#0320d01d2db87bf3" class="k">var</a> <span id="r21 rd" class="r21 r">constraint</span> = <span class="r17 r">parameterConstraints</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 1 ?
+                    <span class="r17 r">parameterConstraints</span>[0] :
+                    <b>new</b> <a href="Constraints/CompoundRouteConstraint.cs.html#3187fd5ebf44722d" class="t constructor">CompoundRouteConstraint</a>(<span class="r17 r">parameterConstraints</span>);
+ 
+                <b>if</b> (<span class="r15 r">isOptional</span>)
+                {
+                    <span class="c">// Constraints should match RouteParameter.Optional if the parameter is optional</span>
+                    <span class="c">// This prevents contraining when there&#39;s no value specified</span>
+                    <span class="r21 r">constraint</span> = <b>new</b> <a href="Constraints/OptionalRouteConstraint.cs.html#b77fbe4e40462da6" class="t constructor">OptionalRouteConstraint</a>(<span class="r21 r">constraint</span>);
+                }
+ 
+                <b>return</b> <span class="r21 r">constraint</span>;
+            }
+            <b>return null</b>;
+        }
+    }
+}</pre></td></tr></table></div></body></html>

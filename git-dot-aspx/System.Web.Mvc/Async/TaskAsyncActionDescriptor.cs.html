@@ -1,0 +1,312 @@
+﻿<!DOCTYPE html>
+<html><head><title>TaskAsyncActionDescriptor.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(303);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/Async/TaskAsyncActionDescriptor.cs" target="_top">Async\TaskAsyncActionDescriptor.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Concurrent</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>.<span class="i n">Expressions</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>.<span class="i n">Tasks</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Async</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> When an action method returns either Task or Task{T} the TaskAsyncActionDescriptor provides information about the action.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="5986924db961b344" href="../R/5986924db961b344.html" target="n" data-glyph="0,0" class="t t">TaskAsyncActionDescriptor</a> : <a href="AsyncActionDescriptor.cs.html#0749997528b19400" class="t t">AsyncActionDescriptor</a>, <a href="../IMethodInfoActionDescriptor.cs.html#19dfbcb905bfe34f" class="t t">IMethodInfoActionDescriptor</a>
+    {
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> dictionary to hold methods that can read Task{T}.Result</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#2e5ef5704344a309" class="t t">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>object</b>, <b>object</b>&gt;&gt; <a id="bda72be480e4dd61" href="../R/bda72be480e4dd61.html" target="n" data-glyph="46,1" class="i field">_taskValueExtractors</a> = <b>new</b> <a href="@0@mscorlib/A.html#abc35f3c19fa0290" class="t constructor">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>object</b>, <b>object</b>&gt;&gt;();
+        <b>private readonly string</b> <a id="dd1b801e26370cff" href="../R/dd1b801e26370cff.html" target="n" data-glyph="46,1" class="i field">_actionName</a>;
+        <b>private readonly</b> <a href="../ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <a id="dcf10f55f7c68598" href="../R/dcf10f55f7c68598.html" target="n" data-glyph="46,1" class="i field">_controllerDescriptor</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#8b99c1f377873554" class="t t">Lazy</a>&lt;<b>string</b>&gt; <a id="e05eecfecb7ee8b2" href="../R/e05eecfecb7ee8b2.html" target="n" data-glyph="46,1" class="i field">_uniqueId</a>;
+        <b>private</b> <a href="../ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a>[] <a id="035f546ff317176b" href="../R/035f546ff317176b.html" target="n" data-glyph="46,1" class="i field">_parametersCache</a>;
+ 
+        <b>public</b> <a id="a5bf94af91e3e9b5" href="../R/a5bf94af91e3e9b5.html" target="n" data-glyph="72,1" class="i constructor">TaskAsyncActionDescriptor</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r0 rd" class="r0 r">taskMethodInfo</span>, <b>string</b> <span id="r1 rd" class="r1 r">actionName</span>, <a href="../ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <span id="r2 rd" class="r2 r">controllerDescriptor</span>)
+            : <a href="#de918fac49a84438" class="k">this</a>(<span class="r0 r">taskMethodInfo</span>, <span class="r1 r">actionName</span>, <span class="r2 r">controllerDescriptor</span>, <span class="r3 r">validateMethod</span>: <b>true</b>)
+        {
+        }
+ 
+        <b>internal</b> <a id="de918fac49a84438" href="../R/de918fac49a84438.html" target="n" data-glyph="74,1" class="i constructor">TaskAsyncActionDescriptor</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r4 rd" class="r4 r">taskMethodInfo</span>, <b>string</b> <span id="r5 rd" class="r5 r">actionName</span>, <a href="../ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <span id="r6 rd" class="r6 r">controllerDescriptor</span>, <b>bool</b> <span id="r3 rd" class="r3 r">validateMethod</span>)
+        {
+            <b>if</b> (<span class="r4 r">taskMethodInfo</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;taskMethodInfo&quot;</span>);
+            }
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r5 r">actionName</span>))
+            {
+                <b>throw</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#1d47f3d5072367d1" class="i method">ParameterCannotBeNullOrEmpty</a>(<span class="s">&quot;actionName&quot;</span>);
+            }
+            <b>if</b> (<span class="r6 r">controllerDescriptor</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerDescriptor&quot;</span>);
+            }
+ 
+            <b>if</b> (<span class="r3 r">validateMethod</span>)
+            {
+                <b>string</b> <span id="r7 rd" class="r7 r">taskFailedMessage</span> = <a href="../ActionDescriptor.cs.html#3ce1d91c2ff28340" class="i method">VerifyActionMethodIsCallable</a>(<span class="r4 r">taskMethodInfo</span>);
+                <b>if</b> (<span class="r7 r">taskFailedMessage</span> != <b>null</b>)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<span class="r7 r">taskFailedMessage</span>, <span class="s">&quot;taskMethodInfo&quot;</span>);
+                }
+            }
+ 
+            <a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a> = <span class="r4 r">taskMethodInfo</span>;
+            <a href="#dd1b801e26370cff" class="i field">_actionName</a> = <span class="r5 r">actionName</span>;
+            <a href="#dcf10f55f7c68598" class="i field">_controllerDescriptor</a> = <span class="r6 r">controllerDescriptor</span>;
+            <a href="#e05eecfecb7ee8b2" class="i field">_uniqueId</a> = <b>new</b> <a href="@0@mscorlib/A.html#c0f7b98bacad370a" class="t constructor">Lazy</a>&lt;<b>string</b>&gt;(<a href="#cbc04fd2fd53d455" class="i method">CreateUniqueId</a>);
+        }
+ 
+        <b>public override string</b> <a id="3358bb3c557a79bb" href="../R/3358bb3c557a79bb.html" target="n" data-glyph="102,1" class="i property">ActionName</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#dd1b801e26370cff" class="i field">_actionName</a>; }
+        }
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <a id="66ca8e987b44b6ee" href="../R/66ca8e987b44b6ee.html" target="n" data-glyph="102,1" class="i property">TaskMethodInfo</a> { <b>get</b>; <b>private set</b>; }
+ 
+        <b>public override</b> <a href="../ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <a id="e0ed77647f710540" href="../R/e0ed77647f710540.html" target="n" data-glyph="102,1" class="i property">ControllerDescriptor</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#dcf10f55f7c68598" class="i field">_controllerDescriptor</a>; }
+        }
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <a id="16741a03fd0a98fb" href="../R/16741a03fd0a98fb.html" target="n" data-glyph="102,1" class="i property">MethodInfo</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>; }
+        }
+ 
+        <b>public override string</b> <a id="7fe25c5912a51048" href="../R/7fe25c5912a51048.html" target="n" data-glyph="102,1" class="i property">UniqueId</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#e05eecfecb7ee8b2" class="i field">_uniqueId</a>.<a href="@0@mscorlib/A.html#606a17645b0dc0ff" class="i property">Value</a>; }
+        }
+ 
+        <b>private string</b> <a id="cbc04fd2fd53d455" href="../R/cbc04fd2fd53d455.html" target="n" data-glyph="76,1" class="i method">CreateUniqueId</a>()
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r8 rd" class="r8 r">builder</span> = <b>new</b> <a href="@0@mscorlib/A.html#57b9d3a70c2aba34" class="t constructor">StringBuilder</a>(<a href="AsyncActionDescriptor.cs.html#0749997528b19400" class="k">base</a>.<a href="../ActionDescriptor.cs.html#542a6d30a8ddf139" class="i property">UniqueId</a>);
+            <a href="../DescriptorUtil.cs.html#cd4e512d108fc916" class="t t">DescriptorUtil</a>.<a href="../DescriptorUtil.cs.html#316ea390deb8e5fb" class="i method">AppendUniqueId</a>(<span class="r8 r">builder</span>, <a href="#16741a03fd0a98fb" class="i property">MethodInfo</a>);
+            <b>return</b> <span class="r8 r">builder</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Web.FxCop&quot;</span>, <span class="s">&quot;MW1201:DoNotCallProblematicMethodsOnTask&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is commented in great detail.&quot;</span>)]
+        <b>public override</b> <a href="@0@mscorlib/A.html#71a3deb2ea37ce06" class="t t">IAsyncResult</a> <a id="1e3666280f539e5a" href="../R/1e3666280f539e5a.html" target="n" data-glyph="72,1" class="i method">BeginExecute</a>(<a href="../ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r9 rd" class="r9 r">controllerContext</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r10 rd" class="r10 r">parameters</span>, <a href="@0@mscorlib/A.html#58aea74ca92df82e" class="t t">AsyncCallback</a> <span id="r11 rd" class="r11 r">callback</span>, <b>object</b> <span id="r12 rd" class="r12 r">state</span>)
+        {
+            <b>if</b> (<span class="r9 r">controllerContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerContext&quot;</span>);
+            }
+            <b>if</b> (<span class="r10 r">parameters</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;parameters&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#adf5577c07f51f16" class="t t">ParameterInfo</a>[] <span id="r13 rd" class="r13 r">parameterInfos</span> = <a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>.<a href="@0@mscorlib/A.html#91801fac9c14db1f" class="i method">GetParameters</a>();
+            <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="k">var</a> <span id="r14 rd" class="r14 r">rawParameterValues</span> = <b>from</b> <span class="i">parameterInfo</span> <b>in</b> <span class="r13 r">parameterInfos</span>
+                                     <b>select</b> <a href="../ActionDescriptor.cs.html#dbbe42bb3b1ae331" class="i method">ExtractParameterFromDictionary</a>(<span class="i">parameterInfo</span>, <span class="r10 r">parameters</span>, <a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>);
+            <b>object</b>[] <span id="r15 rd" class="r15 r">parametersArray</span> = <span class="r14 r">rawParameterValues</span>.<a href="@0@System.Core/A.html#783a052330e7d48d" class="i method">ToArray</a>();
+ 
+            <a href="@0@mscorlib/A.html#130a9536ac96b392" class="t t">CancellationTokenSource</a> <span id="r16 rd" class="r16 r">tokenSource</span> = <b>null</b>;
+            <b>bool</b> <span id="r17 rd" class="r17 r">disposedTimer</span> = <b>false</b>;
+            <a href="@0@mscorlib/A.html#051a39d380760b26" class="t t">Timer</a> <span id="r18 rd" class="r18 r">taskCancelledTimer</span> = <b>null</b>;
+            <b>bool</b> <span id="r19 rd" class="r19 r">taskCancelledTimerRequired</span> = <b>false</b>;
+ 
+            <b>int</b> <span id="r20 rd" class="r20 r">timeout</span> = <a href="AsyncActionDescriptor.cs.html#1e3f8b8bee83977f" class="i method">GetAsyncManager</a>(<span class="r9 r">controllerContext</span>.<a href="../ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>).<a href="AsyncManager.cs.html#82062b6889f67c4e" class="i property">Timeout</a>;
+ 
+            <b>for</b> (<b>int</b> <span id="r21 rd" class="r21 r">i</span> = 0; <span class="r21 r">i</span> &lt; <span class="r15 r">parametersArray</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r21 r">i</span>++)
+            {
+                <b>if</b> (<b>default</b>(<a href="@0@mscorlib/A.html#36b17ded8b1a228c" class="t t">CancellationToken</a>).<a href="@0@mscorlib/A.html#b2b155ee7b18225b" class="i method">Equals</a>(<span class="r15 r">parametersArray</span>[<span class="r21 r">i</span>]))
+                {
+                    <span class="r16 r">tokenSource</span> = <b>new</b> <a href="@0@mscorlib/A.html#0fd973cb6741d972" class="t constructor">CancellationTokenSource</a>();
+                    <span class="r15 r">parametersArray</span>[<span class="r21 r">i</span>] = <span class="r16 r">tokenSource</span>.<a href="@0@mscorlib/A.html#9e22b9c8995bf195" class="i property">Token</a>;
+ 
+                    <span class="c">// If there is a timeout we will create a timer to cancel the task when the</span>
+                    <span class="c">// timeout expires.</span>
+                    <span class="r19 r">taskCancelledTimerRequired</span> = <span class="r20 r">timeout</span> &gt; <a href="@0@mscorlib/A.html#6b53654d3452a8df" class="t t">Timeout</a>.<a href="@0@mscorlib/A.html#17ac04506b89ddd8" class="i field">Infinite</a>;
+                    <b>break</b>;
+                }
+            }
+ 
+            <a href="../ActionMethodDispatcher.cs.html#644cdaf48600da62" class="t t">ActionMethodDispatcher</a> <span id="r22 rd" class="r22 r">dispatcher</span> = <a href="../ActionDescriptor.cs.html#64aee1f07ea5f697" class="i property">DispatcherCache</a>.<a href="../ActionMethodDispatcherCache.cs.html#684fdedf7de14302" class="i method">GetDispatcher</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>);
+ 
+            <b>if</b> (<span class="r19 r">taskCancelledTimerRequired</span>)
+            {
+                <span class="r18 r">taskCancelledTimer</span> = <b>new</b> <a href="@0@mscorlib/A.html#07930248be93641d" class="t constructor">Timer</a>(<span id="r23 rd" class="r23 r">_</span> =&gt;
+                {
+                    <b>lock</b> (<span class="r16 r">tokenSource</span>)
+                    {
+                        <b>if</b> (!<span class="r17 r">disposedTimer</span>)
+                        {
+                            <span class="r16 r">tokenSource</span>.<a href="@0@mscorlib/A.html#93c25ccd0946470f" class="i method">Cancel</a>();
+                        }
+                    }
+                }, <span class="r24 r">state</span>: <b>null</b>, <span class="r25 r">dueTime</span>: <span class="r20 r">timeout</span>, <span class="r26 r">period</span>: <a href="@0@mscorlib/A.html#6b53654d3452a8df" class="t t">Timeout</a>.<a href="@0@mscorlib/A.html#17ac04506b89ddd8" class="i field">Infinite</a>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#045a746eb48cbaa9" class="t t">Task</a> <span id="r27 rd" class="r27 r">taskUser</span> = <span class="r22 r">dispatcher</span>.<a href="../ActionMethodDispatcher.cs.html#b2bbe9e2e048656f" class="i method">Execute</a>(<span class="r9 r">controllerContext</span>.<a href="../ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>, <span class="r15 r">parametersArray</span>) <b>as</b> <a href="@0@mscorlib/A.html#045a746eb48cbaa9" class="t t">Task</a>;
+            <a href="@0@mscorlib/A.html#9147ae6f76643aae" class="t t">Action</a> <span id="r28 rd" class="r28 r">cleanupAtEndExecute</span> = () =&gt;
+            {
+                <span class="c">// Cleanup code that&#39;s run in EndExecute, after we&#39;ve waited on the task value. </span>
+ 
+                <b>if</b> (<span class="r18 r">taskCancelledTimer</span> != <b>null</b>)
+                {
+                    <span class="c">// Timer callback may still fire after Dispose is called. </span>
+                    <span class="r18 r">taskCancelledTimer</span>.<a href="@0@mscorlib/A.html#4a8e954275723902" class="i method">Dispose</a>();
+                }
+ 
+                <b>if</b> (<span class="r16 r">tokenSource</span> != <b>null</b>)
+                {
+                    <b>lock</b> (<span class="r16 r">tokenSource</span>)
+                    {
+                        <span class="r17 r">disposedTimer</span> = <b>true</b>;
+                        <span class="r16 r">tokenSource</span>.<a href="@0@mscorlib/A.html#d6974e1b9b86299d" class="i method">Dispose</a>();
+                        <b>if</b> (<span class="r16 r">tokenSource</span>.<a href="@0@mscorlib/A.html#716cb764064ecfeb" class="i property">IsCancellationRequested</a>)
+                        {
+                            <span class="c">// Give Timeout exceptions higher priority over other exceptions, mainly OperationCancelled exceptions </span>
+                            <span class="c">// that were signaled with out timeout token.                             </span>
+                            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#59c9457789637923" class="t constructor">TimeoutException</a>();
+                        }
+                    }
+                }
+            };
+ 
+            <a href="TaskWrapperAsyncResult.cs.html#10c2c4a8e7336346" class="t t">TaskWrapperAsyncResult</a> <span id="r29 rd" class="r29 r">result</span> = <b>new</b> <a href="TaskWrapperAsyncResult.cs.html#8e9ebb7a4f99e391" class="t constructor">TaskWrapperAsyncResult</a>(<span class="r27 r">taskUser</span>, <span class="r12 r">state</span>, <span class="r28 r">cleanupAtEndExecute</span>);
+ 
+            <span class="c">// if user supplied a callback, invoke that when their task has finished running. </span>
+            <b>if</b> (<span class="r11 r">callback</span> != <b>null</b>)
+            {
+                <b>if</b> (<span class="r27 r">taskUser</span>.<a href="@0@mscorlib/A.html#8d8a16ab86bf7a8a" class="i property">IsCompleted</a>)
+                {
+                    <span class="c">// If the underlying task is already finished, from our caller&#39;s perspective this is just</span>
+                    <span class="c">// a synchronous completion.</span>
+                    <span class="r29 r">result</span>.<a href="TaskWrapperAsyncResult.cs.html#0231a22688b18455" class="i property">CompletedSynchronously</a> = <b>true</b>;
+                    <span class="r11 r">callback</span>(<span class="r29 r">result</span>);
+                }
+                <b>else</b>
+                {
+                    <span class="c">// If the underlying task isn&#39;t yet finished, from our caller&#39;s perspective this will be</span>
+                    <span class="c">// an asynchronous completion. We&#39;ll use ContinueWith instead of Finally for two reasons:</span>
+                    <span class="c">//</span>
+                    <span class="c">// - Finally propagates the antecedent Task&#39;s exception, which we don&#39;t need to do here.</span>
+                    <span class="c">//   Out caller will eventually call EndExecute, which correctly observes the</span>
+                    <span class="c">//   antecedent Task&#39;s exception anyway if it faulted.</span>
+                    <span class="c">//</span>
+                    <span class="c">// - Finally invokes the callback on the captured SynchronizationContext, which is</span>
+                    <span class="c">//   unnecessary when using APM (Begin / End). APM assumes that the callback is invoked</span>
+                    <span class="c">//   on an arbitrary ThreadPool thread with no SynchronizationContext set up, so</span>
+                    <span class="c">//   ContinueWith gets us closer to the desired semantic.</span>
+                    <span class="r29 r">result</span>.<a href="TaskWrapperAsyncResult.cs.html#0231a22688b18455" class="i property">CompletedSynchronously</a> = <b>false</b>;
+                    <span class="r27 r">taskUser</span>.<a href="@0@mscorlib/A.html#e71924f994d1bb54" class="i method">ContinueWith</a>(<span id="r30 rd" class="r30 r">_</span> =&gt;
+                    {
+                        <span class="r11 r">callback</span>(<span class="r29 r">result</span>);
+                    });
+                }
+            }
+ 
+            <b>return</b> <span class="r29 r">result</span>;
+        }
+ 
+        <b>public override object</b> <a id="5e5e2082593afa27" href="../R/5e5e2082593afa27.html" target="n" data-glyph="72,1" class="i method">Execute</a>(<a href="../ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r31 rd" class="r31 r">controllerContext</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r32 rd" class="r32 r">parameters</span>)
+        {
+            <b>string</b> <span id="r33 rd" class="r33 r">errorMessage</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#5493cf7ac984d11e" class="i property">TaskAsyncActionDescriptor_CannotExecuteSynchronously</a>,
+                                                <a href="#3358bb3c557a79bb" class="i property">ActionName</a>);
+ 
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="r33 r">errorMessage</span>);
+        }
+ 
+        <b>public override object</b> <a id="bfb2648504099590" href="../R/bfb2648504099590.html" target="n" data-glyph="72,1" class="i method">EndExecute</a>(<a href="@0@mscorlib/A.html#71a3deb2ea37ce06" class="t t">IAsyncResult</a> <span id="r34 rd" class="r34 r">asyncResult</span>)
+        {
+            <a href="TaskWrapperAsyncResult.cs.html#10c2c4a8e7336346" class="t t">TaskWrapperAsyncResult</a> <span id="r35 rd" class="r35 r">wrapperResult</span> = (<a href="TaskWrapperAsyncResult.cs.html#10c2c4a8e7336346" class="t t">TaskWrapperAsyncResult</a>)<span class="r34 r">asyncResult</span>;
+ 
+            <span class="c">// Throw an exception with the correct call stack</span>
+            <b>try</b>
+            {
+                <span class="r35 r">wrapperResult</span>.<a href="TaskWrapperAsyncResult.cs.html#18a7ddf7f2e824ff" class="i property">Task</a>.<a href="../Common/TaskHelpersExtensions.cs.html#b8a2e721e6f5b7a9" class="i method">ThrowIfFaulted</a>();
+            }
+            <b>finally</b>
+            {
+                <b>if</b> (<span class="r35 r">wrapperResult</span>.<a href="TaskWrapperAsyncResult.cs.html#f060c94bdcf9a228" class="i property">CleanupThunk</a> != <b>null</b>)
+                {
+                    <span class="r35 r">wrapperResult</span>.<a href="TaskWrapperAsyncResult.cs.html#f060c94bdcf9a228" class="i property">CleanupThunk</a>();
+                }
+            }
+ 
+            <span class="c">// Extract the result of the task if there is a result</span>
+            <b>return</b> <a href="#bda72be480e4dd61" class="i field">_taskValueExtractors</a>.<a href="@0@mscorlib/A.html#2f8bcdfbad10304f" class="i method">GetOrAdd</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>.<a href="@0@mscorlib/A.html#5be6c92e98bc4044" class="i property">ReturnType</a>, <a href="#8e189f95e9d16ffc" class="i method">CreateTaskValueExtractor</a>)(<span class="r35 r">wrapperResult</span>.<a href="TaskWrapperAsyncResult.cs.html#18a7ddf7f2e824ff" class="i property">Task</a>);
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>object</b>, <b>object</b>&gt; <a id="8e189f95e9d16ffc" href="../R/8e189f95e9d16ffc.html" target="n" data-glyph="76,1" class="i method">CreateTaskValueExtractor</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r36 rd" class="r36 r">taskType</span>)
+        {
+            <span class="c">// Task&lt;T&gt;?</span>
+            <b>if</b> (<span class="r36 r">taskType</span>.<a href="@0@mscorlib/A.html#b81fd50dfeabd50c" class="i property">IsGenericType</a> &amp;&amp; <span class="r36 r">taskType</span>.<a href="@0@mscorlib/A.html#7179022318447358" class="i method">GetGenericTypeDefinition</a>() == <b>typeof</b>(<a href="@0@mscorlib/A.html#5ca7b77f3df89fc6" class="t t">Task</a>&lt;&gt;))
+            {
+                <span class="c">// lambda = arg =&gt; (object)(((Task&lt;T&gt;)arg).Result)</span>
+                <a href="@0@System.Core/A.html#f4308bded2e9d66a" class="k">var</a> <span id="r37 rd" class="r37 r">arg</span> = <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a>.<a href="@0@System.Core/A.html#ac75ecb815411cb9" class="i method">Parameter</a>(<b>typeof</b>(<b>object</b>));
+                <a href="@0@System.Core/A.html#249779eee7261f1f" class="k">var</a> <span id="r38 rd" class="r38 r">castArg</span> = <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a>.<a href="@0@System.Core/A.html#6546b105f65d4bff" class="i method">Convert</a>(<span class="r37 r">arg</span>, <span class="r36 r">taskType</span>);
+                <a href="@0@System.Core/A.html#8760a057e74485a8" class="k">var</a> <span id="r39 rd" class="r39 r">fieldAccess</span> = <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a>.<a href="@0@System.Core/A.html#1eb2b97f7f953e73" class="i method">Property</a>(<span class="r38 r">castArg</span>, <span class="s">&quot;Result&quot;</span>);
+                <a href="@0@System.Core/A.html#249779eee7261f1f" class="k">var</a> <span id="r40 rd" class="r40 r">castResult</span> = <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a>.<a href="@0@System.Core/A.html#6546b105f65d4bff" class="i method">Convert</a>(<span class="r39 r">fieldAccess</span>, <b>typeof</b>(<b>object</b>));
+                <a href="@0@System.Core/A.html#51d6d604b8c53dc8" class="k">var</a> <span id="r41 rd" class="r41 r">lambda</span> = <a href="@0@System.Core/A.html#39a9b098482b765d" class="t t">Expression</a>.<a href="@0@System.Core/A.html#23094e18bae0345d" class="i method">Lambda</a>&lt;<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>object</b>, <b>object</b>&gt;&gt;(<span class="r40 r">castResult</span>, <span class="r37 r">arg</span>);
+                <b>return</b> <span class="r41 r">lambda</span>.<a href="@0@System.Core/A.html#9d4912c02133de4e" class="i method">Compile</a>();
+            }
+ 
+            <span class="c">// Any exceptions should be thrown before getting the task value so just return null.</span>
+            <b>return</b> <span id="r42 rd" class="r42 r">theTask</span> =&gt;
+            {
+                <b>return null</b>;
+            };
+        }
+ 
+        <b>public override object</b>[] <a id="438236eba338c5d0" href="../R/438236eba338c5d0.html" target="n" data-glyph="72,1" class="i method">GetCustomAttributes</a>(<b>bool</b> <span id="r43 rd" class="r43 r">inherit</span>)
+        {
+            <b>return</b> <a href="../ActionDescriptorHelper.cs.html#dd396b606e150b50" class="t t">ActionDescriptorHelper</a>.<a href="../ActionDescriptorHelper.cs.html#f7a487ba784768cd" class="i method">GetCustomAttributes</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>, <span class="r43 r">inherit</span>);
+        }
+ 
+        <b>public override object</b>[] <a id="92a5608e7f724b8c" href="../R/92a5608e7f724b8c.html" target="n" data-glyph="72,1" class="i method">GetCustomAttributes</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r44 rd" class="r44 r">attributeType</span>, <b>bool</b> <span id="r45 rd" class="r45 r">inherit</span>)
+        {
+            <b>return</b> <a href="../ActionDescriptorHelper.cs.html#dd396b606e150b50" class="t t">ActionDescriptorHelper</a>.<a href="../ActionDescriptorHelper.cs.html#8a4af538065bf0d3" class="i method">GetCustomAttributes</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>, <span class="r44 r">attributeType</span>, <span class="r45 r">inherit</span>);
+        }
+ 
+        <b>public override</b> <a href="../ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a>[] <a id="2c5eb5c76fcb8aa5" href="../R/2c5eb5c76fcb8aa5.html" target="n" data-glyph="72,1" class="i method">GetParameters</a>()
+        {
+            <b>return</b> <a href="../ActionDescriptorHelper.cs.html#dd396b606e150b50" class="t t">ActionDescriptorHelper</a>.<a href="../ActionDescriptorHelper.cs.html#eab502db973cac0b" class="i method">GetParameters</a>(<a href="#5986924db961b344" class="k">this</a>, <a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>, <b>ref</b> <a href="#035f546ff317176b" class="i field">_parametersCache</a>);
+        }
+ 
+        <b>public override</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../ActionSelector.cs.html#c3dffd895d7eaa7f" class="t t">ActionSelector</a>&gt; <a id="541da8968dcb67a9" href="../R/541da8968dcb67a9.html" target="n" data-glyph="72,1" class="i method">GetSelectors</a>()
+        {
+            <b>return</b> <a href="../ActionDescriptorHelper.cs.html#dd396b606e150b50" class="t t">ActionDescriptorHelper</a>.<a href="../ActionDescriptorHelper.cs.html#5c98be15147fffd1" class="i method">GetSelectors</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>);
+        }
+ 
+        <b>internal override</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../ActionNameSelector.cs.html#7527bad45165f949" class="t t">ActionNameSelector</a>&gt; <a id="006fbdd3103532fd" href="../R/006fbdd3103532fd.html" target="n" data-glyph="74,1" class="i method">GetNameSelectors</a>()
+        {
+            <b>return</b> <a href="../ActionDescriptorHelper.cs.html#dd396b606e150b50" class="t t">ActionDescriptorHelper</a>.<a href="../ActionDescriptorHelper.cs.html#272ba09b55f6aaf1" class="i method">GetNameSelectors</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>);
+        }
+ 
+        <b>public override bool</b> <a id="2266cc7e3444475a" href="../R/2266cc7e3444475a.html" target="n" data-glyph="72,1" class="i method">IsDefined</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r46 rd" class="r46 r">attributeType</span>, <b>bool</b> <span id="r47 rd" class="r47 r">inherit</span>)
+        {
+            <b>return</b> <a href="../ActionDescriptorHelper.cs.html#dd396b606e150b50" class="t t">ActionDescriptorHelper</a>.<a href="../ActionDescriptorHelper.cs.html#95614877a3f81f6d" class="i method">IsDefined</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>, <span class="r46 r">attributeType</span>, <span class="r47 r">inherit</span>);
+        }
+ 
+        <b>public override</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="../FilterAttribute.cs.html#9780cfebb29034b4" class="t t">FilterAttribute</a>&gt; <a id="fdb7b2f2656b71be" href="../R/fdb7b2f2656b71be.html" target="n" data-glyph="72,1" class="i method">GetFilterAttributes</a>(<b>bool</b> <span id="r48 rd" class="r48 r">useCache</span>)
+        {
+            <b>if</b> (<span class="r48 r">useCache</span> &amp;&amp; <a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>() == <b>typeof</b>(<a href="#5986924db961b344" class="t t">TaskAsyncActionDescriptor</a>))
+            {
+                <span class="c">// Do not look at cache in types derived from this type because they might incorrectly implement GetCustomAttributes</span>
+                <b>return</b> <a href="../ReflectedAttributeCache.cs.html#548a4b2ad7c3793a" class="t t">ReflectedAttributeCache</a>.<a href="../ReflectedAttributeCache.cs.html#42f63ebf1987c64d" class="i method">GetMethodFilterAttributes</a>(<a href="#66ca8e987b44b6ee" class="i property">TaskMethodInfo</a>);
+            }
+            <b>return</b> <a href="AsyncActionDescriptor.cs.html#0749997528b19400" class="k">base</a>.<a href="../ActionDescriptor.cs.html#899d198842919e8b" class="i method">GetFilterAttributes</a>(<span class="r48 r">useCache</span>);
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

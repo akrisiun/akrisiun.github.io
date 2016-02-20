@@ -1,0 +1,384 @@
+﻿<!DOCTYPE html>
+<html><head><title>RouteParser.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(375);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/Routing/RouteParser.cs" target="_top">Routing\RouteParser.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">using ErrorResources = System.Web.Http.Properties.SRResources;
+using TParsedRoute = System.Web.Http.Routing.HttpParsedRoute;
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+<b>using</b> <span class="t">ErrorResources</span> = <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>.<a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>;
+<b>using</b> <span class="t">TParsedRoute</span> = <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>.<a href="ParsedRoute.cs.html#6ea51e8b718874c9" class="t t">ParsedRoute</a>;
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+ 
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">ASPNETWEBAPI</span>
+<span class="e">namespace System.Web.Http.Routing
+</span><span class="k preprocess">#</span><span class="k preprocess">else</span>
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+{
+    <span class="c">// in the MVC case, route parsing is done for AttributeRouting&#39;s sake, so that</span>
+    <span class="c">// it could order the discovered routes before pushing them into the routeCollection,</span>
+    <span class="c">// where, unfortunately, they would be parsed again.</span>
+    <b>internal static class</b> <a id="e386693923543e40" href="../R/e386693923543e40.html" target="n" data-glyph="2,0" class="t t">RouteParser</a>
+    {
+        <b>private static string</b> <a id="487364521a01ea44" href="../R/487364521a01ea44.html" target="n" data-glyph="76,1" class="i method">GetLiteral</a>(<b>string</b> <span id="r0 rd" class="r0 r">segmentLiteral</span>)
+        {
+            <span class="c">// Scan for errant single { and } and convert double {{ to { and double }} to }</span>
+ 
+            <span class="c">// First we eliminate all escaped braces and then check if any other braces are remaining</span>
+            <b>string</b> <span id="r1 rd" class="r1 r">newLiteral</span> = <span class="r0 r">segmentLiteral</span>.<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;{{&quot;</span>, <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>).<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;}}&quot;</span>, <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>);
+            <b>if</b> (<span class="r1 r">newLiteral</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<span class="s">&quot;{&quot;</span>) || <span class="r1 r">newLiteral</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<span class="s">&quot;}&quot;</span>))
+            {
+                <b>return null</b>;
+            }
+ 
+            <span class="c">// If it&#39;s a valid format, we unescape the braces</span>
+            <b>return</b> <span class="r0 r">segmentLiteral</span>.<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;{{&quot;</span>, <span class="s">&quot;{&quot;</span>).<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;}}&quot;</span>, <span class="s">&quot;}&quot;</span>);
+        }
+ 
+        <b>private static int</b> <a id="27699614ba511a6b" href="../R/27699614ba511a6b.html" target="n" data-glyph="76,1" class="i method">IndexOfFirstOpenParameter</a>(<b>string</b> <span id="r2 rd" class="r2 r">segment</span>, <b>int</b> <span id="r3 rd" class="r3 r">startIndex</span>)
+        {
+            <span class="c">// Find the first unescaped open brace</span>
+            <b>while</b> (<b>true</b>)
+            {
+                <span class="r3 r">startIndex</span> = <span class="r2 r">segment</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;{&#39;</span>, <span class="r3 r">startIndex</span>);
+                <b>if</b> (<span class="r3 r">startIndex</span> == -1)
+                {
+                    <span class="c">// If there are no more open braces, stop</span>
+                    <b>return</b> -1;
+                }
+                <b>if</b> ((<span class="r3 r">startIndex</span> + 1 == <span class="r2 r">segment</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>) ||
+                    ((<span class="r3 r">startIndex</span> + 1 &lt; <span class="r2 r">segment</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>) &amp;&amp; (<span class="r2 r">segment</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r3 r">startIndex</span> + 1] != <span class="s">&#39;{&#39;</span>)))
+                {
+                    <span class="c">// If we found an open brace that is followed by a non-open brace, it&#39;s</span>
+                    <span class="c">// a parameter delimiter.</span>
+                    <span class="c">// It&#39;s also a delimiter if the open brace is the last character - though</span>
+                    <span class="c">// it ends up being being called out as invalid later on.</span>
+                    <b>return</b> <span class="r3 r">startIndex</span>;
+                }
+                <span class="c">// Increment by two since we want to skip both the open brace that</span>
+                <span class="c">// we&#39;re on as well as the subsequent character since we know for</span>
+                <span class="c">// sure that it is part of an escape sequence.</span>
+                <span class="r3 r">startIndex</span> += 2;
+            }
+        }
+ 
+        <b>internal static bool</b> <a id="e6f9f02734f296b8" href="../R/e6f9f02734f296b8.html" target="n" data-glyph="74,1" class="i method">IsSeparator</a>(<b>string</b> <span id="r4 rd" class="r4 r">s</span>)
+        {
+            <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#d47c1f57ad1e1e6e" class="i method">Equals</a>(<span class="r4 r">s</span>, <span class="s">&quot;/&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a>);
+        }
+ 
+        <b>private static bool</b> <a id="169b66edbfb7d7c4" href="../R/169b66edbfb7d7c4.html" target="n" data-glyph="76,1" class="i method">IsValidParameterName</a>(<b>string</b> <span id="r5 rd" class="r5 r">parameterName</span>)
+        {
+            <b>if</b> (<span class="r5 r">parameterName</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 0)
+            {
+                <b>return false</b>;
+            }
+ 
+            <b>for</b> (<b>int</b> <span id="r6 rd" class="r6 r">i</span> = 0; <span class="r6 r">i</span> &lt; <span class="r5 r">parameterName</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; <span class="r6 r">i</span>++)
+            {
+                <b>char</b> <span id="r7 rd" class="r7 r">c</span> = <span class="r5 r">parameterName</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r6 r">i</span>];
+                <b>if</b> (<span class="r7 r">c</span> == <span class="s">&#39;/&#39;</span> || <span class="r7 r">c</span> == <span class="s">&#39;{&#39;</span> || <span class="r7 r">c</span> == <span class="s">&#39;}&#39;</span>)
+                {
+                    <b>return false</b>;
+                }
+            }
+ 
+            <b>return true</b>;
+        }
+ 
+        <b>internal static bool</b> <a id="22896b016d5a8e59" href="../R/22896b016d5a8e59.html" target="n" data-glyph="74,1" class="i method">IsInvalidRouteTemplate</a>(<b>string</b> <span id="r8 rd" class="r8 r">routeTemplate</span>)
+        {
+            <b>return</b> <span class="r8 r">routeTemplate</span>.<a href="@0@mscorlib/A.html#1c787ba07a7b11ab" class="i method">StartsWith</a>(<span class="s">&quot;~&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a>) ||
+                   <span class="r8 r">routeTemplate</span>.<a href="@0@mscorlib/A.html#1c787ba07a7b11ab" class="i method">StartsWith</a>(<span class="s">&quot;/&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a>) ||
+                   (<span class="r8 r">routeTemplate</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39;?&#39;</span>) != -1);
+        }
+ 
+        <b>public static</b> <a href="ParsedRoute.cs.html#6ea51e8b718874c9" class="t t">TParsedRoute</a> <a id="61209809c7224693" href="../R/61209809c7224693.html" target="n" data-glyph="72,1" class="i method">Parse</a>(<b>string</b> <span id="r9 rd" class="r9 r">routeTemplate</span>)
+        {
+            <b>if</b> (<span class="r9 r">routeTemplate</span> == <b>null</b>)
+            {
+                <span class="r9 r">routeTemplate</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+            }
+ 
+            <b>if</b> (<a href="#22896b016d5a8e59" class="i method">IsInvalidRouteTemplate</a>(<span class="r9 r">routeTemplate</span>))
+            {
+                <b>throw</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#0717f5dd5522ea08" class="i property">Route_InvalidRouteTemplate</a>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r10 rd" class="r10 r">uriParts</span> = <a href="#be1a2f2cf3906ad7" class="i method">SplitUriToPathSegmentStrings</a>(<span class="r9 r">routeTemplate</span>);
+            <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r11 rd" class="r11 r">ex</span> = <a href="#9b01c2b618f4806a" class="i method">ValidateUriParts</a>(<span class="r10 r">uriParts</span>);
+            <b>if</b> (<span class="r11 r">ex</span> != <b>null</b>)
+            {
+                <b>throw</b> <span class="r11 r">ex</span>;
+            }
+ 
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSegment.cs.html#fb38f93d24588683" class="t t">PathSegment</a>&gt; <span id="r12 rd" class="r12 r">pathSegments</span> = <a href="#d859fc5aa8cd17f4" class="i method">SplitUriToPathSegments</a>(<span class="r10 r">uriParts</span>);
+ 
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e1f5696175c73b50" class="i method">Assert</a>(<span class="r10 r">uriParts</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == <span class="r12 r">pathSegments</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>, <span class="s">&quot;The number of string segments should be the same as the number of path segments&quot;</span>);
+ 
+            <b>return</b> <b>new</b> <a href="ParsedRoute.cs.html#6d32a1d5dcf37c17" class="t constructor">TParsedRoute</a>(<span class="r12 r">pathSegments</span>);
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2208:InstantiateArgumentExceptionsCorrectly&quot;</span>,
+            <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The exceptions are just constructed here, but they are thrown from a method that does have those parameter names.&quot;</span>)]
+        <b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt; <a id="6d7ec724d072c65c" href="../R/6d7ec724d072c65c.html" target="n" data-glyph="76,1" class="i method">ParseUriSegment</a>(<b>string</b> <span id="r13 rd" class="r13 r">segment</span>, <b>out</b> <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r14 rd" class="r14 r">exception</span>)
+        {
+            <b>int</b> <span id="r15 rd" class="r15 r">startIndex</span> = 0;
+ 
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt; <span id="r16 rd" class="r16 r">pathSubsegments</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt;();
+ 
+            <b>while</b> (<span class="r15 r">startIndex</span> &lt; <span class="r13 r">segment</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+            {
+                <b>int</b> <span id="r17 rd" class="r17 r">nextParameterStart</span> = <a href="#27699614ba511a6b" class="i method">IndexOfFirstOpenParameter</a>(<span class="r13 r">segment</span>, <span class="r15 r">startIndex</span>);
+                <b>if</b> (<span class="r17 r">nextParameterStart</span> == -1)
+                {
+                    <span class="c">// If there are no more parameters in the segment, capture the remainder as a literal and stop</span>
+                    <b>string</b> <span id="r18 rd" class="r18 r">lastLiteralPart</span> = <a href="#487364521a01ea44" class="i method">GetLiteral</a>(<span class="r13 r">segment</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r15 r">startIndex</span>));
+                    <b>if</b> (<span class="r18 r">lastLiteralPart</span> == <b>null</b>)
+                    {
+                        <span class="r14 r">exception</span> = <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#bfbcf9128c26efcd" class="i property">Route_MismatchedParameter</a>, <span class="r13 r">segment</span>);
+                        <b>return null</b>;
+                    }
+ 
+                    <b>if</b> (<span class="r18 r">lastLiteralPart</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+                    {
+                        <span class="r16 r">pathSubsegments</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="PathLiteralSubsegment.cs.html#5627551a1084b393" class="t constructor">PathLiteralSubsegment</a>(<span class="r18 r">lastLiteralPart</span>));
+                    }
+                    <b>break</b>;
+                }
+ 
+                <b>int</b> <span id="r19 rd" class="r19 r">nextParameterEnd</span> = <span class="r13 r">segment</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;}&#39;</span>, <span class="r17 r">nextParameterStart</span> + 1);
+                <b>if</b> (<span class="r19 r">nextParameterEnd</span> == -1)
+                {
+                    <span class="r14 r">exception</span> = <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#bfbcf9128c26efcd" class="i property">Route_MismatchedParameter</a>, <span class="r13 r">segment</span>);
+                    <b>return null</b>;
+                }
+ 
+                <b>string</b> <span id="r20 rd" class="r20 r">literalPart</span> = <a href="#487364521a01ea44" class="i method">GetLiteral</a>(<span class="r13 r">segment</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(<span class="r15 r">startIndex</span>, <span class="r17 r">nextParameterStart</span> - <span class="r15 r">startIndex</span>));
+                <b>if</b> (<span class="r20 r">literalPart</span> == <b>null</b>)
+                {
+                    <span class="r14 r">exception</span> = <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#bfbcf9128c26efcd" class="i property">Route_MismatchedParameter</a>, <span class="r13 r">segment</span>);
+                    <b>return null</b>;
+                }
+ 
+                <b>if</b> (<span class="r20 r">literalPart</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+                {
+                    <span class="r16 r">pathSubsegments</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="PathLiteralSubsegment.cs.html#5627551a1084b393" class="t constructor">PathLiteralSubsegment</a>(<span class="r20 r">literalPart</span>));
+                }
+ 
+                <b>string</b> <span id="r21 rd" class="r21 r">parameterName</span> = <span class="r13 r">segment</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(<span class="r17 r">nextParameterStart</span> + 1, <span class="r19 r">nextParameterEnd</span> - <span class="r17 r">nextParameterStart</span> - 1);
+                <span class="r16 r">pathSubsegments</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="PathParameterSubsegment.cs.html#a3a08512b7eab5ed" class="t constructor">PathParameterSubsegment</a>(<span class="r21 r">parameterName</span>));
+ 
+                <span class="r15 r">startIndex</span> = <span class="r19 r">nextParameterEnd</span> + 1;
+            }
+ 
+            <span class="r14 r">exception</span> = <b>null</b>;
+            <b>return</b> <span class="r16 r">pathSubsegments</span>;
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSegment.cs.html#fb38f93d24588683" class="t t">PathSegment</a>&gt; <a id="d859fc5aa8cd17f4" href="../R/d859fc5aa8cd17f4.html" target="n" data-glyph="76,1" class="i method">SplitUriToPathSegments</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r22 rd" class="r22 r">uriParts</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSegment.cs.html#fb38f93d24588683" class="t t">PathSegment</a>&gt; <span id="r23 rd" class="r23 r">pathSegments</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="PathSegment.cs.html#fb38f93d24588683" class="t t">PathSegment</a>&gt;();
+ 
+            <b>foreach</b> (<b>string</b> <span id="r24 rd" class="r24 r">pathSegment</span> <b>in</b> <span class="r22 r">uriParts</span>)
+            {
+                <b>bool</b> <span id="r25 rd" class="r25 r">isCurrentPartSeparator</span> = <a href="#e6f9f02734f296b8" class="i method">IsSeparator</a>(<span class="r24 r">pathSegment</span>);
+                <b>if</b> (<span class="r25 r">isCurrentPartSeparator</span>)
+                {
+                    <span class="r23 r">pathSegments</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="PathSeparatorSegment.cs.html#accb3fec43cf5d81" class="t constructor">PathSeparatorSegment</a>());
+                }
+                <b>else</b>
+                {
+                    <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r26 rd" class="r26 r">exception</span>;
+                    <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt; <span id="r27 rd" class="r27 r">subsegments</span> = <a href="#6d7ec724d072c65c" class="i method">ParseUriSegment</a>(<span class="r24 r">pathSegment</span>, <b>out</b> <span class="r26 r">exception</span>);
+                    <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e1f5696175c73b50" class="i method">Assert</a>(<span class="r26 r">exception</span> == <b>null</b>, <span class="s">&quot;This only gets called after the path has been validated, so there should never be an exception here&quot;</span>);
+                    <span class="r23 r">pathSegments</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="PathContentSegment.cs.html#9eb463fbd7e86e8f" class="t constructor">PathContentSegment</a>(<span class="r27 r">subsegments</span>));
+                }
+            }
+            <b>return</b> <span class="r23 r">pathSegments</span>;
+        }
+ 
+        <b>internal static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="be1a2f2cf3906ad7" href="../R/be1a2f2cf3906ad7.html" target="n" data-glyph="74,1" class="i method">SplitUriToPathSegmentStrings</a>(<b>string</b> <span id="r28 rd" class="r28 r">uri</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r29 rd" class="r29 r">parts</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r28 r">uri</span>))
+            {
+                <b>return</b> <span class="r29 r">parts</span>;
+            }
+ 
+            <b>int</b> <span id="r30 rd" class="r30 r">currentIndex</span> = 0;
+ 
+            <span class="c">// Split the incoming URI into individual parts</span>
+            <b>while</b> (<span class="r30 r">currentIndex</span> &lt; <span class="r28 r">uri</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+            {
+                <b>int</b> <span id="r31 rd" class="r31 r">indexOfNextSeparator</span> = <span class="r28 r">uri</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;/&#39;</span>, <span class="r30 r">currentIndex</span>);
+                <b>if</b> (<span class="r31 r">indexOfNextSeparator</span> == -1)
+                {
+                    <span class="c">// If there are no more separators, the rest of the string is the last part</span>
+                    <b>string</b> <span id="r32 rd" class="r32 r">finalPart</span> = <span class="r28 r">uri</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r30 r">currentIndex</span>);
+                    <b>if</b> (<span class="r32 r">finalPart</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+                    {
+                        <span class="r29 r">parts</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r32 r">finalPart</span>);
+                    }
+                    <b>break</b>;
+                }
+ 
+                <b>string</b> <span id="r33 rd" class="r33 r">nextPart</span> = <span class="r28 r">uri</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(<span class="r30 r">currentIndex</span>, <span class="r31 r">indexOfNextSeparator</span> - <span class="r30 r">currentIndex</span>);
+                <b>if</b> (<span class="r33 r">nextPart</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+                {
+                    <span class="r29 r">parts</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r33 r">nextPart</span>);
+                }
+ 
+                <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e1f5696175c73b50" class="i method">Assert</a>(<span class="r28 r">uri</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r31 r">indexOfNextSeparator</span>] == <span class="s">&#39;/&#39;</span>, <span class="s">&quot;The separator char itself should always be a &#39;/&#39;.&quot;</span>);
+                <span class="r29 r">parts</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="s">&quot;/&quot;</span>);
+                <span class="r30 r">currentIndex</span> = <span class="r31 r">indexOfNextSeparator</span> + 1;
+            }
+ 
+            <b>return</b> <span class="r29 r">parts</span>;
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1800:DoNotCastUnnecessarily&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;Not changing original algorithm&quot;</span>)]
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2208:InstantiateArgumentExceptionsCorrectly&quot;</span>,
+            <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The exceptions are just constructed here, but they are thrown from a method that does have those parameter names.&quot;</span>)]
+        <b>private static</b> <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <a id="9b01c2b618f4806a" href="../R/9b01c2b618f4806a.html" target="n" data-glyph="76,1" class="i method">ValidateUriParts</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r34 rd" class="r34 r">pathSegments</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e1f5696175c73b50" class="i method">Assert</a>(<span class="r34 r">pathSegments</span> != <b>null</b>, <span class="s">&quot;The value should always come from SplitUri(), and that function should never return null.&quot;</span>);
+ 
+            <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <span id="r35 rd" class="r35 r">usedParameterNames</span> = <b>new</b> <a href="@0@System.Core/A.html#4398571cacc18ed5" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;(<a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+            <b>bool</b>? <span id="r36 rd" class="r36 r">isPreviousPartSeparator</span> = <b>null</b>;
+ 
+            <b>bool</b> <span id="r37 rd" class="r37 r">foundCatchAllParameter</span> = <b>false</b>;
+ 
+            <b>foreach</b> (<b>string</b> <span id="r38 rd" class="r38 r">pathSegment</span> <b>in</b> <span class="r34 r">pathSegments</span>)
+            {
+                <b>if</b> (<span class="r37 r">foundCatchAllParameter</span>)
+                {
+                    <span class="c">// If we ever start an iteration of the loop and we&#39;ve already found a</span>
+                    <span class="c">// catchall parameter then we have an invalid URI format.</span>
+                    <b>return</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#73de36e39bfcd8e3" class="i property">Route_CatchAllMustBeLast</a>, <span class="s">&quot;routeTemplate&quot;</span>);
+                }
+ 
+                <b>bool</b> <span id="r39 rd" class="r39 r">isCurrentPartSeparator</span>;
+                <b>if</b> (<span class="r36 r">isPreviousPartSeparator</span> == <b>null</b>)
+                {
+                    <span class="c">// Prime the loop with the first value</span>
+                    <span class="r36 r">isPreviousPartSeparator</span> = <a href="#e6f9f02734f296b8" class="i method">IsSeparator</a>(<span class="r38 r">pathSegment</span>);
+                    <span class="r39 r">isCurrentPartSeparator</span> = <span class="r36 r">isPreviousPartSeparator</span>.<a href="@0@mscorlib/A.html#7b38d1fa76071c95" class="i property">Value</a>;
+                }
+                <b>else</b>
+                {
+                    <span class="r39 r">isCurrentPartSeparator</span> = <a href="#e6f9f02734f296b8" class="i method">IsSeparator</a>(<span class="r38 r">pathSegment</span>);
+ 
+                    <span class="c">// If both the previous part and the current part are separators, it&#39;s invalid</span>
+                    <b>if</b> (<span class="r39 r">isCurrentPartSeparator</span> &amp;&amp; <span class="r36 r">isPreviousPartSeparator</span>.<a href="@0@mscorlib/A.html#7b38d1fa76071c95" class="i property">Value</a>)
+                    {
+                        <b>return</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#d580f006b1f38e0b" class="i property">Route_CannotHaveConsecutiveSeparators</a>);
+                    }
+ 
+                    <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e1f5696175c73b50" class="i method">Assert</a>(<span class="r39 r">isCurrentPartSeparator</span> != <span class="r36 r">isPreviousPartSeparator</span>.<a href="@0@mscorlib/A.html#7b38d1fa76071c95" class="i property">Value</a>, <span class="s">&quot;This assert should only happen if both the current and previous parts are non-separators. This should never happen because consecutive non-separators are always parsed as a single part.&quot;</span>);
+                    <span class="r36 r">isPreviousPartSeparator</span> = <span class="r39 r">isCurrentPartSeparator</span>;
+                }
+ 
+                <span class="c">// If it&#39;s not a separator, parse the segment for parameters and validate it</span>
+                <b>if</b> (!<span class="r39 r">isCurrentPartSeparator</span>)
+                {
+                    <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r40 rd" class="r40 r">exception</span>;
+                    <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt; <span id="r41 rd" class="r41 r">subsegments</span> = <a href="#6d7ec724d072c65c" class="i method">ParseUriSegment</a>(<span class="r38 r">pathSegment</span>, <b>out</b> <span class="r40 r">exception</span>);
+                    <b>if</b> (<span class="r40 r">exception</span> != <b>null</b>)
+                    {
+                        <b>return</b> <span class="r40 r">exception</span>;
+                    }
+ 
+                    <span class="r40 r">exception</span> = <a href="#b7c39ce21c5c0447" class="i method">ValidateUriSegment</a>(<span class="r41 r">subsegments</span>, <span class="r35 r">usedParameterNames</span>);
+                    <b>if</b> (<span class="r40 r">exception</span> != <b>null</b>)
+                    {
+                        <b>return</b> <span class="r40 r">exception</span>;
+                    }
+ 
+                    <span class="r37 r">foundCatchAllParameter</span> = <span class="r41 r">subsegments</span>.<a href="@0@System.Core/A.html#6a1af7c3d17845e3" class="i method">Any</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt;(<span id="r42 rd" class="r42 r">seg</span> =&gt; (<span class="r42 r">seg</span> <b>is</b> <a href="PathParameterSubsegment.cs.html#d0364375f370473f" class="t t">PathParameterSubsegment</a>) &amp;&amp; ((<a href="PathParameterSubsegment.cs.html#d0364375f370473f" class="t t">PathParameterSubsegment</a>)<span class="r42 r">seg</span>).<a href="PathParameterSubsegment.cs.html#dde26cf1300848a3" class="i property">IsCatchAll</a>);
+                }
+            }
+            <b>return null</b>;
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2208:InstantiateArgumentExceptionsCorrectly&quot;</span>,
+            <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The exceptions are just constructed here, but they are thrown from a method that does have those parameter names.&quot;</span>)]
+        <b>private static</b> <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <a id="b7c39ce21c5c0447" href="../R/b7c39ce21c5c0447.html" target="n" data-glyph="76,1" class="i method">ValidateUriSegment</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a>&gt; <span id="r43 rd" class="r43 r">pathSubsegments</span>, <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <span id="r44 rd" class="r44 r">usedParameterNames</span>)
+        {
+            <b>bool</b> <span id="r45 rd" class="r45 r">segmentContainsCatchAll</span> = <b>false</b>;
+ 
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r46 rd" class="r46 r">previousSegmentType</span> = <b>null</b>;
+ 
+            <b>foreach</b> (<a href="PathSubsegment.cs.html#e5668f2e15b9dab7" class="t t">PathSubsegment</a> <span id="r47 rd" class="r47 r">subsegment</span> <b>in</b> <span class="r43 r">pathSubsegments</span>)
+            {
+                <b>if</b> (<span class="r46 r">previousSegmentType</span> != <b>null</b>)
+                {
+                    <b>if</b> (<span class="r46 r">previousSegmentType</span> == <span class="r47 r">subsegment</span>.<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>())
+                    {
+                        <b>return</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#c7d7d7c31d14a0b1" class="i property">Route_CannotHaveConsecutiveParameters</a>);
+                    }
+                }
+                <span class="r46 r">previousSegmentType</span> = <span class="r47 r">subsegment</span>.<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>();
+ 
+                <a href="PathLiteralSubsegment.cs.html#75c4dd30122b0a72" class="t t">PathLiteralSubsegment</a> <span id="r48 rd" class="r48 r">literalSubsegment</span> = <span class="r47 r">subsegment</span> <b>as</b> <a href="PathLiteralSubsegment.cs.html#75c4dd30122b0a72" class="t t">PathLiteralSubsegment</a>;
+                <b>if</b> (<span class="r48 r">literalSubsegment</span> != <b>null</b>)
+                {
+                    <span class="c">// Nothing to validate for literals - everything is valid</span>
+                }
+                <b>else</b>
+                {
+                    <a href="PathParameterSubsegment.cs.html#d0364375f370473f" class="t t">PathParameterSubsegment</a> <span id="r49 rd" class="r49 r">parameterSubsegment</span> = <span class="r47 r">subsegment</span> <b>as</b> <a href="PathParameterSubsegment.cs.html#d0364375f370473f" class="t t">PathParameterSubsegment</a>;
+                    <b>if</b> (<span class="r49 r">parameterSubsegment</span> != <b>null</b>)
+                    {
+                        <b>string</b> <span id="r50 rd" class="r50 r">parameterName</span> = <span class="r49 r">parameterSubsegment</span>.<a href="PathParameterSubsegment.cs.html#de05fa77af7b6984" class="i property">ParameterName</a>;
+ 
+                        <b>if</b> (<span class="r49 r">parameterSubsegment</span>.<a href="PathParameterSubsegment.cs.html#dde26cf1300848a3" class="i property">IsCatchAll</a>)
+                        {
+                            <span class="r45 r">segmentContainsCatchAll</span> = <b>true</b>;
+                        }
+ 
+                        <span class="c">// Check for valid characters in the parameter name</span>
+                        <b>if</b> (!<a href="#169b66edbfb7d7c4" class="i method">IsValidParameterName</a>(<span class="r50 r">parameterName</span>))
+                        {
+                            <b>return</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#e43e07244567e4fc" class="i property">Route_InvalidParameterName</a>, <span class="r50 r">parameterName</span>);
+                        }
+ 
+                        <b>if</b> (<span class="r44 r">usedParameterNames</span>.<a href="@0@System.Core/A.html#06d905a0ac76e4f5" class="i method">Contains</a>(<span class="r50 r">parameterName</span>))
+                        {
+                            <b>return</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#1c91d3673bc95017" class="i property">Route_RepeatedParameter</a>, <span class="r50 r">parameterName</span>);
+                        }
+                        <b>else</b>
+                        {
+                            <span class="r44 r">usedParameterNames</span>.<a href="@0@System.Core/A.html#43a2b651926474a7" class="i method">Add</a>(<span class="r50 r">parameterName</span>);
+                        }
+                    }
+                    <b>else</b>
+                    {
+                        <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e1f5696175c73b50" class="i method">Assert</a>(<b>false</b>, <span class="s">&quot;Invalid path subsegment type&quot;</span>);
+                    }
+                }
+            }
+ 
+            <b>if</b> (<span class="r45 r">segmentContainsCatchAll</span> &amp;&amp; (<span class="r43 r">pathSubsegments</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> != 1))
+            {
+                <b>return</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#d08d30898dd0576f" class="i method">Argument</a>(<span class="s">&quot;routeTemplate&quot;</span>, <a href="../Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">ErrorResources</a>.<a href="../Properties/MvcResources.Designer.cs.html#b2a0c94e4b1edbe2" class="i property">Route_CannotHaveCatchAllInMultiSegment</a>);
+            }
+ 
+            <b>return null</b>;
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

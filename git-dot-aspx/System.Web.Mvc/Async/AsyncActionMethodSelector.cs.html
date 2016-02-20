@@ -1,0 +1,148 @@
+﻿<!DOCTYPE html>
+<html><head><title>AsyncActionMethodSelector.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(139);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/Async/AsyncActionMethodSelector.cs" target="_top">Async\AsyncActionMethodSelector.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>.<span class="i n">Tasks</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Async</span>
+{
+    <b>internal sealed class</b> <a id="925cd6424d8f4f06" href="../R/925cd6424d8f4f06.html" target="n" data-glyph="2,0" class="t t">AsyncActionMethodSelector</a> : <a href="../ActionMethodSelectorBase.cs.html#798280abf38d4d83" class="t t">ActionMethodSelectorBase</a>
+    {
+        <span class="c">// This flag controls async action binding for backwards compat since Controller now supports async. </span>
+        <span class="c">// Set to true for classes that derive from AsyncController. In this case, FooAsync/FooCompleted is </span>
+        <span class="c">// bound as a single async action pair &quot;Foo&quot;. If false, they&#39;re bound as 2 separate sync actions. </span>
+        <span class="c">// Practically, if this is false, then IsAsyncSuffixedMethod and IsCompeltedSuffixedMethod return false.</span>
+        <b>private readonly bool</b> <a id="3795e86b7c7764b2" href="../R/3795e86b7c7764b2.html" target="n" data-glyph="46,1" class="i field">_allowLegacyAsyncActions</a>;
+ 
+        <b>public</b> <a id="a94f4ce406fbd91d" href="../R/a94f4ce406fbd91d.html" target="n" data-glyph="72,1" class="i constructor">AsyncActionMethodSelector</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r0 rd" class="r0 r">controllerType</span>, <b>bool</b> <span id="r1 rd" class="r1 r">allowLegacyAsyncActions</span> = <b>true</b>)
+        {
+            <a href="#3795e86b7c7764b2" class="i field">_allowLegacyAsyncActions</a> = <span class="r1 r">allowLegacyAsyncActions</span>;
+            <a href="../ActionMethodSelectorBase.cs.html#76cbdc258f793f3b" class="i method">Initialize</a>(<span class="r0 r">controllerType</span>);
+        }
+        
+        <b>public</b> <a href="ActionDescriptorCreator.cs.html#569cf5e1d2880517" class="t t">ActionDescriptorCreator</a> <a id="a419b4936dbc06f2" href="../R/a419b4936dbc06f2.html" target="n" data-glyph="72,1" class="i method">FindAction</a>(<a href="../ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r2 rd" class="r2 r">controllerContext</span>, <b>string</b> <span id="r3 rd" class="r3 r">actionName</span>)
+        {
+            <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r4 rd" class="r4 r">method</span> = <a href="../ActionMethodSelectorBase.cs.html#3a485a38ebe2232a" class="i method">FindActionMethod</a>(<span class="r2 r">controllerContext</span>, <span class="r3 r">actionName</span>);
+ 
+            <b>if</b> (<span class="r4 r">method</span> == <b>null</b>)
+            {
+                <b>return null</b>;
+            }
+ 
+            <b>return</b> <a href="#7521e3a664d84431" class="i method">GetActionDescriptorDelegate</a>(<span class="r4 r">method</span>);
+        }
+ 
+        <b>internal bool</b> <a id="902a4332a8e564a0" href="../R/../../0000000000.html" target="n" data-glyph="104,1" class="i property">AllowLegacyAsyncActions</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#3795e86b7c7764b2" class="i field">_allowLegacyAsyncActions</a>; }
+        }
+ 
+        <span class="c">// This method and GetMethodInfo need to stay in sync, we need to be able to</span>
+        <span class="c">// get a method info from each type of action descriptor we create.</span>
+        <b>internal</b> <a href="ActionDescriptorCreator.cs.html#569cf5e1d2880517" class="t t">ActionDescriptorCreator</a> <a id="7521e3a664d84431" href="../R/7521e3a664d84431.html" target="n" data-glyph="74,1" class="i method">GetActionDescriptorDelegate</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r5 rd" class="r5 r">entryMethod</span>)
+        {
+            <span class="c">// Does the action return a Task?</span>
+            <b>if</b> (<span class="r5 r">entryMethod</span>.<a href="@0@mscorlib/A.html#5be6c92e98bc4044" class="i property">ReturnType</a> != <b>null</b> &amp;&amp; <b>typeof</b>(<a href="@0@mscorlib/A.html#045a746eb48cbaa9" class="t t">Task</a>).<a href="@0@mscorlib/A.html#ba0cffea035fe210" class="i method">IsAssignableFrom</a>(<span class="r5 r">entryMethod</span>.<a href="@0@mscorlib/A.html#5be6c92e98bc4044" class="i property">ReturnType</a>))
+            {
+                <b>return</b> (<span id="r6 rd" class="r6 r">actionName</span>, <span id="r7 rd" class="r7 r">controllerDescriptor</span>) =&gt; <b>new</b> <a href="TaskAsyncActionDescriptor.cs.html#a5bf94af91e3e9b5" class="t constructor">TaskAsyncActionDescriptor</a>(<span class="r5 r">entryMethod</span>, <span class="r6 r">actionName</span>, <span class="r7 r">controllerDescriptor</span>);
+            }
+ 
+            <span class="c">// Is this the FooAsync() / FooCompleted() pattern?</span>
+            <b>if</b> (<a href="#224bae4c87692ec9" class="i method">IsAsyncSuffixedMethod</a>(<span class="r5 r">entryMethod</span>))
+            {
+                <b>string</b> <span id="r8 rd" class="r8 r">completionMethodName</span> = <span class="r5 r">entryMethod</span>.<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(0, <span class="r5 r">entryMethod</span>.<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - <span class="s">&quot;Async&quot;</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>) + <span class="s">&quot;Completed&quot;</span>;
+                <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r9 rd" class="r9 r">completionMethod</span> = <a href="#acad363bf182991f" class="i method">GetMethodByName</a>(<span class="r8 r">completionMethodName</span>);
+                <b>if</b> (<span class="r9 r">completionMethod</span> != <b>null</b>)
+                {
+                    <b>return</b> (<span id="r10 rd" class="r10 r">actionName</span>, <span id="r11 rd" class="r11 r">controllerDescriptor</span>) =&gt; <b>new</b> <a href="ReflectedAsyncActionDescriptor.cs.html#878c3960297c7aae" class="t constructor">ReflectedAsyncActionDescriptor</a>(<span class="r5 r">entryMethod</span>, <span class="r9 r">completionMethod</span>, <span class="r10 r">actionName</span>, <span class="r11 r">controllerDescriptor</span>);
+                }
+                <b>else</b>
+                {
+                    <b>throw</b> <a href="../Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="../Error.cs.html#4d4ccb92fcbc5134" class="i method">AsyncActionMethodSelector_CouldNotFindMethod</a>(<span class="r8 r">completionMethodName</span>, <a href="../ActionMethodSelectorBase.cs.html#225d83672b122928" class="i property">ControllerType</a>);
+                }
+            }
+ 
+            <span class="c">// Fallback to synchronous method</span>
+            <b>return</b> (<span id="r12 rd" class="r12 r">actionName</span>, <span id="r13 rd" class="r13 r">controllerDescriptor</span>) =&gt; <b>new</b> <a href="../ReflectedActionDescriptor.cs.html#446c2d01e6691759" class="t constructor">ReflectedActionDescriptor</a>(<span class="r5 r">entryMethod</span>, <span class="r12 r">actionName</span>, <span class="r13 r">controllerDescriptor</span>);
+        }
+ 
+        <b>protected override bool</b> <a id="dd34e2d7b45ebbf7" href="../R/dd34e2d7b45ebbf7.html" target="n" data-glyph="75,1" class="i method">IsValidActionMethod</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r14 rd" class="r14 r">methodInfo</span>)
+        {
+            <b>return</b> <a href="#0e21aea5a1aeff04" class="i method">IsValidActionMethod</a>(<span class="r14 r">methodInfo</span>, <b>true</b> <span class="c">/* stripInfrastructureMethods */</span>);
+        }
+ 
+        <b>private bool</b> <a id="0e21aea5a1aeff04" href="../R/0e21aea5a1aeff04.html" target="n" data-glyph="76,1" class="i method">IsValidActionMethod</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r15 rd" class="r15 r">methodInfo</span>, <b>bool</b> <span id="r16 rd" class="r16 r">stripInfrastructureMethods</span>)
+        {
+            <b>if</b> (<span class="r15 r">methodInfo</span>.<a href="@0@mscorlib/A.html#4216dfda208314bd" class="i property">IsSpecialName</a>)
+            {
+                <span class="c">// not a normal method, e.g. a constructor or an event</span>
+                <b>return false</b>;
+            }
+ 
+            <b>if</b> (<span class="r15 r">methodInfo</span>.<a href="@0@mscorlib/A.html#9a2ee9bb16ffb64b" class="i method">GetBaseDefinition</a>().<a href="@0@mscorlib/A.html#3eb1391de297c1a8" class="i property">DeclaringType</a>.<a href="@0@mscorlib/A.html#ba0cffea035fe210" class="i method">IsAssignableFrom</a>(<b>typeof</b>(<a href="../AsyncController.cs.html#92b70b4c74be5d78" class="t t">AsyncController</a>)))
+            {
+                <span class="c">// is a method on Object, ControllerBase, Controller, or AsyncController</span>
+                <b>return false</b>;
+            }
+ 
+            <b>if</b> (<span class="r16 r">stripInfrastructureMethods</span>)
+            {
+                <b>if</b> (<a href="#91f9d7346b035c9a" class="i method">IsCompletedSuffixedMethod</a>(<span class="r15 r">methodInfo</span>))
+                {
+                    <span class="c">// do not match FooCompleted() methods, as these are infrastructure methods</span>
+                    <b>return false</b>;
+                }
+            }
+ 
+            <b>return true</b>;
+        }
+ 
+        <b>protected override string</b> <a id="531e6a663451e136" href="../R/531e6a663451e136.html" target="n" data-glyph="75,1" class="i method">GetCanonicalMethodName</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r17 rd" class="r17 r">methodInfo</span>)
+        {
+            <b>string</b> <span id="r18 rd" class="r18 r">methodName</span> = <span class="r17 r">methodInfo</span>.<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a>;
+            <b>return</b> (<a href="#224bae4c87692ec9" class="i method">IsAsyncSuffixedMethod</a>(<span class="r17 r">methodInfo</span>))
+                       ? <span class="r18 r">methodName</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(0, <span class="r18 r">methodName</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - <span class="s">&quot;Async&quot;</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+                       : <span class="r18 r">methodName</span>;
+        }
+ 
+        <b>private bool</b> <a id="224bae4c87692ec9" href="../R/224bae4c87692ec9.html" target="n" data-glyph="76,1" class="i method">IsAsyncSuffixedMethod</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r19 rd" class="r19 r">methodInfo</span>)
+        {
+            <b>return</b> <a href="#3795e86b7c7764b2" class="i field">_allowLegacyAsyncActions</a> &amp;&amp; <span class="r19 r">methodInfo</span>.<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a>.<a href="@0@mscorlib/A.html#41a31e4feec3ef41" class="i method">EndsWith</a>(<span class="s">&quot;Async&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>);
+        }
+ 
+        <b>private bool</b> <a id="91f9d7346b035c9a" href="../R/91f9d7346b035c9a.html" target="n" data-glyph="76,1" class="i method">IsCompletedSuffixedMethod</a>(<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r20 rd" class="r20 r">methodInfo</span>)
+        {
+            <b>return</b> <a href="#3795e86b7c7764b2" class="i field">_allowLegacyAsyncActions</a> &amp;&amp; <span class="r20 r">methodInfo</span>.<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a>.<a href="@0@mscorlib/A.html#41a31e4feec3ef41" class="i method">EndsWith</a>(<span class="s">&quot;Completed&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>);
+        }
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <a id="acad363bf182991f" href="../R/acad363bf182991f.html" target="n" data-glyph="76,1" class="i method">GetMethodByName</a>(<b>string</b> <span id="r21 rd" class="r21 r">methodName</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a>&gt; <span id="r22 rd" class="r22 r">methods</span> = (<b>from</b> <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span class="i">methodInfo</span> <b>in</b> <a href="../ActionMethodSelectorBase.cs.html#225d83672b122928" class="i property">ControllerType</a>.<a href="@0@mscorlib/A.html#38babefe11c7a0aa" class="i method">GetMember</a>(<span class="r21 r">methodName</span>, <a href="@0@mscorlib/A.html#38bae76198657605" class="t t">MemberTypes</a>.<a href="@0@mscorlib/A.html#daac8b3e2026e91d" class="i field">Method</a>, <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#54a14f747b06c614" class="i field">Instance</a> | <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#ef2ef39bdfa059df" class="i field">Public</a> | <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#f9c44802799330f2" class="i field">InvokeMethod</a> | <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#67be9642c6aa5b98" class="i field">IgnoreCase</a>)
+                                        <b>where</b> <a href="#0e21aea5a1aeff04" class="i method">IsValidActionMethod</a>(<span class="i">methodInfo</span>, <b>false</b> <span class="c">/* stripInfrastructureMethods */</span>)
+                                        <b>select</b> <span class="i">methodInfo</span>).<a href="@0@System.Core/A.html#e276d6892241255b" class="i method">ToList</a>();
+ 
+            <b>switch</b> (<span class="r22 r">methods</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+            {
+                <b>case</b> 0:
+                    <b>return null</b>;
+ 
+                <b>case</b> 1:
+                    <b>return</b> <span class="r22 r">methods</span>[0];
+ 
+                <b>default</b>:
+                    <b>throw</b> <a href="../ActionMethodSelectorBase.cs.html#3e3a115a425fda0b" class="i method">CreateAmbiguousMethodMatchException</a>(<span class="r22 r">methods</span>, <span class="r21 r">methodName</span>);
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>
