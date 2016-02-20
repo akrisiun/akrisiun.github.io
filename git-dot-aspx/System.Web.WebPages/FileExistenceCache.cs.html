@@ -1,0 +1,98 @@
+﻿<!DOCTYPE html>
+<html><head><title>FileExistenceCache.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(89);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.WebPages/FileExistenceCache.cs" target="_top">FileExistenceCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.WebPages" target="_top">..\Mvc\src\System.Web.WebPages\System.Web.WebPages.csproj</a> (System.Web.WebPages)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Concurrent</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Hosting</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">WebPages</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> This class caches the result of VirtualPathProvider.FileExists for a short</span>
+    <span class="c">///</span><span class="c"> period of time, and recomputes it if necessary.</span>
+    <span class="c">///</span><span class="c"> </span>
+    <span class="c">///</span><span class="c"> The default VPP MapPathBasedVirtualPathProvider caches the result of</span>
+    <span class="c">///</span><span class="c"> the FileExists call with the appropriate dependencies, so it is less</span>
+    <span class="c">///</span><span class="c"> expensive on subsequent calls, but it still needs to do MapPath which can </span>
+    <span class="c">///</span><span class="c"> take quite some time.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>internal class</b> <a id="a34938e04939d8da" href="R/a34938e04939d8da.html" target="n" data-glyph="2,0" class="t t">FileExistenceCache</a>
+    {
+        <b>private const int</b> <a id="db7b9d0136251041" href="R/db7b9d0136251041.html" target="n" data-glyph="10,1" class="i field">TicksPerMillisecond</a> = 10000;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a>&gt; <a id="40658d74a8d8e99c" href="R/40658d74a8d8e99c.html" target="n" data-glyph="46,1" class="i field">_virtualPathProviderFunc</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>string</b>, <b>bool</b>&gt; <a id="d899b0bbc14325f5" href="R/d899b0bbc14325f5.html" target="n" data-glyph="46,1" class="i field">_virtualPathFileExists</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#2e5ef5704344a309" class="t t">ConcurrentDictionary</a>&lt;<b>string</b>, <b>bool</b>&gt; <a id="3dfda988fce0bf82" href="R/3dfda988fce0bf82.html" target="n" data-glyph="46,1" class="i field">_cache</a>;
+        <b>private long</b> <a id="5b0122f2c7dd8dae" href="R/5b0122f2c7dd8dae.html" target="n" data-glyph="46,1" class="i field">_creationTick</a>;
+        <b>private int</b> <a id="cd60bb0f2bfab04d" href="R/cd60bb0f2bfab04d.html" target="n" data-glyph="46,1" class="i field">_ticksBeforeReset</a>;
+ 
+        <span class="c">// Overload used mainly for testing</span>
+        <b>public</b> <a id="d696e566d5cd9952" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">FileExistenceCache</a>(<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a> <span id="r0 rd" class="r0 r">virtualPathProvider</span>, <b>int</b> <span id="r1 rd" class="r1 r">milliSecondsBeforeReset</span> = 1000)
+            : <a href="#78ab74cda176ec37" class="k">this</a>(() =&gt; <span class="r0 r">virtualPathProvider</span>, <span class="r1 r">milliSecondsBeforeReset</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r0 r">virtualPathProvider</span> != <b>null</b>);
+        }
+ 
+        <b>public</b> <a id="78ab74cda176ec37" href="R/78ab74cda176ec37.html" target="n" data-glyph="72,1" class="i constructor">FileExistenceCache</a>(<a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a>&gt; <span id="r2 rd" class="r2 r">virtualPathProviderFunc</span>, <b>int</b> <span id="r3 rd" class="r3 r">milliSecondsBeforeReset</span> = 1000)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r2 r">virtualPathProviderFunc</span> != <b>null</b>);
+ 
+            <a href="#40658d74a8d8e99c" class="i field">_virtualPathProviderFunc</a> = <span class="r2 r">virtualPathProviderFunc</span>;
+            <a href="#d899b0bbc14325f5" class="i field">_virtualPathFileExists</a> = <span id="r4 rd" class="r4 r">path</span> =&gt; <a href="#40658d74a8d8e99c" class="i field">_virtualPathProviderFunc</a>().<a href="@0@System.Web/A.html#acd31758c7857a62" class="i method">FileExists</a>(<span class="r4 r">path</span>);
+            <a href="#cd60bb0f2bfab04d" class="i field">_ticksBeforeReset</a> = <span class="r3 r">milliSecondsBeforeReset</span> * <a href="#db7b9d0136251041" class="i field">TicksPerMillisecond</a>;
+            <a href="#37d1d7b17ce11193" class="i method">Reset</a>();
+        }
+ 
+        <span class="c">// Use the VPP returned by the HostingEnvironment unless a custom vpp is passed in (mainly for testing purposes)</span>
+        <b>public</b> <a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a> <a id="6aaf09202b14d759" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">VirtualPathProvider</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#40658d74a8d8e99c" class="i field">_virtualPathProviderFunc</a>(); }
+        }
+ 
+        <b>public int</b> <a id="a3553ce857fbc172" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">MilliSecondsBeforeReset</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#cd60bb0f2bfab04d" class="i field">_ticksBeforeReset</a> / <a href="#db7b9d0136251041" class="i field">TicksPerMillisecond</a>; }
+            <b>internal set</b> { <a href="#cd60bb0f2bfab04d" class="i field">_ticksBeforeReset</a> = <b>value</b> * <a href="#db7b9d0136251041" class="i field">TicksPerMillisecond</a>; }
+        }
+ 
+        <b>internal</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>bool</b>&gt; <a id="965a1f82a82235f5" href="R/../../0000000000.html" target="n" data-glyph="104,1" class="i property">CacheInternal</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#3dfda988fce0bf82" class="i field">_cache</a>; }
+        }
+ 
+        <b>public bool</b> <a id="df997fc74c966fd8" href="R/df997fc74c966fd8.html" target="n" data-glyph="102,1" class="i property">TimeExceeded</a>
+        {
+            <b>get</b> { <b>return</b> (<a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#b0d5e4c9a8d4ddac" class="i property">UtcNow</a>.<a href="@0@mscorlib/A.html#92f52fcc6830b73e" class="i property">Ticks</a> - <a href="@0@mscorlib/A.html#8792520ddc6dadcb" class="t t">Interlocked</a>.<a href="@0@mscorlib/A.html#22e58906412927dc" class="i method">Read</a>(<b>ref</b> <a href="#5b0122f2c7dd8dae" class="i field">_creationTick</a>)) &gt; <a href="#cd60bb0f2bfab04d" class="i field">_ticksBeforeReset</a>; }
+        }
+ 
+        <b>public void</b> <a id="37d1d7b17ce11193" href="R/37d1d7b17ce11193.html" target="n" data-glyph="72,1" class="i method">Reset</a>()
+        {
+            <a href="#3dfda988fce0bf82" class="i field">_cache</a> = <b>new</b> <a href="@0@mscorlib/A.html#6dabefc533af0715" class="t constructor">ConcurrentDictionary</a>&lt;<b>string</b>, <b>bool</b>&gt;(<a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+ 
+            <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <span id="r5 rd" class="r5 r">now</span> = <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#b0d5e4c9a8d4ddac" class="i property">UtcNow</a>;
+            <b>long</b> <span id="r6 rd" class="r6 r">tick</span> = <span class="r5 r">now</span>.<a href="@0@mscorlib/A.html#92f52fcc6830b73e" class="i property">Ticks</a>;
+ 
+            <a href="@0@mscorlib/A.html#8792520ddc6dadcb" class="t t">Interlocked</a>.<a href="@0@mscorlib/A.html#b4eb06f8a279b2f2" class="i method">Exchange</a>(<b>ref</b> <a href="#5b0122f2c7dd8dae" class="i field">_creationTick</a>, <span class="r6 r">tick</span>);
+        }
+ 
+        <b>public bool</b> <a id="2e026d778adc3efb" href="R/2e026d778adc3efb.html" target="n" data-glyph="72,1" class="i method">FileExists</a>(<b>string</b> <span id="r7 rd" class="r7 r">virtualPath</span>)
+        {
+            <b>if</b> (<a href="#df997fc74c966fd8" class="i property">TimeExceeded</a>)
+            {
+                <a href="#37d1d7b17ce11193" class="i method">Reset</a>();
+            }
+ 
+            <b>return</b> <a href="#3dfda988fce0bf82" class="i field">_cache</a>.<a href="@0@mscorlib/A.html#2f8bcdfbad10304f" class="i method">GetOrAdd</a>(<span class="r7 r">virtualPath</span>, <a href="#d899b0bbc14325f5" class="i field">_virtualPathFileExists</a>);
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,244 @@
+﻿<!DOCTYPE html>
+<html><head><title>StringBlockWriter.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(235);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.WebPages/Utils/StringBlockWriter.cs" target="_top">Utils\StringBlockWriter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.WebPages" target="_top">..\Mvc\src\System.Web.WebPages\System.Web.WebPages.csproj</a> (System.Web.WebPages)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">WebPages</span>
+{
+    <b>public sealed class</b> <a id="10bd690fccc1b3ed" href="../R/10bd690fccc1b3ed.html" target="n" data-glyph="0,0" class="t t">StringBlockWriter</a> : <a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a>
+    {
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a> <a id="fe8e12a7a3eb516a" href="../R/fe8e12a7a3eb516a.html" target="n" data-glyph="46,1" class="i field">_encoding</a> = <b>new</b> <a href="@0@mscorlib/A.html#c939043add0ade30" class="t constructor">UnicodeEncoding</a>(<b>false</b>, <b>false</b>);
+ 
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#42021806b924c5cd" class="t t">ThreadLocal</a>&lt;<a href="@0@System/A.html#df5a6c7b6b60da4f" class="t t">LinkedList</a>&lt;<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a>&gt;&gt; <a id="24ec3bf56f063002" href="../R/24ec3bf56f063002.html" target="n" data-glyph="46,1" class="i field">_charBufferCache</a> = <b>new</b> <a href="@0@mscorlib/A.html#d52c28f16ff376f3" class="t constructor">ThreadLocal</a>&lt;<a href="@0@System/A.html#df5a6c7b6b60da4f" class="t t">LinkedList</a>&lt;<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a>&gt;&gt;(() =&gt; <b>new</b> <a href="@0@System/A.html#c882be11e9fb76b2" class="t constructor">LinkedList</a>&lt;<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a>&gt;());
+ 
+        <b>private const int</b> <a id="72270d5a45ddc698" href="../R/72270d5a45ddc698.html" target="n" data-glyph="10,1" class="i field">ConcatBufferLimit</a> = 10000;
+ 
+        <b>private const int</b> <a id="66091edab52806a0" href="../R/66091edab52806a0.html" target="n" data-glyph="10,1" class="i field">PerThreadBufferCacheLimit</a> = 32;
+ 
+        <b>private const int</b> <a id="0d5e360d179d74a2" href="../R/0d5e360d179d74a2.html" target="n" data-glyph="10,1" class="i field">CharBufferThreshold</a> = 31;
+ 
+        <b>private const int</b> <a id="4742fc61727708b3" href="../R/4742fc61727708b3.html" target="n" data-glyph="10,1" class="i field">InitialPartsCapacity</a> = 15;
+ 
+        <b>public override</b> <a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a> <a id="b8e69313aa279d5c" href="../R/b8e69313aa279d5c.html" target="n" data-glyph="102,1" class="i property">Encoding</a>
+        {
+            <b>get</b>
+            {
+                <b>return</b> <a href="#fe8e12a7a3eb516a" class="i field">_encoding</a>;
+            }
+        }
+ 
+        <b>public int</b> <a id="c0a91179c12cb73e" href="../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">Length</a>
+        {
+            <b>get</b>
+            {
+                <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+                <b>return</b> <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>;
+            }
+ 
+            <b>set</b>
+            {
+                <a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r0 rd" class="r0 r">diff</span> = <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> - <b>value</b>;
+                <b>if</b> (<span class="r0 r">diff</span> != 0)
+                {
+                    <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+                    <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#1f0a5b4e108afc08" class="i method">RemoveRange</a>(<b>value</b>, <span class="r0 r">diff</span>);
+                }
+            }
+        }
+ 
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>object</b>&gt; <a id="0f66ef580de361cd" href="../R/0f66ef580de361cd.html" target="n" data-glyph="46,1" class="i field">_parts</a> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<b>object</b>&gt;(<a href="#4742fc61727708b3" class="i field">InitialPartsCapacity</a>);
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <a id="69a6e5ec87f5f946" href="../R/69a6e5ec87f5f946.html" target="n" data-glyph="46,1" class="i field">_charBuffer</a>;
+ 
+        <b>private void</b> <a id="cb3694b4316e9ee5" href="../R/cb3694b4316e9ee5.html" target="n" data-glyph="76,1" class="i method">Write</a>(<a href="#10bd690fccc1b3ed" class="t t">StringBlockWriter</a> <span id="r1 rd" class="r1 r">writer</span>)
+        {
+            <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+            <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r1 r">writer</span>);
+        }
+ 
+        <b>public override void</b> <a id="4b4048378a3123b8" href="../R/4b4048378a3123b8.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>string</b> <span id="r2 rd" class="r2 r">value</span>)
+        {
+            <b>if</b> (<span class="r2 r">value</span> == <b>null</b>)
+            {
+                <b>return</b>;
+            }
+            <a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r3 rd" class="r3 r">length</span> = <span class="r2 r">value</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>;
+            <b>if</b> (<span class="r3 r">length</span> == 0)
+            {
+                <b>return</b>;
+            }
+            <b>if</b> (<span class="r3 r">length</span> &lt;= <a href="#0d5e360d179d74a2" class="i field">CharBufferThreshold</a>)
+            {
+                <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r4 rd" class="r4 r">charBuffer</span> = <a href="#30176387a07edc7d" class="i method">GetCharBuffer</a>();
+                <b>if</b> (<span class="r4 r">charBuffer</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> + <span class="r3 r">length</span> &lt;= <span class="r4 r">charBuffer</span>.<a href="@0@mscorlib/A.html#7529ccd440df5320" class="i property">Capacity</a>)
+                {
+                    <span class="r4 r">charBuffer</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r2 r">value</span>);
+                    <b>return</b>;
+                }
+            }
+            <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+            <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r2 r">value</span>);
+        }
+ 
+        <b>public override void</b> <a id="7db8789a4f8f7b9e" href="../R/7db8789a4f8f7b9e.html" target="n" data-glyph="72,1" class="i method">Flush</a>()
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r5 rd" class="r5 r">charBuffer</span> = <a href="#69a6e5ec87f5f946" class="i field">_charBuffer</a>;
+            <b>if</b> (<span class="r5 r">charBuffer</span> != <b>null</b>)
+            {
+                <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r6 rd" class="r6 r">value</span> = <span class="r5 r">charBuffer</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+                <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r6 r">value</span>);
+                <a href="#69a6e5ec87f5f946" class="i field">_charBuffer</a> = <b>null</b>;
+                <a href="@0@System/A.html#df5a6c7b6b60da4f" class="k">var</a> <span id="r7 rd" class="r7 r">charBufferCache</span> = <a href="#24ec3bf56f063002" class="i field">_charBufferCache</a>.<a href="@0@mscorlib/A.html#bf5157f54273c48c" class="i property">Value</a>;
+                <b>if</b> (<span class="r7 r">charBufferCache</span>.<a href="@0@System/A.html#dc93ffb6a4a268f2" class="i property">Count</a> &lt; <a href="#66091edab52806a0" class="i field">PerThreadBufferCacheLimit</a>)
+                {
+                    <span class="r7 r">charBufferCache</span>.<a href="@0@System/A.html#b99d0011f4fee45a" class="i method">AddFirst</a>(<span class="r5 r">charBuffer</span>);
+                }
+            }
+        }
+ 
+        <b>public override void</b> <a id="73add6bde6c083bb" href="../R/73add6bde6c083bb.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>char</b> <span id="r8 rd" class="r8 r">value</span>)
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r9 rd" class="r9 r">charBuffer</span> = <a href="#30176387a07edc7d" class="i method">GetCharBuffer</a>();
+            <b>if</b> (<span class="r9 r">charBuffer</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> == <span class="r9 r">charBuffer</span>.<a href="@0@mscorlib/A.html#7529ccd440df5320" class="i property">Capacity</a>)
+            {
+                <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+                <span class="r9 r">charBuffer</span> = <a href="#30176387a07edc7d" class="i method">GetCharBuffer</a>();
+            }
+            <span class="r9 r">charBuffer</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="r8 r">value</span>);
+        }
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <a id="30176387a07edc7d" href="../R/30176387a07edc7d.html" target="n" data-glyph="76,1" class="i method">GetCharBuffer</a>()
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r10 rd" class="r10 r">charBuffer</span> = <a href="#69a6e5ec87f5f946" class="i field">_charBuffer</a>;
+            <b>if</b> (<span class="r10 r">charBuffer</span> == <b>null</b>)
+            {
+                <a href="@0@System/A.html#df5a6c7b6b60da4f" class="k">var</a> <span id="r11 rd" class="r11 r">charBufferCache</span> = <a href="#24ec3bf56f063002" class="i field">_charBufferCache</a>.<a href="@0@mscorlib/A.html#bf5157f54273c48c" class="i property">Value</a>;
+                <a href="@0@System/A.html#08181ebdd4cdf907" class="k">var</a> <span id="r12 rd" class="r12 r">cacheNode</span> = <span class="r11 r">charBufferCache</span>.<a href="@0@System/A.html#5312341b3346de9e" class="i property">First</a>;
+                <b>if</b> (<span class="r12 r">cacheNode</span> != <b>null</b>)
+                {
+                    <span class="r11 r">charBufferCache</span>.<a href="@0@System/A.html#bf8f7858b06e2728" class="i method">Remove</a>(<span class="r12 r">cacheNode</span>);
+                    <span class="r10 r">charBuffer</span> = <span class="r12 r">cacheNode</span>.<a href="@0@System/A.html#ab8931f084807c6d" class="i property">Value</a>;
+                    <span class="r10 r">charBuffer</span>.<a href="@0@mscorlib/A.html#12bafac7fd9481fd" class="i method">Clear</a>();
+                }
+                <b>else</b>
+                {
+                    <span class="r10 r">charBuffer</span> = <b>new</b> <a href="@0@mscorlib/A.html#ec674e2123a44860" class="t constructor">StringBuilder</a>(<a href="../StringWriterExtensions.cs.html#84ea5d55a3a5ac00" class="t t">StringWriterExtensions</a>.<a href="../StringWriterExtensions.cs.html#17cb0fd36d085832" class="i field">BufferSize</a>);
+                }
+                <a href="#69a6e5ec87f5f946" class="i field">_charBuffer</a> = <span class="r10 r">charBuffer</span>;
+            }
+ 
+            <b>return</b> <span class="r10 r">charBuffer</span>;
+        }
+ 
+        <b>public override void</b> <a id="b434d00769db2828" href="../R/b434d00769db2828.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>char</b>[] <span id="r13 rd" class="r13 r">buffer</span>, <b>int</b> <span id="r14 rd" class="r14 r">index</span>, <b>int</b> <span id="r15 rd" class="r15 r">count</span>)
+        {
+            <b>if</b> (<span class="r15 r">count</span> == 0)
+            {
+                <b>return</b>;
+            }
+            <b>if</b> (<span class="r15 r">count</span> &lt;= <a href="#0d5e360d179d74a2" class="i field">CharBufferThreshold</a>)
+            {
+                <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r16 rd" class="r16 r">charBuffer</span> = <a href="#30176387a07edc7d" class="i method">GetCharBuffer</a>();
+                <b>if</b> (<span class="r16 r">charBuffer</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> + <span class="r15 r">count</span> &lt;= <span class="r16 r">charBuffer</span>.<a href="@0@mscorlib/A.html#7529ccd440df5320" class="i property">Capacity</a>)
+                {
+                    <span class="r16 r">charBuffer</span>.<a href="@0@mscorlib/A.html#fa5edcd3d03d27e1" class="i method">Append</a>(<span class="r13 r">buffer</span>, <span class="r14 r">index</span>, <span class="r15 r">count</span>);
+                    <b>return</b>;
+                }
+            }
+            <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+            <a href="#0f66ef580de361cd" class="i field">_parts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <b>string</b>(<span class="r13 r">buffer</span>, <span class="r14 r">index</span>, <span class="r15 r">count</span>));
+        }
+ 
+        <b>public void</b> <a id="085c3681d11057fb" href="../R/085c3681d11057fb.html" target="n" data-glyph="72,1" class="i method">CopyTo</a>(<a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r17 rd" class="r17 r">target</span>)
+        {
+            <a href="#10bd690fccc1b3ed" class="k">var</a> <span id="r18 rd" class="r18 r">writer</span> = <span class="r17 r">target</span> <b>as</b> <a href="#10bd690fccc1b3ed" class="t t">StringBlockWriter</a>;
+            <b>if</b> (<span class="r18 r">writer</span> != <b>null</b>)
+            {
+                <span class="r18 r">writer</span>.<a href="#cb3694b4316e9ee5" class="i method">Write</a>(<a href="#10bd690fccc1b3ed" class="k">this</a>);
+                <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+                <b>return</b>;
+            }
+            <a href="#093cbd48e0d70ae3" class="i method">CopyToInternal</a>(<span class="r17 r">target</span>);
+        }
+ 
+        <b>private void</b> <a id="093cbd48e0d70ae3" href="../R/093cbd48e0d70ae3.html" target="n" data-glyph="76,1" class="i method">CopyToInternal</a>(<a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r19 rd" class="r19 r">target</span>)
+        {
+            <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="k">var</a> <span id="r20 rd" class="r20 r">item</span> <b>in</b> <a href="#0f66ef580de361cd" class="i field">_parts</a>)
+            {
+                <a href="#10bd690fccc1b3ed" class="k">var</a> <span id="r21 rd" class="r21 r">itemWriter</span> = <span class="r20 r">item</span> <b>as</b> <a href="#10bd690fccc1b3ed" class="t t">StringBlockWriter</a>;
+                <b>if</b> (<span class="r21 r">itemWriter</span> != <b>null</b>)
+                {
+                    <span class="r21 r">itemWriter</span>.<a href="#093cbd48e0d70ae3" class="i method">CopyToInternal</a>(<span class="r19 r">target</span>);
+                    <b>continue</b>;
+                }
+                <span class="r19 r">target</span>.<a href="@0@mscorlib/A.html#d3fb8ea93246e9a9" class="i method">Write</a>((<b>string</b>)<span class="r20 r">item</span>);
+            }
+        }
+ 
+        <b>private int</b> <a id="51c66fc7d121d395" href="../R/51c66fc7d121d395.html" target="n" data-glyph="76,1" class="i method">GetCount</a>()
+        {
+            <a href="#7db8789a4f8f7b9e" class="i method">Flush</a>();
+            <b>int</b> <span id="r22 rd" class="r22 r">count</span> = 0;
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="k">var</a> <span id="r23 rd" class="r23 r">item</span> <b>in</b> <a href="#0f66ef580de361cd" class="i field">_parts</a>)
+            {
+                <a href="#10bd690fccc1b3ed" class="k">var</a> <span id="r24 rd" class="r24 r">itemWriter</span> = <span class="r23 r">item</span> <b>as</b> <a href="#10bd690fccc1b3ed" class="t t">StringBlockWriter</a>;
+                <b>if</b> (<span class="r24 r">itemWriter</span> != <b>null</b>)
+                {
+                    <span class="r22 r">count</span> += <span class="r24 r">itemWriter</span>.<a href="#51c66fc7d121d395" class="i method">GetCount</a>();
+                    <b>continue</b>;
+                }
+                ++<span class="r22 r">count</span>;
+            }
+            <b>return</b> <span class="r22 r">count</span>;
+        }
+ 
+        <b>private int</b> <a id="4d715fd3ac020c94" href="../R/4d715fd3ac020c94.html" target="n" data-glyph="76,1" class="i method">CopyTo</a>(<b>string</b>[] <span id="r25 rd" class="r25 r">buffer</span>, <b>int</b> <span id="r26 rd" class="r26 r">index</span>)
+        {
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="k">var</a> <span id="r27 rd" class="r27 r">item</span> <b>in</b> <a href="#0f66ef580de361cd" class="i field">_parts</a>)
+            {
+                <a href="#10bd690fccc1b3ed" class="k">var</a> <span id="r28 rd" class="r28 r">itemWriter</span> = <span class="r27 r">item</span> <b>as</b> <a href="#10bd690fccc1b3ed" class="t t">StringBlockWriter</a>;
+                <b>if</b> (<span class="r28 r">itemWriter</span> != <b>null</b>)
+                {
+                    <span class="r26 r">index</span> = <span class="r28 r">itemWriter</span>.<a href="#4d715fd3ac020c94" class="i method">CopyTo</a>(<span class="r25 r">buffer</span>, <span class="r26 r">index</span>);
+                    <b>continue</b>;
+                }
+                <span class="r25 r">buffer</span>[<span class="r26 r">index</span>++] = (<b>string</b>)<span class="r27 r">item</span>;
+            }
+            <b>return</b> <span class="r26 r">index</span>;
+        }
+ 
+        <b>public override string</b> <a id="da635a929aba26d7" href="../R/da635a929aba26d7.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+        {
+            <a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r29 rd" class="r29 r">count</span> = <a href="#51c66fc7d121d395" class="i method">GetCount</a>();
+            <b>if</b> (<span class="r29 r">count</span> &lt;= <a href="#72270d5a45ddc698" class="i field">ConcatBufferLimit</a>)
+            {
+                <b>var</b> <span id="r30 rd" class="r30 r">buffer</span> = <b>new</b> <b>string</b>[<span class="r29 r">count</span>];
+                <a href="#4d715fd3ac020c94" class="i method">CopyTo</a>(<span class="r30 r">buffer</span>, 0);
+                <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#75e4bdc056f3daf0" class="i method">Concat</a>(<span class="r30 r">buffer</span>);
+            }
+            <b>using</b> (<a href="@0@mscorlib/A.html#fd76db5d443fe076" class="k">var</a> <span id="r31 rd" class="r31 r">writer</span> = <b>new</b> <a href="@0@mscorlib/A.html#0dbf27f4bc65a4cb" class="t constructor">StringWriter</a>(<a href="@0@mscorlib/A.html#26310b22553d14cf" class="i property">FormatProvider</a>))
+            {
+                <a href="#093cbd48e0d70ae3" class="i method">CopyToInternal</a>(<span class="r31 r">writer</span>);
+                <b>return</b> <span class="r31 r">writer</span>.<a href="@0@mscorlib/A.html#dd992896cbb21320" class="i method">ToString</a>();
+            }
+        }
+ 
+        <b>public</b> <a id="6babad01feca20cf" href="../R/6babad01feca20cf.html" target="n" data-glyph="72,1" class="i constructor">StringBlockWriter</a>(<a href="@0@mscorlib/A.html#0dbf315d83aad6ca" class="t t">IFormatProvider</a> <span id="r32 rd" class="r32 r">formatProvider</span>)
+            : <a href="@0@mscorlib/A.html#fa8b78988e2fd970" class="k">base</a>(<span class="r32 r">formatProvider</span>)
+        {
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

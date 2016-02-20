@@ -1,0 +1,232 @@
+﻿<!DOCTYPE html>
+<html><head><title>BuildManagerWrapper.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(223);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.WebPages/BuildManagerWrapper.cs" target="_top">BuildManagerWrapper.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.WebPages" target="_top">..\Mvc\src\System.Web.WebPages\System.Web.WebPages.csproj</a> (System.Web.WebPages)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Caching</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Compilation</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Hosting</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Xml</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">Microsoft</span>.<span class="i n">Internal</span>.<span class="i n">Web</span>.<span class="i n">Utils</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">WebPages</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Wraps the caching and instantiation of paths of the BuildManager. </span>
+    <span class="c">///</span><span class="c"> In case of precompiled non-updateable sites, the only way to verify if a file exists is to call BuildManager.GetObjectFactory. However this method is less performant than</span>
+    <span class="c">///</span><span class="c"> VirtualPathProvider.FileExists which is used for all other scenarios. In this class, we optimize for the first scenario by storing the results of GetObjectFactory for a </span>
+    <span class="c">///</span><span class="c"> long duration.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>internal sealed class</b> <a id="012478bf600ab9e5" href="R/012478bf600ab9e5.html" target="n" data-glyph="2,0" class="t t">BuildManagerWrapper</a> : <a href="IVirtualPathFactory.cs.html#014d8a8e8c100ef2" class="t t">IVirtualPathFactory</a>
+    {
+        <b>internal static readonly</b> <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a> <a id="110758deb96500ed" href="R/110758deb96500ed.html" target="n" data-glyph="44,1" class="i field">KeyGuid</a> = <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a>.<a href="@0@mscorlib/A.html#b7fae6994c22c22e" class="i method">NewGuid</a>();
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#865ef7b89f41b632" class="t t">TimeSpan</a> <a id="ee37e37d38042f8d" href="R/ee37e37d38042f8d.html" target="n" data-glyph="46,1" class="i field">_objectFactoryCacheDuration</a> = <a href="@0@mscorlib/A.html#865ef7b89f41b632" class="t t">TimeSpan</a>.<a href="@0@mscorlib/A.html#ae74be5264df78d8" class="i method">FromMinutes</a>(1);
+        <b>private readonly</b> <a href="IVirtualPathUtility.cs.html#d9078551f42f70d6" class="t t">IVirtualPathUtility</a> <a id="fa90bf58573abdb8" href="R/fa90bf58573abdb8.html" target="n" data-glyph="46,1" class="i field">_virtualPathUtility</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a>&gt; <a id="116e328601875fe4" href="R/116e328601875fe4.html" target="n" data-glyph="46,1" class="i field">_vppFunc</a>;
+        <b>private readonly bool</b> <a id="998bfa84159c19b2" href="R/998bfa84159c19b2.html" target="n" data-glyph="46,1" class="i field">_isPrecompiled</a>;
+        <b>private readonly</b> <a href="FileExistenceCache.cs.html#a34938e04939d8da" class="t t">FileExistenceCache</a> <a id="41b069cdf474b79b" href="R/41b069cdf474b79b.html" target="n" data-glyph="46,1" class="i field">_vppCache</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <a id="8a570dddfbb993c7" href="R/8a570dddfbb993c7.html" target="n" data-glyph="46,1" class="i field">_supportedExtensions</a>;
+ 
+        <b>public</b> <a id="f4c1086154a07882" href="R/f4c1086154a07882.html" target="n" data-glyph="72,1" class="i constructor">BuildManagerWrapper</a>()
+            : <a href="#bf47f01c8bf6ac13" class="k">this</a>(() =&gt; <a href="@0@System.Web/A.html#f12b2fb72be7982c" class="t t">HostingEnvironment</a>.<a href="@0@System.Web/A.html#cca6f22dc3bcba2a" class="i property">VirtualPathProvider</a>, <b>new</b> <a href="VirtualPathUtilityWrapper.cs.html#4803529831792cb1" class="t constructor">VirtualPathUtilityWrapper</a>())
+        {
+        }
+ 
+        <b>public</b> <a id="00f1fe15338225ab" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">BuildManagerWrapper</a>(<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a> <span id="r0 rd" class="r0 r">vpp</span>, <a href="IVirtualPathUtility.cs.html#d9078551f42f70d6" class="t t">IVirtualPathUtility</a> <span id="r1 rd" class="r1 r">virtualPathUtility</span>)
+            : <a href="#bf47f01c8bf6ac13" class="k">this</a>(() =&gt; <span class="r0 r">vpp</span>, <span class="r1 r">virtualPathUtility</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r0 r">vpp</span> != <b>null</b>);
+        }
+ 
+        <b>public</b> <a id="bf47f01c8bf6ac13" href="R/bf47f01c8bf6ac13.html" target="n" data-glyph="72,1" class="i constructor">BuildManagerWrapper</a>(<a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a>&gt; <span id="r2 rd" class="r2 r">vppFunc</span>, <a href="IVirtualPathUtility.cs.html#d9078551f42f70d6" class="t t">IVirtualPathUtility</a> <span id="r3 rd" class="r3 r">virtualPathUtility</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r2 r">vppFunc</span> != <b>null</b>);
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r3 r">virtualPathUtility</span> != <b>null</b>);
+ 
+            <a href="#116e328601875fe4" class="i field">_vppFunc</a> = <span class="r2 r">vppFunc</span>;
+            <a href="#fa90bf58573abdb8" class="i field">_virtualPathUtility</a> = <span class="r3 r">virtualPathUtility</span>;
+            <a href="#998bfa84159c19b2" class="i field">_isPrecompiled</a> = <a href="#b424375ce89a113e" class="i method">IsNonUpdatablePrecompiledApp</a>();
+            <b>if</b> (!<a href="#998bfa84159c19b2" class="i field">_isPrecompiled</a>)
+            {
+                <a href="#41b069cdf474b79b" class="i field">_vppCache</a> = <b>new</b> <a href="FileExistenceCache.cs.html#78ab74cda176ec37" class="t constructor">FileExistenceCache</a>(<span class="r2 r">vppFunc</span>);
+            }
+        }
+ 
+        <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <a id="013974c5e7a1433b" href="R/013974c5e7a1433b.html" target="n" data-glyph="102,1" class="i property">SupportedExtensions</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#8a570dddfbb993c7" class="i field">_supportedExtensions</a> ?? <a href="WebPageHttpHandler.cs.html#74752623d28a28e8" class="t t">WebPageHttpHandler</a>.<a href="WebPageHttpHandler.cs.html#5f243c1e309450fd" class="i method">GetRegisteredExtensions</a>(); }
+            <b>set</b> { <a href="#8a570dddfbb993c7" class="i field">_supportedExtensions</a> = <b>value</b>; }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Determines if a page exists in the website. </span>
+        <span class="c">///</span><span class="c"> This method switches between a long duration cache or a short duration FileExistenceCache depending on whether the site is precompiled. </span>
+        <span class="c">///</span><span class="c"> This is an optimization because BuildManager.GetObjectFactory is comparably slower than performing VirtualPathFactory.Exists</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="312188baca74840f" href="R/312188baca74840f.html" target="n" data-glyph="72,1" class="i method">Exists</a>(<b>string</b> <span id="r4 rd" class="r4 r">virtualPath</span>)
+        {
+            <b>if</b> (<a href="#998bfa84159c19b2" class="i field">_isPrecompiled</a>)
+            {
+                <b>return</b> <a href="#85361c3b1f538ac8" class="i method">ExistsInPrecompiledSite</a>(<span class="r4 r">virtualPath</span>);
+            }
+            <b>return</b> <a href="#db430b7261b6b726" class="i method">ExistsInVpp</a>(<span class="r4 r">virtualPath</span>);
+        }
+ 
+        <b>internal bool</b> <a id="b424375ce89a113e" href="R/b424375ce89a113e.html" target="n" data-glyph="74,1" class="i method">IsNonUpdatablePrecompiledApp</a>()
+        {
+            <a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a> <span id="r5 rd" class="r5 r">vpp</span> = <a href="#116e328601875fe4" class="i field">_vppFunc</a>();
+            <span class="c">// VirtualPathProvider currently null in some test scenarios e.g. PreApplicationStartCodeTest.StartTest</span>
+            <b>if</b> (<span class="r5 r">vpp</span> == <b>null</b>)
+            {
+                <b>return false</b>;
+            }
+            <b>return</b> <a href="#83a3d3d2c4fdfddb" class="i method">IsNonUpdateablePrecompiledApp</a>(<span class="r5 r">vpp</span>, <a href="#fa90bf58573abdb8" class="i field">_virtualPathUtility</a>);
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An app&#39;s is precompiled for our purposes if </span>
+        <span class="c">///</span><span class="c"> (a) it has a PreCompiledApp.config file in the site root, </span>
+        <span class="c">///</span><span class="c"> (b) The PreCompiledApp.config says that the app is not Updatable.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> This code is based on System.Web.DynamicData.Misc.IsNonUpdatablePrecompiledAppNoCache (DynamicData)</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1031:DoNotCatchGeneralExceptionTypes&quot;</span>,
+            <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;We want to replicate the behavior of BuildManager which catches all exceptions.&quot;</span>)]
+        <b>internal static bool</b> <a id="83a3d3d2c4fdfddb" href="R/83a3d3d2c4fdfddb.html" target="n" data-glyph="74,1" class="i method">IsNonUpdateablePrecompiledApp</a>(<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a> <span id="r6 rd" class="r6 r">vpp</span>, <a href="IVirtualPathUtility.cs.html#d9078551f42f70d6" class="t t">IVirtualPathUtility</a> <span id="r7 rd" class="r7 r">virtualPathUtility</span>)
+        {
+            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r8 rd" class="r8 r">virtualPath</span> = <span class="r7 r">virtualPathUtility</span>.<a href="IVirtualPathUtility.cs.html#1a1b251a32dd9766" class="i method">ToAbsolute</a>(<span class="s">&quot;~/PrecompiledApp.config&quot;</span>);
+            <b>if</b> (!<span class="r6 r">vpp</span>.<a href="@0@System.Web/A.html#acd31758c7857a62" class="i method">FileExists</a>(<span class="r8 r">virtualPath</span>))
+            {
+                <b>return false</b>;
+            }
+ 
+            <a href="@0@System.Xml.Linq/A.html#3354dac0913e417b" class="t t">XDocument</a> <span id="r9 rd" class="r9 r">document</span>;
+            <b>using</b> (<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r10 rd" class="r10 r">stream</span> = <span class="r6 r">vpp</span>.<a href="@0@System.Web/A.html#a29080043affa02d" class="i method">GetFile</a>(<span class="r8 r">virtualPath</span>).<a href="@0@System.Web/A.html#bbe78e468c5b8b82" class="i method">Open</a>())
+            {
+                <b>try</b>
+                {
+                    <span class="r9 r">document</span> = <a href="@0@System.Xml.Linq/A.html#3354dac0913e417b" class="t t">XDocument</a>.<a href="@0@System.Xml.Linq/A.html#417faa1e81ecf38f" class="i method">Load</a>(<span class="r10 r">stream</span>);
+                }
+                <b>catch</b>
+                {
+                    <span class="c">// If we are unable to load the file, ignore it. The BuildManager behaves identically.</span>
+                    <b>return false</b>;
+                }
+            }
+ 
+            <b>if</b> (<span class="r9 r">document</span>.<a href="@0@System.Xml.Linq/A.html#bd595f7d7f214050" class="i property">Root</a> == <b>null</b> || !<span class="r9 r">document</span>.<a href="@0@System.Xml.Linq/A.html#bd595f7d7f214050" class="i property">Root</a>.<a href="@0@System.Xml.Linq/A.html#21efc1834aa7f4ac" class="i property">Name</a>.<a href="@0@System.Xml.Linq/A.html#193480f8d96a71ba" class="i property">LocalName</a>.<a href="@0@mscorlib/A.html#b98069ccbe2d3960" class="i method">Equals</a>(<span class="s">&quot;precompiledApp&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>))
+            {
+                <b>return false</b>;
+            }
+            <a href="@0@System.Xml.Linq/A.html#4ca7337be72c47a4" class="k">var</a> <span id="r11 rd" class="r11 r">updatableAttribute</span> = <span class="r9 r">document</span>.<a href="@0@System.Xml.Linq/A.html#bd595f7d7f214050" class="i property">Root</a>.<a href="@0@System.Xml.Linq/A.html#4967ff154010968e" class="i method">Attribute</a>(<span class="s">&quot;updatable&quot;</span>);
+            <b>if</b> (<span class="r11 r">updatableAttribute</span> != <b>null</b>)
+            {
+                <b>bool</b> <span id="r12 rd" class="r12 r">result</span>;
+                <b>return</b> <a href="@0@mscorlib/A.html#f1b135ff6c380b37" class="t t">Boolean</a>.<a href="@0@mscorlib/A.html#c8d4e2d26d59f9d0" class="i method">TryParse</a>(<span class="r11 r">updatableAttribute</span>.<a href="@0@System.Xml.Linq/A.html#41b93251dfa049f0" class="i property">Value</a>, <b>out</b> <span class="r12 r">result</span>) &amp;&amp; (<span class="r12 r">result</span> == <b>false</b>);
+            }
+            <b>return false</b>;
+        }
+ 
+        <b>private bool</b> <a id="85361c3b1f538ac8" href="R/85361c3b1f538ac8.html" target="n" data-glyph="76,1" class="i method">ExistsInPrecompiledSite</a>(<b>string</b> <span id="r13 rd" class="r13 r">virtualPath</span>)
+        {
+            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r14 rd" class="r14 r">key</span> = <a href="#5046cb68e306c2f7" class="i method">GetKeyFromVirtualPath</a>(<span class="r13 r">virtualPath</span>);
+ 
+            <span class="c">// We assume that the key is unique enough to avoid collisions.</span>
+            <a href="#55e79716a71eb831" class="k">var</a> <span id="r15 rd" class="r15 r">buildManagerResult</span> = (<a href="#55e79716a71eb831" class="t t">BuildManagerResult</a>)<a href="@0@System.Web/A.html#983653469024b295" class="t t">HttpRuntime</a>.<a href="@0@System.Web/A.html#26262a93dbb8d884" class="i property">Cache</a>.<a href="@0@System.Web/A.html#a8345561fa36b9c7" class="i method">Get</a>(<span class="r14 r">key</span>);
+            <b>if</b> (<span class="r15 r">buildManagerResult</span> == <b>null</b>)
+            {
+                <span class="c">// For precompiled apps, we cache the ObjectFactory and use it in the CreateInstance method. </span>
+                <a href="@0@System.Web/A.html#1f0e3bb54d088c69" class="k">var</a> <span id="r16 rd" class="r16 r">objectFactory</span> = <a href="#57e3c97c77bdc971" class="i method">GetObjectFactory</a>(<span class="r13 r">virtualPath</span>);
+                <span class="r15 r">buildManagerResult</span> = <b>new</b> <a href="#55e79716a71eb831" class="t constructor">BuildManagerResult</a> { <a href="#24fafad188cccda8" class="i property">ObjectFactory</a> = <span class="r16 r">objectFactory</span>, <a href="#f05b8b5ee0d2f17d" class="i property">Exists</a> = <span class="r16 r">objectFactory</span> != <b>null</b> };
+                <span class="c">// Cache the result with a sliding expiration for a long duration. </span>
+                <a href="@0@System.Web/A.html#983653469024b295" class="t t">HttpRuntime</a>.<a href="@0@System.Web/A.html#26262a93dbb8d884" class="i property">Cache</a>.<a href="@0@System.Web/A.html#26152879ad8a322a" class="i method">Add</a>(<span class="r14 r">key</span>, <span class="r15 r">buildManagerResult</span>, <b>null</b>, <a href="@0@System.Web/A.html#d083199dcfb5f0da" class="t t">Cache</a>.<a href="@0@System.Web/A.html#cfccf7fe42d4e05a" class="i field">NoAbsoluteExpiration</a>, <a href="#ee37e37d38042f8d" class="i field">_objectFactoryCacheDuration</a>, <a href="@0@System.Web/A.html#12293a160e5429fd" class="t t">CacheItemPriority</a>.<a href="@0@System.Web/A.html#6710989a013a0189" class="i field">Low</a>, <b>null</b>);
+            }
+            <b>return</b> <span class="r15 r">buildManagerResult</span>.<a href="#f05b8b5ee0d2f17d" class="i property">Exists</a>;
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Determines if a site exists in the VirtualPathProvider.</span>
+        <span class="c">///</span><span class="c"> Results of hits are cached for a very short amount of time in the FileExistenceCache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private bool</b> <a id="db430b7261b6b726" href="R/db430b7261b6b726.html" target="n" data-glyph="76,1" class="i method">ExistsInVpp</a>(<b>string</b> <span id="r17 rd" class="r17 r">virtualPath</span>)
+        {
+            <a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#74ae7c85c0e36e34" class="i method">Assert</a>(<a href="#41b069cdf474b79b" class="i field">_vppCache</a> != <b>null</b>);
+            <b>return</b> <a href="#41b069cdf474b79b" class="i field">_vppCache</a>.<a href="FileExistenceCache.cs.html#2e026d778adc3efb" class="i method">FileExists</a>(<span class="r17 r">virtualPath</span>);
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Determines if an ObjectFactory exists for the virtualPath. </span>
+        <span class="c">///</span><span class="c"> The BuildManager complains if we pass in extensions that aren&#39;t registered for compilation. So we ensure that the virtual path is not </span>
+        <span class="c">///</span><span class="c"> extensionless and that it is one of the extension</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="@0@System.Web/A.html#1f0e3bb54d088c69" class="t t">IWebObjectFactory</a> <a id="57e3c97c77bdc971" href="R/57e3c97c77bdc971.html" target="n" data-glyph="76,1" class="i method">GetObjectFactory</a>(<b>string</b> <span id="r18 rd" class="r18 r">virtualPath</span>)
+        {
+            <b>if</b> (<a href="#b8754544654e5197" class="i method">IsPathExtensionSupported</a>(<span class="r18 r">virtualPath</span>))
+            {
+                <b>return</b> <a href="@0@System.Web/A.html#fb803c621f3806a8" class="t t">BuildManager</a>.<a href="@0@System.Web/A.html#33a02879ada5de68" class="i method">GetObjectFactory</a>(<span class="r18 r">virtualPath</span>, <span class="r19 r">throwIfNotFound</span>: <b>false</b>);
+            }
+            <b>return null</b>;
+        }
+ 
+        <b>public object</b> <a id="9938a07bbbc0fae7" href="R/9938a07bbbc0fae7.html" target="n" data-glyph="72,1" class="i method">CreateInstance</a>(<b>string</b> <span id="r20 rd" class="r20 r">virtualPath</span>)
+        {
+            <b>return</b> <a href="#8233c5383743e657" class="i method">CreateInstanceOfType</a>&lt;<b>object</b>&gt;(<span class="r20 r">virtualPath</span>);
+        }
+ 
+        <b>public</b> <span class="r21 r t">T</span> <a id="8233c5383743e657" href="R/8233c5383743e657.html" target="n" data-glyph="72,1" class="i method">CreateInstanceOfType</a>&lt;<span id="r21 rd t" class="r21 r t">T</span>&gt;(<b>string</b> <span id="r22 rd" class="r22 r">virtualPath</span>) <b>where</b> <span class="r21 r t">T</span> : <b>class</b>
+        {
+            <b>if</b> (<a href="#998bfa84159c19b2" class="i field">_isPrecompiled</a>)
+            {
+                <a href="#55e79716a71eb831" class="k">var</a> <span id="r23 rd" class="r23 r">buildManagerResult</span> = (<a href="#55e79716a71eb831" class="t t">BuildManagerResult</a>)<a href="@0@System.Web/A.html#983653469024b295" class="t t">HttpRuntime</a>.<a href="@0@System.Web/A.html#26262a93dbb8d884" class="i property">Cache</a>.<a href="@0@System.Web/A.html#a8345561fa36b9c7" class="i method">Get</a>(<a href="#5046cb68e306c2f7" class="i method">GetKeyFromVirtualPath</a>(<span class="r22 r">virtualPath</span>));
+                <span class="c">// The cache could have evicted our results. In this case, we&#39;ll simply fall through to CreateInstanceFromVirtualPath</span>
+                <b>if</b> (<span class="r23 r">buildManagerResult</span> != <b>null</b>)
+                {
+                    <a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#4f55cf5792dfc5e6" class="i method">Assert</a>(<span class="r23 r">buildManagerResult</span>.<a href="#f05b8b5ee0d2f17d" class="i property">Exists</a> &amp;&amp; <span class="r23 r">buildManagerResult</span>.<a href="#24fafad188cccda8" class="i property">ObjectFactory</a> != <b>null</b>, <span class="s">&quot;This method must only be called if the file exists.&quot;</span>);
+                    <b>return</b> <span class="r23 r">buildManagerResult</span>.<a href="#24fafad188cccda8" class="i property">ObjectFactory</a>.<a href="@0@System.Web/A.html#c2b9656356a14548" class="i method">CreateInstance</a>() <b>as</b> <span class="r21 r t">T</span>;
+                }
+            }
+ 
+            <b>return</b> (<span class="r21 r t">T</span>)<a href="@0@System.Web/A.html#fb803c621f3806a8" class="t t">BuildManager</a>.<a href="@0@System.Web/A.html#77343ad852f7d07a" class="i method">CreateInstanceFromVirtualPath</a>(<span class="r22 r">virtualPath</span>, <b>typeof</b>(<span class="r21 r t">T</span>));
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Determines if the extension is one of the extensions registered with WebPageHttpHandler. </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="b8754544654e5197" href="R/b8754544654e5197.html" target="n" data-glyph="72,1" class="i method">IsPathExtensionSupported</a>(<b>string</b> <span id="r24 rd" class="r24 r">virtualPath</span>)
+        {
+            <b>string</b> <span id="r25 rd" class="r25 r">extension</span> = <a href="Utils/PathUtil.cs.html#f0c78b02558aae7c" class="t t">PathUtil</a>.<a href="Utils/PathUtil.cs.html#eef7603c2050ab05" class="i method">GetExtension</a>(<span class="r24 r">virtualPath</span>);
+            <b>return</b> !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r25 r">extension</span>)
+                   &amp;&amp; <a href="#013974c5e7a1433b" class="i property">SupportedExtensions</a>.<a href="@0@System.Core/A.html#d1530e4eed8b26b3" class="i method">Contains</a>(<span class="r25 r">extension</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1), <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Creates a reasonably unique key for a given virtual path by concatenating it with a Guid.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private static string</b> <a id="5046cb68e306c2f7" href="R/5046cb68e306c2f7.html" target="n" data-glyph="76,1" class="i method">GetKeyFromVirtualPath</a>(<b>string</b> <span id="r26 rd" class="r26 r">virtualPath</span>)
+        {
+            <b>return</b> <a href="#110758deb96500ed" class="i field">KeyGuid</a>.<a href="@0@mscorlib/A.html#a6547a472def7796" class="i method">ToString</a>() + <span class="s">&quot;_&quot;</span> + <span class="r26 r">virtualPath</span>;
+        }
+ 
+        <b>private class</b> <a id="55e79716a71eb831" href="R/55e79716a71eb831.html" target="n" data-glyph="4,1" class="t t"><span id="8b1ad3320a659aaf">BuildManagerResult</span></a>
+        {
+            <b>public bool</b> <a id="f05b8b5ee0d2f17d" href="R/f05b8b5ee0d2f17d.html" target="n" data-glyph="102,2" class="i property">Exists</a> { <b>get</b>; <b>set</b>; }
+ 
+            <b>public</b> <a href="@0@System.Web/A.html#1f0e3bb54d088c69" class="t t">IWebObjectFactory</a> <a id="24fafad188cccda8" href="R/24fafad188cccda8.html" target="n" data-glyph="102,2" class="i property">ObjectFactory</a> { <b>get</b>; <b>set</b>; }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>
