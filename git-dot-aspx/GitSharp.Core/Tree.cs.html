@@ -1,0 +1,718 @@
+﻿<!DOCTYPE html>
+<html><head><title>Tree.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(709);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Tree.cs" target="_top">Tree.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;me@lathund.dewire.com&gt;
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A representation of a Git tree entry. A Tree is a directory in Git.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="5c7834780fcb0bc3" href="R/5c7834780fcb0bc3.html" target="n" data-glyph="0,0" class="t t">Tree</a> : <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>, <a href="Treeish.cs.html#f2a5e1e5a4e553e0" class="t t">Treeish</a>
+	{
+		<b>private static readonly</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <a id="607cd78d8257b52e" href="R/607cd78d8257b52e.html" target="n" data-glyph="46,1" class="i field">EmptyTree</a> = <b>new</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[0];
+
+		<b>private readonly</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="ea34e2019e27df62" href="R/ea34e2019e27df62.html" target="n" data-glyph="46,1" class="i field">_db</a>;
+		<b>private</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <a id="d789594314120933" href="R/d789594314120933.html" target="n" data-glyph="46,1" class="i field">_contents</a>;
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Compare two names represented as bytes. Since git treats names of trees and</span>
+		<span class="c">///</span><span class="c">	blobs differently we have one parameter that represents a &#39;/&#39; for trees. For</span>
+		<span class="c">///</span><span class="c">	other objects the value should be NUL. The names are compare by their positive</span>
+		<span class="c">///</span><span class="c">	byte value (0..255).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> A blob and a tree with the same name will not compare equal.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> name </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> name </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">lastA</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> &#39;/&#39; if a is a tree, else NULL.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">lastB</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> &#39;/&#39; if b is a tree, else NULL.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&amp;lt;</span><span class="c"> 0 if a is sorted before b, 0 if they are the same, else b </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static int</b> <a id="033fbc527638d239" href="R/033fbc527638d239.html" target="n" data-glyph="72,1" class="i method">CompareNames</a>(<b>byte</b>[] <span id="r0 rd" class="r0 r">a</span>, <b>byte</b>[] <span id="r1 rd" class="r1 r">b</span>, <b>int</b> <span id="r2 rd" class="r2 r">lastA</span>, <b>int</b> <span id="r3 rd" class="r3 r">lastB</span>)
+		{
+			<b>return</b> <a href="#86999c2e837986b4" class="i method">CompareNames</a>(<span class="r0 r">a</span>, <span class="r1 r">b</span>, 0, <span class="r1 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r2 r">lastA</span>, <span class="r3 r">lastB</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Compare two names represented as bytes. Since git treats names of trees and</span>
+		<span class="c">///</span><span class="c"> blobs differently we have one parameter that represents a &#39;/&#39; for trees. For</span>
+		<span class="c">///</span><span class="c"> other objects the value should be NUL. The names are compare by their positive</span>
+		<span class="c">///</span><span class="c"> byte value (0..255).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> A blob and a tree with the same name will not compare equal.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">nameUTF8</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">nameStart</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">nameEnd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">lastA</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> &#39;/&#39; if a is a tree, else NULL.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">lastB</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> &#39;/&#39; if b is a tree, else NULL.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Return </span><span class="c">&amp;lt;</span><span class="c"> 0 if a is sorted before b, 0 if they are the same, else b</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>private static int</b> <a id="86999c2e837986b4" href="R/86999c2e837986b4.html" target="n" data-glyph="76,1" class="i method">CompareNames</a>(<b>byte</b>[] <span id="r4 rd" class="r4 r">a</span>, <b>byte</b>[] <span id="r5 rd" class="r5 r">nameUTF8</span>, <b>int</b> <span id="r6 rd" class="r6 r">nameStart</span>, <b>int</b> <span id="r7 rd" class="r7 r">nameEnd</span>, <b>int</b> <span id="r8 rd" class="r8 r">lastA</span>, <b>int</b> <span id="r9 rd" class="r9 r">lastB</span>)
+		{
+			<span class="c">// There must be a .NET way of doing this! I assume there are both UTF8 names,</span>
+			<span class="c">// perhaps Constants.CHARSET.GetString on both then .Compare on the strings?</span>
+			<span class="c">// I&#39;m pretty sure this is just doing that but the long way round, however</span>
+			<span class="c">// I could be wrong so we&#39;ll leave it at this for now. - NR</span>
+			<b>int</b> <span id="r10 rd" class="r10 r">j</span>;
+			<b>int</b> <span id="r11 rd" class="r11 r">k</span>;
+
+			<b>for</b> (<span class="r10 r">j</span> = 0, <span class="r11 r">k</span> = <span class="r6 r">nameStart</span>; <span class="r10 r">j</span> &lt; <span class="r4 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r11 r">k</span> &lt; <span class="r7 r">nameEnd</span>; <span class="r10 r">j</span>++, <span class="r11 r">k</span>++)
+			{
+				<b>int</b> <span id="r12 rd" class="r12 r">aj</span> = <span class="r4 r">a</span>[<span class="r10 r">j</span>] &amp; 0xff;
+				<b>int</b> <span id="r13 rd" class="r13 r">bk</span> = <span class="r5 r">nameUTF8</span>[<span class="r11 r">k</span>] &amp; 0xff;
+
+				<b>if</b> (<span class="r12 r">aj</span> &lt; <span class="r13 r">bk</span>) <b>return</b> -1;
+				<b>if</b> (<span class="r12 r">aj</span> &gt; <span class="r13 r">bk</span>) <b>return</b> 1;
+			}
+
+			<b>if</b> (<span class="r10 r">j</span> &lt; <span class="r4 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>int</b> <span id="r14 rd" class="r14 r">aj</span> = <span class="r4 r">a</span>[<span class="r10 r">j</span>] &amp; 0xff;
+
+				<b>if</b> (<span class="r14 r">aj</span> &lt; <span class="r9 r">lastB</span>) <b>return</b> -1;
+				<b>if</b> (<span class="r14 r">aj</span> &gt; <span class="r9 r">lastB</span>) <b>return</b> 1;
+				<b>if</b> (<span class="r10 r">j</span> == <span class="r4 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1) <b>return</b> 0;
+				<b>return</b> -1;
+			}
+
+			<b>if</b> (<span class="r11 r">k</span> &lt; <span class="r7 r">nameEnd</span>)
+			{
+				<b>int</b> <span id="r15 rd" class="r15 r">bk</span> = <span class="r5 r">nameUTF8</span>[<span class="r11 r">k</span>] &amp; 0xff;
+
+				<b>if</b> (<span class="r8 r">lastA</span> &lt; <span class="r15 r">bk</span>) <b>return</b> -1;
+				<b>if</b> (<span class="r8 r">lastA</span> &gt; <span class="r15 r">bk</span>) <b>return</b> 1;
+				<b>if</b> (<span class="r11 r">k</span> == <span class="r7 r">nameEnd</span> - 1) <b>return</b> 0;
+				<b>return</b> 1;
+			}
+
+			<b>if</b> (<span class="r8 r">lastA</span> &lt; <span class="r9 r">lastB</span>) <b>return</b> -1;
+			<b>if</b> (<span class="r8 r">lastA</span> &gt; <span class="r9 r">lastB</span>) <b>return</b> 1;
+
+			<b>int</b> <span id="r16 rd" class="r16 r">nameLength</span> = <span class="r7 r">nameEnd</span> - <span class="r6 r">nameStart</span>;
+			<b>if</b> (<span class="r4 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == <span class="r16 r">nameLength</span>) <b>return</b> 0;
+			<b>return</b> <span class="r4 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <span class="r16 r">nameLength</span> ? -1 : 1;
+		}
+
+		<b>private static byte</b>[] <a id="e306c095222bfb10" href="R/e306c095222bfb10.html" target="n" data-glyph="76,1" class="i method">SubString</a>(<b>byte</b>[] <span id="r17 rd" class="r17 r">s</span>, <b>int</b> <span id="r18 rd" class="r18 r">nameStart</span>, <b>int</b> <span id="r19 rd" class="r19 r">nameEnd</span>)
+		{
+			<b>if</b> (<span class="r18 r">nameStart</span> == 0 &amp;&amp; <span class="r18 r">nameStart</span> == <span class="r17 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>return</b> <span class="r17 r">s</span>;
+			}
+
+			<b>var</b> <span id="r20 rd" class="r20 r">n</span> = <b>new</b> <b>byte</b>[<span class="r19 r">nameEnd</span> - <span class="r18 r">nameStart</span>];
+			<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r17 r">s</span>, <span class="r18 r">nameStart</span>, <span class="r20 r">n</span>, 0, <span class="r20 r">n</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			<b>return</b> <span class="r20 r">n</span>;
+		}
+
+		<b>private static int</b> <a id="871b222cf00ee11b" href="R/871b222cf00ee11b.html" target="n" data-glyph="76,1" class="i method">BinarySearch</a>(<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <span id="r21 rd" class="r21 r">entries</span>, <b>byte</b>[] <span id="r22 rd" class="r22 r">nameUTF8</span>, <b>int</b> <span id="r23 rd" class="r23 r">nameUTF8Last</span>, <b>int</b> <span id="r24 rd" class="r24 r">nameStart</span>, <b>int</b> <span id="r25 rd" class="r25 r">nameEnd</span>)
+		{
+			<b>if</b> (<span class="r21 r">entries</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0) <b>return</b> -1;
+
+			<b>int</b> <span id="r26 rd" class="r26 r">high</span> = <span class="r21 r">entries</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+			<b>int</b> <span id="r27 rd" class="r27 r">low</span> = 0;
+			<b>do</b>
+			{
+			    <b>int</b> <span id="r28 rd" class="r28 r">mid</span> = (<b>int</b>) (((<b>uint</b>) (<span class="r27 r">low</span> + <span class="r26 r">high</span>)) &gt;&gt; 1);
+				<b>int</b> <span id="r29 rd" class="r29 r">cmp</span> = <a href="#86999c2e837986b4" class="i method">CompareNames</a>(<span class="r21 r">entries</span>[<span class="r28 r">mid</span>].<a href="TreeEntry.cs.html#c68618c8cb939fd5" class="i property">NameUTF8</a>, <span class="r22 r">nameUTF8</span>,
+					<span class="r24 r">nameStart</span>, <span class="r25 r">nameEnd</span>, <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>.<a href="TreeEntry.cs.html#402ccb3ca58588a6" class="i method">LastChar</a>(<span class="r21 r">entries</span>[<span class="r28 r">mid</span>]), <span class="r23 r">nameUTF8Last</span>);
+
+				<b>if</b> (<span class="r29 r">cmp</span> &lt; 0)
+				{
+					<span class="r27 r">low</span> = <span class="r28 r">mid</span> + 1;
+				}
+				<b>else if</b> (<span class="r29 r">cmp</span> == 0)
+				{
+					<b>return</b> <span class="r28 r">mid</span>;
+				}
+				<b>else</b>
+				{
+					<span class="r26 r">high</span> = <span class="r28 r">mid</span>;
+				}
+
+			} <b>while</b> (<span class="r27 r">low</span> &lt; <span class="r26 r">high</span>);
+			<b>return</b> -(<span class="r27 r">low</span> + 1);
+		}
+
+		<b>public override</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="f227778150c5871d" href="R/f227778150c5871d.html" target="n" data-glyph="102,1" class="i property">Repository</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#ea34e2019e27df62" class="i field">_db</a>; }
+		}
+
+		<b>public bool</b> <a id="91f7853d46e32339" href="R/91f7853d46e32339.html" target="n" data-glyph="102,1" class="i property">IsRoot</a>
+		{
+			<b>get</b> { <b>return</b> <a href="TreeEntry.cs.html#9960f104c00cc77f" class="i property">Parent</a> == <b>null</b>; }
+		}
+
+		<b>public override</b> <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a> <a id="a17ffbf87fcf910d" href="R/a17ffbf87fcf910d.html" target="n" data-glyph="102,1" class="i property">Mode</a>
+		{
+			<b>get</b> { <b>return</b> <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>; }
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Constructor for a new Tree</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The repository that owns the Tree.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="f2cd72703b360079" href="R/f2cd72703b360079.html" target="n" data-glyph="72,1" class="i constructor">Tree</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r30 rd" class="r30 r">repo</span>)
+			: <a href="TreeEntry.cs.html#703e50500d898f05" class="k">base</a>(<b>null</b>, <b>null</b>, <b>null</b>)
+		{
+			<a href="#ea34e2019e27df62" class="i field">_db</a> = <span class="r30 r">repo</span>;
+			<a href="#d789594314120933" class="i field">_contents</a> = <a href="#607cd78d8257b52e" class="i field">EmptyTree</a>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a Tree object with known content and hash value</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r31 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">raw</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="6f4170604db55bcd" href="R/6f4170604db55bcd.html" target="n" data-glyph="72,1" class="i constructor">Tree</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r31 rd" class="r31 r">repo</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r32 rd" class="r32 r">id</span>, <b>byte</b>[] <span id="r33 rd" class="r33 r">raw</span>)
+			: <a href="TreeEntry.cs.html#703e50500d898f05" class="k">base</a>(<b>null</b>, <span class="r32 r">id</span>, <b>null</b>)
+		{
+			<a href="#ea34e2019e27df62" class="i field">_db</a> = <span class="r31 r">repo</span>;
+			<a href="#3d2ae7fd546218dc" class="i method">ReadTree</a>(<span class="r33 r">raw</span>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a new Tree under another Tree</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">parent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">nameUTF8</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="458bcf8f79ff96be" href="R/458bcf8f79ff96be.html" target="n" data-glyph="72,1" class="i constructor">Tree</a>(<a href="#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r34 rd" class="r34 r">parent</span>, <b>byte</b>[] <span id="r35 rd" class="r35 r">nameUTF8</span>)
+			: <a href="TreeEntry.cs.html#703e50500d898f05" class="k">base</a>(<span class="r34 r">parent</span>, <b>null</b>, <span class="r35 r">nameUTF8</span>)
+		{
+			<a href="#ea34e2019e27df62" class="i field">_db</a> = <span class="r34 r">parent</span>.<a href="#f227778150c5871d" class="i property">Repository</a>;
+			<a href="#d789594314120933" class="i field">_contents</a> = <a href="#607cd78d8257b52e" class="i field">EmptyTree</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a Tree with a known SHA-1 under another tree. Data is not yet</span>
+		<span class="c">///</span><span class="c">	specified and will have to be loaded on demand.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">parent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">nameUTF8</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="c6410b105a6d9f1c" href="R/c6410b105a6d9f1c.html" target="n" data-glyph="72,1" class="i constructor">Tree</a>(<a href="#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r36 rd" class="r36 r">parent</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r37 rd" class="r37 r">id</span>, <b>byte</b>[] <span id="r38 rd" class="r38 r">nameUTF8</span>)
+			: <a href="TreeEntry.cs.html#703e50500d898f05" class="k">base</a>(<span class="r36 r">parent</span>, <span class="r37 r">id</span>, <span class="r38 r">nameUTF8</span>)
+		{
+			<a href="#ea34e2019e27df62" class="i field">_db</a> = <span class="r36 r">parent</span>.<a href="#f227778150c5871d" class="i property">Repository</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Returns true of the data of this Tree is loaded.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="0060e3d34734372e" href="R/0060e3d34734372e.html" target="n" data-glyph="102,1" class="i property">IsLoaded</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#d789594314120933" class="i field">_contents</a> != <b>null</b>; }
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Forget the in-memory data for this tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="48607eefd959984e" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Unload</a>()
+		{
+			<b>if</b> (<a href="TreeEntry.cs.html#18ec2ec46d679a32" class="i property">IsModified</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;Cannot unload a modified tree.&quot;</span>);
+			}
+
+			<a href="#d789594314120933" class="i field">_contents</a> = <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Adds a new or existing file with the specified name to this tree.</span>
+		<span class="c">///</span><span class="c">	Trees are added if necessary as the name may contain &#39;/&#39;:s.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r39 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> Name </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for the added file.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+
+		<b>public</b> <a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a> <a id="5fc82fa2e32048de" href="R/5fc82fa2e32048de.html" target="n" data-glyph="72,1" class="i method">AddFile</a>(<b>string</b> <span id="r39 rd" class="r39 r">name</span>)
+		{
+			<b>return</b> <a href="#5c791d41206b5499" class="i method">AddFile</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#6cad4279396ab06a" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r39 r">name</span>)), 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Adds a new or existing file with the specified name to this tree.</span>
+		<span class="c">///</span><span class="c">	Trees are added if necessary as the name may contain &#39;/&#39;:s.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r40 r">s</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> an array containing the name </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r41 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> when the name starts in the tree.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for the added file.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a> <a id="5c791d41206b5499" href="R/5c791d41206b5499.html" target="n" data-glyph="72,1" class="i method">AddFile</a>(<b>byte</b>[] <span id="r40 rd" class="r40 r">s</span>, <b>int</b> <span id="r41 rd" class="r41 r">offset</span>)
+		{
+			<b>int</b> <span id="r42 rd" class="r42 r">slash</span>;
+
+			<b>for</b> (<span class="r42 r">slash</span> = <span class="r41 r">offset</span>; <span class="r42 r">slash</span> &lt; <span class="r40 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r40 r">s</span>[<span class="r42 r">slash</span>] != <span class="s">&#39;/&#39;</span>; <span class="r42 r">slash</span>++)
+			{
+				<span class="c">// search for path component terminator</span>
+				<span class="c">// [henon] body is empty by intention!</span>
+			}
+
+			<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+            <b>byte</b> <span id="r43 rd" class="r43 r">xlast</span> = <span class="r42 r">slash</span> &lt; <span class="r40 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> ? (<b>byte</b>)<span class="s">&#39;/&#39;</span> : (<b>byte</b>)0;
+			<b>int</b> <span id="r44 rd" class="r44 r">p</span> = <a href="#871b222cf00ee11b" class="i method">BinarySearch</a>(<a href="#d789594314120933" class="i field">_contents</a>, <span class="r40 r">s</span>, <span class="r43 r">xlast</span>, <span class="r41 r">offset</span>, <span class="r42 r">slash</span>);
+			<b>if</b> (<span class="r44 r">p</span> &gt;= 0 &amp;&amp; <span class="r42 r">slash</span> &lt; <span class="r40 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <a href="#d789594314120933" class="i field">_contents</a>[<span class="r44 r">p</span>] <b>is</b> <a href="#5c7834780fcb0bc3" class="t t">Tree</a>)
+			{
+				<b>return</b> ((<a href="#5c7834780fcb0bc3" class="t t">Tree</a>)<a href="#d789594314120933" class="i field">_contents</a>[<span class="r44 r">p</span>]).<a href="#5c791d41206b5499" class="i method">AddFile</a>(<span class="r40 r">s</span>, <span class="r42 r">slash</span> + 1);
+			}
+
+			<b>byte</b>[] <span id="r45 rd" class="r45 r">newName</span> = <a href="#e306c095222bfb10" class="i method">SubString</a>(<span class="r40 r">s</span>, <span class="r41 r">offset</span>, <span class="r42 r">slash</span>);
+			<b>if</b> (<span class="r44 r">p</span> &gt;= 0)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/EntryExistsException.cs.html#4f84323f12d69eea" class="t constructor">EntryExistsException</a>(<a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#7b0958d23f8e00a2" class="i method">decode</a>(<span class="r45 r">newName</span>));
+			}
+
+			<b>if</b> (<span class="r42 r">slash</span> &lt; <span class="r40 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+                <a href="#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r46 rd" class="r46 r">t</span> = <b>new</b> <a href="#458bcf8f79ff96be" class="t constructor">Tree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r45 r">newName</span>);
+				<a href="#151e6b6e19d7f207" class="i method">InsertEntry</a>(<span class="r44 r">p</span>, <span class="r46 r">t</span>);
+				<b>return</b> <span class="r46 r">t</span>.<a href="#5c791d41206b5499" class="i method">AddFile</a>(<span class="r40 r">s</span>, <span class="r42 r">slash</span> + 1);
+			}
+
+            <a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a> <span id="r47 rd" class="r47 r">f</span> = <b>new</b> <a href="FileTreeEntry.cs.html#aff375e54e09490e" class="t constructor">FileTreeEntry</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <b>null</b>, <span class="r45 r">newName</span>, <b>false</b>);
+			<a href="#151e6b6e19d7f207" class="i method">InsertEntry</a>(<span class="r44 r">p</span>, <span class="r47 r">f</span>);
+			<b>return</b> <span class="r47 r">f</span>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Adds a new or existing Tree with the specified name to this tree.</span>
+		<span class="c">///</span><span class="c">	Trees are added if necessary as the name may contain &#39;/&#39;:s.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r48 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for the added tree.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#5c7834780fcb0bc3" class="t t">Tree</a> <a id="3d8afae09f945e9a" href="R/3d8afae09f945e9a.html" target="n" data-glyph="72,1" class="i method">AddTree</a>(<b>string</b> <span id="r48 rd" class="r48 r">name</span>)
+		{
+			<b>return</b> <a href="#ed8007712ccd71a7" class="i method">AddTree</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#6cad4279396ab06a" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r48 r">name</span>)), 0);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Adds a new or existing Tree with the specified name to this tree.</span>
+		<span class="c">///</span><span class="c">	Trees are added if necessary as the name may contain &#39;/&#39;:s.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r49 r">s</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> an array containing the name </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r50 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> when the name starts in the tree.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="t t">FileTreeEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for the added tree.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#5c7834780fcb0bc3" class="t t">Tree</a> <a id="ed8007712ccd71a7" href="R/ed8007712ccd71a7.html" target="n" data-glyph="72,1" class="i method">AddTree</a>(<b>byte</b>[] <span id="r49 rd" class="r49 r">s</span>, <b>int</b> <span id="r50 rd" class="r50 r">offset</span>)
+		{
+			<b>int</b> <span id="r51 rd" class="r51 r">slash</span>;
+
+			<b>for</b> (<span class="r51 r">slash</span> = <span class="r50 r">offset</span>; <span class="r51 r">slash</span> &lt; <span class="r49 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r49 r">s</span>[<span class="r51 r">slash</span>] != <span class="s">&#39;/&#39;</span>; <span class="r51 r">slash</span>++)
+			{
+				<span class="c">// search for path component terminator</span>
+			}
+
+			<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+			<b>int</b> <span id="r52 rd" class="r52 r">p</span> = <a href="#871b222cf00ee11b" class="i method">BinarySearch</a>(<a href="#d789594314120933" class="i field">_contents</a>, <span class="r49 r">s</span>, (<b>byte</b>)<span class="s">&#39;/&#39;</span>, <span class="r50 r">offset</span>, <span class="r51 r">slash</span>);
+			<b>if</b> (<span class="r52 r">p</span> &gt;= 0 &amp;&amp; <span class="r51 r">slash</span> &lt; <span class="r49 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <a href="#d789594314120933" class="i field">_contents</a>[<span class="r52 r">p</span>] <b>is</b> <a href="#5c7834780fcb0bc3" class="t t">Tree</a>)
+			{
+				<b>return</b> ((<a href="#5c7834780fcb0bc3" class="t t">Tree</a>)<a href="#d789594314120933" class="i field">_contents</a>[<span class="r52 r">p</span>]).<a href="#ed8007712ccd71a7" class="i method">AddTree</a>(<span class="r49 r">s</span>, <span class="r51 r">slash</span> + 1);
+			}
+
+			<b>byte</b>[] <span id="r53 rd" class="r53 r">newName</span> = <a href="#e306c095222bfb10" class="i method">SubString</a>(<span class="r49 r">s</span>, <span class="r50 r">offset</span>, <span class="r51 r">slash</span>);
+			<b>if</b> (<span class="r52 r">p</span> &gt;= 0)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/EntryExistsException.cs.html#4f84323f12d69eea" class="t constructor">EntryExistsException</a>(<a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#7b0958d23f8e00a2" class="i method">decode</a>(<span class="r53 r">newName</span>));
+			}
+
+            <a href="#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r54 rd" class="r54 r">t</span> = <b>new</b> <a href="#458bcf8f79ff96be" class="t constructor">Tree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r53 r">newName</span>);
+			<a href="#151e6b6e19d7f207" class="i method">InsertEntry</a>(<span class="r52 r">p</span>, <span class="r54 r">t</span>);
+			<b>return</b> <span class="r51 r">slash</span> == <span class="r49 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> ? <span class="r54 r">t</span> : <span class="r54 r">t</span>.<a href="#ed8007712ccd71a7" class="i method">AddTree</a>(<span class="r49 r">s</span>, <span class="r51 r">slash</span> + 1);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add the specified tree entry to this tree.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r55 r">e</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="4e55144ee51a0cb1" href="R/4e55144ee51a0cb1.html" target="n" data-glyph="72,1" class="i method">AddEntry</a>(<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r55 rd" class="r55 r">e</span>)
+		{
+			<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+			<b>int</b> <span id="r56 rd" class="r56 r">p</span> = <a href="#871b222cf00ee11b" class="i method">BinarySearch</a>(<a href="#d789594314120933" class="i field">_contents</a>, <span class="r55 r">e</span>.<a href="TreeEntry.cs.html#c68618c8cb939fd5" class="i property">NameUTF8</a>, <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>.<a href="TreeEntry.cs.html#402ccb3ca58588a6" class="i method">LastChar</a>(<span class="r55 r">e</span>), 0, <span class="r55 r">e</span>.<a href="TreeEntry.cs.html#c68618c8cb939fd5" class="i property">NameUTF8</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			<b>if</b> (<span class="r56 r">p</span> &lt; 0)
+			{
+				<span class="r55 r">e</span>.<a href="TreeEntry.cs.html#863788f087eb1f07" class="i method">AttachParent</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>);
+				<a href="#151e6b6e19d7f207" class="i method">InsertEntry</a>(<span class="r56 r">p</span>, <span class="r55 r">e</span>);
+			}
+			<b>else</b>
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/EntryExistsException.cs.html#4f84323f12d69eea" class="t constructor">EntryExistsException</a>(<span class="r55 r">e</span>.<a href="TreeEntry.cs.html#7a79dfb946aba405" class="i property">Name</a>);
+			}
+		}
+
+		<b>private void</b> <a id="151e6b6e19d7f207" href="R/151e6b6e19d7f207.html" target="n" data-glyph="76,1" class="i method">InsertEntry</a>(<b>int</b> <span id="r57 rd" class="r57 r">p</span>, <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r58 rd" class="r58 r">e</span>)
+		{
+			<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <span id="r59 rd" class="r59 r">c</span> = <a href="#d789594314120933" class="i field">_contents</a>;
+			<b>var</b> <span id="r60 rd" class="r60 r">n</span> = <b>new</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[<span class="r59 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> + 1];
+
+			<span class="r57 r">p</span> = -(<span class="r57 r">p</span> + 1);
+			<b>for</b> (<b>int</b> <span id="r61 rd" class="r61 r">k</span> = <span class="r59 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1; <span class="r61 r">k</span> &gt;= <span class="r57 r">p</span>; <span class="r61 r">k</span>--)
+			{
+				<span class="r60 r">n</span>[<span class="r61 r">k</span> + 1] = <span class="r59 r">c</span>[<span class="r61 r">k</span>];
+			}
+
+			<span class="r60 r">n</span>[<span class="r57 r">p</span>] = <span class="r58 r">e</span>;
+			<b>for</b> (<b>int</b> <span id="r62 rd" class="r62 r">k</span> = <span class="r57 r">p</span> - 1; <span class="r62 r">k</span> &gt;= 0; <span class="r62 r">k</span>--)
+			{
+				<span class="r60 r">n</span>[<span class="r62 r">k</span>] = <span class="r59 r">c</span>[<span class="r62 r">k</span>];
+			}
+
+			<a href="#d789594314120933" class="i field">_contents</a> = <span class="r60 r">n</span>;
+
+			<a href="TreeEntry.cs.html#dfa9524ce4878f51" class="i method">SetModified</a>();
+		}
+
+		<b>internal void</b> <a id="8804f18deb97753a" href="R/8804f18deb97753a.html" target="n" data-glyph="74,1" class="i method">RemoveEntry</a>(<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r63 rd" class="r63 r">e</span>)
+		{
+			<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <span id="r64 rd" class="r64 r">c</span> = <a href="#d789594314120933" class="i field">_contents</a>;
+			<b>int</b> <span id="r65 rd" class="r65 r">p</span> = <a href="#871b222cf00ee11b" class="i method">BinarySearch</a>(<span class="r64 r">c</span>, <span class="r63 r">e</span>.<a href="TreeEntry.cs.html#c68618c8cb939fd5" class="i property">NameUTF8</a>, <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>.<a href="TreeEntry.cs.html#402ccb3ca58588a6" class="i method">LastChar</a>(<span class="r63 r">e</span>), 0, <span class="r63 r">e</span>.<a href="TreeEntry.cs.html#c68618c8cb939fd5" class="i property">NameUTF8</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			<b>if</b> (<span class="r65 r">p</span> &gt;= 0)
+			{
+				<b>var</b> <span id="r66 rd" class="r66 r">n</span> = <b>new</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[<span class="r64 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1];
+				<b>for</b> (<b>int</b> <span id="r67 rd" class="r67 r">k</span> = <span class="r64 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1; <span class="r67 r">k</span> &gt; <span class="r65 r">p</span>; <span class="r67 r">k</span>--)
+				{
+					<span class="r66 r">n</span>[<span class="r67 r">k</span> - 1] = <span class="r64 r">c</span>[<span class="r67 r">k</span>];
+				}
+
+				<b>for</b> (<b>int</b> <span id="r68 rd" class="r68 r">k</span> = <span class="r65 r">p</span> - 1; <span class="r68 r">k</span> &gt;= 0; <span class="r68 r">k</span>--)
+				{
+					<span class="r66 r">n</span>[<span class="r68 r">k</span>] = <span class="r64 r">c</span>[<span class="r68 r">k</span>];
+				}
+
+				<a href="#d789594314120933" class="i field">_contents</a> = <span class="r66 r">n</span>;
+				<a href="TreeEntry.cs.html#dfa9524ce4878f51" class="i method">SetModified</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets the number of members in this tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual  int</b> <a id="3dfefac78521bf43" href="R/3dfefac78521bf43.html" target="n" data-glyph="102,1" class="i property">MemberCount</a>
+		{
+			<b>get</b>
+			{
+				<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+				<b>return</b> <a href="#d789594314120933" class="i field">_contents</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+			}
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Return all members of the tree sorted in Git order.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c">	Entries are sorted by the numerical unsigned byte</span>
+		<span class="c">///</span><span class="c">	values with (sub)trees having an implicit &#39;/&#39;. An</span>
+		<span class="c">///</span><span class="c">	example of a tree with three entries. a:b is an</span>
+		<span class="c">///</span><span class="c">	actual file name here.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c">	100644 blob e69de29bb2d1d6434b8b29ae775ad8c2e48c5391    a.b</span>
+		<span class="c">///</span><span class="c">	040000 tree 4277b6e69d25e5efa77c455340557b384a4c018a    a</span>
+		<span class="c">///</span><span class="c">	100644 blob e69de29bb2d1d6434b8b29ae775ad8c2e48c5391    a:b</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">All entries in this Tree, sorted.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <a id="9883e64bacef8470" href="R/9883e64bacef8470.html" target="n" data-glyph="102,1" class="i property">Members</a>
+		{
+			<b>get</b>
+			{
+				<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+				<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <span id="r69 rd" class="r69 r">c</span> = <a href="#d789594314120933" class="i field">_contents</a>;
+				<b>if</b> (<span class="r69 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> != 0)
+				{
+					<b>var</b> <span id="r70 rd" class="r70 r">r</span> = <b>new</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[<span class="r69 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>];
+					<b>for</b> (<b>int</b> <span id="r71 rd" class="r71 r">k</span> = <span class="r69 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1; <span class="r71 r">k</span> &gt;= 0; <span class="r71 r">k</span>--)
+					{
+						<span class="r70 r">r</span>[<span class="r71 r">k</span>] = <span class="r69 r">c</span>[<span class="r71 r">k</span>];
+					}
+
+					<b>return</b> <span class="r70 r">r</span>;
+				}
+
+				<b>return</b> <span class="r69 r">c</span>;
+			}
+		}
+
+		<b>private bool</b> <a id="59846750f9789e55" href="R/59846750f9789e55.html" target="n" data-glyph="76,1" class="i method">Exists</a>(<b>string</b> <span id="r72 rd" class="r72 r">s</span>, <b>byte</b> <span id="r73 rd" class="r73 r">slast</span>)
+		{
+			<b>return</b> <a href="#1c2ff1d10bd18a4d" class="i method">FindMember</a>(<span class="r72 r">s</span>, <span class="r73 r">slast</span>) != <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r74 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Path to the tree.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	True if a tree with the specified path can be found under this</span>
+		<span class="c">///</span><span class="c">	tree. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="9bba66177560bf4a" href="R/9bba66177560bf4a.html" target="n" data-glyph="72,1" class="i method">ExistsTree</a>(<b>string</b> <span id="r74 rd" class="r74 r">path</span>)
+		{
+			<b>return</b> <a href="#59846750f9789e55" class="i method">Exists</a>(<span class="r74 r">path</span>, (<b>byte</b>)<span class="s">&#39;/&#39;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r75 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> True if a blob or symlink with the specified name can be found</span>
+		<span class="c">///</span><span class="c"> under this tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="134c21b7179c3141" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ExistsBlob</a>(<b>string</b> <span id="r75 rd" class="r75 r">path</span>)
+		{
+			<b>return</b> <a href="#59846750f9789e55" class="i method">Exists</a>(<span class="r75 r">path</span>, 0);
+		}
+
+		<b>private</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <a id="1c2ff1d10bd18a4d" href="R/1c2ff1d10bd18a4d.html" target="n" data-glyph="76,1" class="i method">FindMember</a>(<b>string</b> <span id="r76 rd" class="r76 r">s</span>, <b>byte</b> <span id="r77 rd" class="r77 r">slast</span>)
+		{
+			<b>return</b> <a href="#0a7608685d4bb132" class="i method">FindMember</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#6cad4279396ab06a" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r76 r">s</span>)), <span class="r77 r">slast</span>, 0);
+		}
+
+		<b>private</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <a id="0a7608685d4bb132" href="R/0a7608685d4bb132.html" target="n" data-glyph="76,1" class="i method">FindMember</a>(<b>byte</b>[] <span id="r78 rd" class="r78 r">s</span>, <b>byte</b> <span id="r79 rd" class="r79 r">slast</span>, <b>int</b> <span id="r80 rd" class="r80 r">offset</span>)
+		{
+			<b>int</b> <span id="r81 rd" class="r81 r">slash</span>;
+
+			<b>for</b> (<span class="r81 r">slash</span> = <span class="r80 r">offset</span>; <span class="r81 r">slash</span> &lt; <span class="r78 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r78 r">s</span>[<span class="r81 r">slash</span>] != <span class="s">&#39;/&#39;</span>; <span class="r81 r">slash</span>++)
+			{
+				<span class="c">// search for path component terminator</span>
+				<span class="c">// [henon] body is intentionally empty!</span>
+			}
+
+			<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+			<b>byte</b> <span id="r82 rd" class="r82 r">xlast</span> = <span class="r81 r">slash</span> &lt; <span class="r78 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> ? (<b>byte</b>)<span class="s">&#39;/&#39;</span> : <span class="r79 r">slast</span>;
+			<b>int</b> <span id="r83 rd" class="r83 r">p</span> = <a href="#871b222cf00ee11b" class="i method">BinarySearch</a>(<a href="#d789594314120933" class="i field">_contents</a>, <span class="r78 r">s</span>, <span class="r82 r">xlast</span>, <span class="r80 r">offset</span>, <span class="r81 r">slash</span>);
+			<b>if</b> (<span class="r83 r">p</span> &gt;= 0)
+			{
+				<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r84 rd" class="r84 r">r</span> = <a href="#d789594314120933" class="i field">_contents</a>[<span class="r83 r">p</span>];
+				<b>if</b> (<span class="r81 r">slash</span> &lt; <span class="r78 r">s</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1)
+				{
+					<a href="#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r85 rd" class="r85 r">oTree</span> = (<span class="r84 r">r</span> <b>as</b> <a href="#5c7834780fcb0bc3" class="t t">Tree</a>);
+					<b>return</b> <span class="r85 r">oTree</span> != <b>null</b> ? <span class="r85 r">oTree</span>.<a href="#0a7608685d4bb132" class="i method">FindMember</a>(<span class="r78 r">s</span>, <span class="r79 r">slast</span>, <span class="r81 r">slash</span> + 1) : <b>null</b>;
+				}
+
+				<b>return</b> <span class="r84 r">r</span>;
+			}
+
+			<b>return null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r86 r">blobName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#95f2d0a3e218541d" class="i property">TreeEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> representing an object with the specified</span>
+		<span class="c">///</span><span class="c"> relative path.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <a id="5da4e82e421301e7" href="R/5da4e82e421301e7.html" target="n" data-glyph="72,1" class="i method">FindBlobMember</a>(<b>string</b> <span id="r86 rd" class="r86 r">blobName</span>)
+		{
+			<b>return</b> <a href="#1c2ff1d10bd18a4d" class="i method">FindMember</a>(<span class="r86 r">blobName</span>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r87 r">treeName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Tree name</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">return a </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#5c7834780fcb0bc3" class="t t">Tree</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> with the name treeName or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <a id="60a0f93d56dc6a93" href="R/60a0f93d56dc6a93.html" target="n" data-glyph="72,1" class="i method">findTreeMember</a>(<b>string</b> <span id="r87 rd" class="r87 r">treeName</span>)
+		{
+			<b>return</b> <a href="#1c2ff1d10bd18a4d" class="i method">FindMember</a>(<span class="r87 r">treeName</span>, (<b>byte</b>)<span class="s">&#39;/&#39;</span>);
+		}
+
+		<b>public override void</b> <a id="54b74455d716e171" href="R/54b74455d716e171.html" target="n" data-glyph="72,1" class="i method">Accept</a>(<a href="TreeVisitor.cs.html#cfe3216a7691cc69" class="t t">TreeVisitor</a> <span id="r88 rd" class="r88 r">tv</span>, <b>int</b> <span id="r89 rd" class="r89 r">flags</span>)
+		{
+			<b>if</b> ((<a href="TreeEntry.cs.html#092c3fb5b04a308c" class="i field">MODIFIED_ONLY</a> &amp; <span class="r89 r">flags</span>) == <a href="TreeEntry.cs.html#092c3fb5b04a308c" class="i field">MODIFIED_ONLY</a> &amp;&amp; !<a href="TreeEntry.cs.html#18ec2ec46d679a32" class="i property">IsModified</a>) <b>return</b>;
+
+			<b>if</b> ((<a href="TreeEntry.cs.html#97dc534028519262" class="i field">LOADED_ONLY</a> &amp; <span class="r89 r">flags</span>) == <a href="TreeEntry.cs.html#97dc534028519262" class="i field">LOADED_ONLY</a> &amp;&amp; !<a href="#0060e3d34734372e" class="i property">IsLoaded</a>)
+			{
+				<span class="r88 r">tv</span>.<a href="TreeVisitor.cs.html#0981a3e6cf3a2a25" class="i method">StartVisitTree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>);
+				<span class="r88 r">tv</span>.<a href="TreeVisitor.cs.html#8b5a5b2f75e68657" class="i method">EndVisitTree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>);
+				<b>return</b>;
+			}
+
+			<a href="#08fd5b7136d49adc" class="i method">EnsureLoaded</a>();
+			<span class="r88 r">tv</span>.<a href="TreeVisitor.cs.html#0981a3e6cf3a2a25" class="i method">StartVisitTree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>);
+
+			<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <span id="r90 rd" class="r90 r">c</span> = (<a href="TreeEntry.cs.html#c4600d668449f934" class="i field">CONCURRENT_MODIFICATION</a> &amp; <span class="r89 r">flags</span>) == <a href="TreeEntry.cs.html#c4600d668449f934" class="i field">CONCURRENT_MODIFICATION</a> ? <a href="#9883e64bacef8470" class="i property">Members</a> : <a href="#d789594314120933" class="i field">_contents</a>;
+
+			<b>for</b> (<b>int</b> <span id="r91 rd" class="r91 r">k</span> = 0; <span class="r91 r">k</span> &lt; <span class="r90 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r91 r">k</span>++)
+			{
+				<span class="r90 r">c</span>[<span class="r91 r">k</span>].<a href="TreeEntry.cs.html#f9c485f835cbd546" class="i method">Accept</a>(<span class="r88 r">tv</span>, <span class="r89 r">flags</span>);
+			}
+
+			<span class="r88 r">tv</span>.<a href="TreeVisitor.cs.html#8b5a5b2f75e68657" class="i method">EndVisitTree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>);
+		}
+        
+		<b>private void</b> <a id="08fd5b7136d49adc" href="R/08fd5b7136d49adc.html" target="n" data-glyph="76,1" class="i method">EnsureLoaded</a>()
+		{
+			<b>if</b> (<a href="#0060e3d34734372e" class="i property">IsLoaded</a>) <b>return</b>;
+
+			<a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r92 rd" class="r92 r">or</span> = <a href="#ea34e2019e27df62" class="i field">_db</a>.<a href="Repository.cs.html#70bd1e25691509a0" class="i method">OpenTree</a>(<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>);
+			<b>if</b> (<span class="r92 r">or</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/MissingObjectException.cs.html#0d6db60bed07e3b0" class="t constructor">MissingObjectException</a>(<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#d3cd40a2991d1aba" class="i field">Tree</a>);
+			}
+
+			<a href="#3d2ae7fd546218dc" class="i method">ReadTree</a>(<span class="r92 r">or</span>.<a href="ObjectLoader.cs.html#d883e0b16803f8fb" class="i property">Bytes</a>);
+		}
+
+		<b>private void</b> <a id="3d2ae7fd546218dc" href="R/3d2ae7fd546218dc.html" target="n" data-glyph="76,1" class="i method">ReadTree</a>(<b>byte</b>[] <span id="r93 rd" class="r93 r">raw</span>)
+		{
+			<b>int</b> <span id="r94 rd" class="r94 r">rawSize</span> = <span class="r93 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+			<b>int</b> <span id="r95 rd" class="r95 r">rawPtr</span> = 0;
+			<b>int</b> <span id="r96 rd" class="r96 r">nextIndex</span> = 0;
+
+			<b>while</b> (<span class="r95 r">rawPtr</span> &lt; <span class="r94 r">rawSize</span>)
+			{
+				<b>while</b> (<span class="r95 r">rawPtr</span> &lt; <span class="r94 r">rawSize</span> &amp;&amp; <span class="r93 r">raw</span>[<span class="r95 r">rawPtr</span>] != 0)
+				{
+					<span class="r95 r">rawPtr</span>++;
+				}
+
+				<span class="r95 r">rawPtr</span>++;
+				<span class="r95 r">rawPtr</span> += <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>;
+				<span class="r96 r">nextIndex</span>++;
+			}
+
+			<b>var</b> <span id="r97 rd" class="r97 r">temp</span> = <b>new</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[<span class="r96 r">nextIndex</span>];
+			<span class="r95 r">rawPtr</span> = 0;
+			<span class="r96 r">nextIndex</span> = 0;
+
+			<b>while</b> (<span class="r95 r">rawPtr</span> &lt; <span class="r94 r">rawSize</span>)
+			{
+				<b>int</b> <span id="r98 rd" class="r98 r">c</span> = <span class="r93 r">raw</span>[<span class="r95 r">rawPtr</span>++];
+				<b>if</b> (<span class="r98 r">c</span> &lt; <span class="s">&#39;0&#39;</span> || <span class="r98 r">c</span> &gt; <span class="s">&#39;7&#39;</span>)
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>, <span class="s">&quot;invalid entry mode&quot;</span>);
+				}
+
+				<b>int</b> <span id="r99 rd" class="r99 r">mode</span> = <span class="r98 r">c</span> - <span class="s">&#39;0&#39;</span>;
+
+				<b>while</b> (<b>true</b>)
+				{
+					<span class="r98 r">c</span> = <span class="r93 r">raw</span>[<span class="r95 r">rawPtr</span>++];
+					<b>if</b> (<span class="s">&#39; &#39;</span> == <span class="r98 r">c</span>) <b>break</b>;
+
+					<b>if</b> (<span class="r98 r">c</span> &lt; <span class="s">&#39;0&#39;</span> || <span class="r98 r">c</span> &gt; <span class="s">&#39;7&#39;</span>)
+					{
+						<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>, <span class="s">&quot;invalid mode&quot;</span>);
+					}
+
+					<span class="r99 r">mode</span> &lt;&lt;= 3;
+					<span class="r99 r">mode</span> += <span class="r98 r">c</span> - <span class="s">&#39;0&#39;</span>;
+				}
+
+				<b>int</b> <span id="r100 rd" class="r100 r">nameLen</span> = 0;
+				<b>while</b> (<span class="r93 r">raw</span>[<span class="r95 r">rawPtr</span> + <span class="r100 r">nameLen</span>] != 0)
+				{
+					<span class="r100 r">nameLen</span>++;
+				}
+
+				<b>var</b> <span id="r101 rd" class="r101 r">name</span> = <b>new</b> <b>byte</b>[<span class="r100 r">nameLen</span>];
+				<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r93 r">raw</span>, <span class="r95 r">rawPtr</span>, <span class="r101 r">name</span>, 0, <span class="r100 r">nameLen</span>);
+				<span class="r95 r">rawPtr</span> += <span class="r100 r">nameLen</span> + 1;
+
+				<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r102 rd" class="r102 r">id</span> = <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#6c7378267feaae09" class="i method">FromRaw</a>(<span class="r93 r">raw</span>, <span class="r95 r">rawPtr</span>);
+				<span class="r95 r">rawPtr</span> += <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>;
+
+				<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r103 rd" class="r103 r">ent</span>;
+				<b>if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#be784a832405c1cc" class="i field">RegularFile</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r99 r">mode</span>))
+				{
+					<span class="r103 r">ent</span> = <b>new</b> <a href="FileTreeEntry.cs.html#aff375e54e09490e" class="t constructor">FileTreeEntry</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r102 r">id</span>, <span class="r101 r">name</span>, <b>false</b>);
+				}
+				<b>else if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r99 r">mode</span>))
+				{
+					<span class="r103 r">ent</span> = <b>new</b> <a href="FileTreeEntry.cs.html#aff375e54e09490e" class="t constructor">FileTreeEntry</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r102 r">id</span>, <span class="r101 r">name</span>, <b>true</b>);
+				}
+				<b>else if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r99 r">mode</span>))
+				{
+					<span class="r103 r">ent</span> = <b>new</b> <a href="#c6410b105a6d9f1c" class="t constructor">Tree</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r102 r">id</span>, <span class="r101 r">name</span>);
+				}
+                <b>else if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#9389275b7fd29b59" class="i field">Symlink</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r99 r">mode</span>))
+                {
+                    <span class="r103 r">ent</span> = <b>new</b> <a href="SymlinkTreeEntry.cs.html#237df5907e6aba69" class="t constructor">SymlinkTreeEntry</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r102 r">id</span>, <span class="r101 r">name</span>);
+                }
+                <b>else if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#2aa78f80011ca9c8" class="i field">GitLink</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r99 r">mode</span>))
+                {
+                    <span class="r103 r">ent</span> = <b>new</b> <a href="GitlinkTreeEntry.cs.html#e1fd60b06c35bc97" class="t constructor">GitLinkTreeEntry</a>(<a href="#5c7834780fcb0bc3" class="k">this</a>, <span class="r102 r">id</span>, <span class="r101 r">name</span>);
+                }
+				<b>else</b>
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>, <span class="s">&quot;Invalid mode: &quot;</span> + <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#60c42f04fafc878e" class="i method">ToString</a>(<span class="r99 r">mode</span>, 8));
+				}
+
+				<span class="r97 r">temp</span>[<span class="r96 r">nextIndex</span>++] = <span class="r103 r">ent</span>;
+			}
+
+			<a href="#d789594314120933" class="i field">_contents</a> = <span class="r97 r">temp</span>;
+		}
+
+		<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="5dac5a8ef0122c99" href="R/5dac5a8ef0122c99.html" target="n" data-glyph="102,1" class="i property">TreeId</a>
+		{
+			<b>get</b> { <b>return</b> <a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>; }
+		}
+
+		<b>public</b> <a href="#5c7834780fcb0bc3" class="t t">Tree</a> <a id="95f2d0a3e218541d" href="R/95f2d0a3e218541d.html" target="n" data-glyph="102,1" class="i property">TreeEntry</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#5c7834780fcb0bc3" class="k">this</a>; }
+		}
+
+		<b>public override string</b> <a id="31aae3810a1375b9" href="R/31aae3810a1375b9.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+		{
+			<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r104 rd" class="r104 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+			<span class="r104 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#b0c86d6089a488f2" class="i method">ToString</a>(<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>));
+			<span class="r104 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot; T &quot;</span>);
+			<span class="r104 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="TreeEntry.cs.html#f2fc52ae001c479c" class="i property">FullName</a>);
+			<b>return</b> <span class="r104 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

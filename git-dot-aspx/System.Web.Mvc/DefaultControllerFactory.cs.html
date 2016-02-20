@@ -1,0 +1,392 @@
+﻿<!DOCTYPE html>
+<html><head><title>DefaultControllerFactory.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(383);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/DefaultControllerFactory.cs" target="_top">DefaultControllerFactory.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Concurrent</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Routing</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">SessionState</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    <b>public class</b> <a id="da16878525ab7fe3" href="R/da16878525ab7fe3.html" target="n" data-glyph="0,0" class="t t">DefaultControllerFactory</a> : <a href="IControllerFactory.cs.html#fd3068446c31f300" class="t t">IControllerFactory</a>
+    {
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#2e5ef5704344a309" class="t t">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@System.Web/A.html#3dab5efec233d235" class="t t">SessionStateBehavior</a>&gt; <a id="8d807b1f9e843a79" href="R/8d807b1f9e843a79.html" target="n" data-glyph="46,1" class="i field">_sessionStateCache</a> = <b>new</b> <a href="@0@mscorlib/A.html#abc35f3c19fa0290" class="t constructor">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@System.Web/A.html#3dab5efec233d235" class="t t">SessionStateBehavior</a>&gt;();
+        <b>private static</b> <a href="ControllerTypeCache.cs.html#906b10dbc5f737c2" class="t t">ControllerTypeCache</a> <a id="de72e48990398e0f" href="R/de72e48990398e0f.html" target="n" data-glyph="46,1" class="i field">_staticControllerTypeCache</a> = <b>new</b> <a href="ControllerTypeCache.cs.html#906b10dbc5f737c2" class="t constructor">ControllerTypeCache</a>();
+        <b>private</b> <a href="IBuildManager.cs.html#50efdee650562fa0" class="t t">IBuildManager</a> <a id="2ce99f7f6b58856e" href="R/2ce99f7f6b58856e.html" target="n" data-glyph="46,1" class="i field">_buildManager</a>;
+        <b>private</b> <a href="IResolver.cs.html#72156061224331b6" class="t t">IResolver</a>&lt;<a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a>&gt; <a id="8fcd3bc371985dc8" href="R/8fcd3bc371985dc8.html" target="n" data-glyph="46,1" class="i field">_activatorResolver</a>;
+        <b>private</b> <a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a> <a id="50502817f5ede803" href="R/50502817f5ede803.html" target="n" data-glyph="46,1" class="i field">_controllerActivator</a>;
+        <b>private</b> <a href="ControllerBuilder.cs.html#dc383c2ded6ed123" class="t t">ControllerBuilder</a> <a id="76ec28f29558b486" href="R/76ec28f29558b486.html" target="n" data-glyph="46,1" class="i field">_controllerBuilder</a>;
+        <b>private</b> <a href="ControllerTypeCache.cs.html#906b10dbc5f737c2" class="t t">ControllerTypeCache</a> <a id="f976e7d6931ffe3e" href="R/f976e7d6931ffe3e.html" target="n" data-glyph="46,1" class="i field">_instanceControllerTypeCache</a>;
+ 
+        <b>public</b> <a id="c567c3c42070b842" href="R/c567c3c42070b842.html" target="n" data-glyph="72,1" class="i constructor">DefaultControllerFactory</a>()
+            : <a href="#413b1860746184aa" class="k">this</a>(<b>null</b>, <b>null</b>, <b>null</b>)
+        {
+        }
+ 
+        <b>public</b> <a id="f44141c968beb68e" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">DefaultControllerFactory</a>(<a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a> <span id="r0 rd" class="r0 r">controllerActivator</span>)
+            : <a href="#413b1860746184aa" class="k">this</a>(<span class="r0 r">controllerActivator</span>, <b>null</b>, <b>null</b>)
+        {
+        }
+ 
+        <b>internal</b> <a id="413b1860746184aa" href="R/413b1860746184aa.html" target="n" data-glyph="74,1" class="i constructor">DefaultControllerFactory</a>(<a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a> <span id="r1 rd" class="r1 r">controllerActivator</span>, <a href="IResolver.cs.html#72156061224331b6" class="t t">IResolver</a>&lt;<a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a>&gt; <span id="r2 rd" class="r2 r">activatorResolver</span>, <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <span id="r3 rd" class="r3 r">dependencyResolver</span>)
+        {
+            <b>if</b> (<span class="r1 r">controllerActivator</span> != <b>null</b>)
+            {
+                <a href="#50502817f5ede803" class="i field">_controllerActivator</a> = <span class="r1 r">controllerActivator</span>;
+            }
+            <b>else</b>
+            {
+                <a href="#8fcd3bc371985dc8" class="i field">_activatorResolver</a> = <span class="r2 r">activatorResolver</span> ?? <b>new</b> <a href="SingleServiceResolver.cs.html#3d36c5ecfa6072f1" class="t constructor">SingleServiceResolver</a>&lt;<a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a>&gt;(
+                                                              () =&gt; <b>null</b>,
+                                                              <b>new</b> <a href="#df2b4e820de6092b" class="t constructor">DefaultControllerActivator</a>(<span class="r3 r">dependencyResolver</span>),
+                                                              <span class="s">&quot;DefaultControllerFactory constructor&quot;</span>);
+            }
+        }
+ 
+        <b>private</b> <a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a> <a id="5b6cbf0a7c2cfb87" href="R/5b6cbf0a7c2cfb87.html" target="n" data-glyph="106,1" class="i property">ControllerActivator</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#50502817f5ede803" class="i field">_controllerActivator</a> != <b>null</b>)
+                {
+                    <b>return</b> <a href="#50502817f5ede803" class="i field">_controllerActivator</a>;
+                }
+                <a href="#50502817f5ede803" class="i field">_controllerActivator</a> = <a href="#8fcd3bc371985dc8" class="i field">_activatorResolver</a>.<a href="IResolver.cs.html#235c1cc9bc557145" class="i property">Current</a>;
+                <b>return</b> <a href="#50502817f5ede803" class="i field">_controllerActivator</a>;
+            }
+        }
+ 
+        <b>internal</b> <a href="IBuildManager.cs.html#50efdee650562fa0" class="t t">IBuildManager</a> <a id="0980b7565d455af5" href="R/0980b7565d455af5.html" target="n" data-glyph="104,1" class="i property">BuildManager</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#2ce99f7f6b58856e" class="i field">_buildManager</a> == <b>null</b>)
+                {
+                    <a href="#2ce99f7f6b58856e" class="i field">_buildManager</a> = <b>new</b> <a href="BuildManagerWrapper.cs.html#0e92ffaf1204c220" class="t constructor">BuildManagerWrapper</a>();
+                }
+                <b>return</b> <a href="#2ce99f7f6b58856e" class="i field">_buildManager</a>;
+            }
+            <b>set</b> { <a href="#2ce99f7f6b58856e" class="i field">_buildManager</a> = <b>value</b>; }
+        }
+ 
+        <b>internal</b> <a href="ControllerBuilder.cs.html#dc383c2ded6ed123" class="t t">ControllerBuilder</a> <a id="e55a3483a04abcd5" href="R/e55a3483a04abcd5.html" target="n" data-glyph="104,1" class="i property">ControllerBuilder</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#76ec28f29558b486" class="i field">_controllerBuilder</a> ?? <a href="ControllerBuilder.cs.html#dc383c2ded6ed123" class="t t">ControllerBuilder</a>.<a href="ControllerBuilder.cs.html#ddf3b305ce361b8d" class="i property">Current</a>; }
+            <b>set</b> { <a href="#76ec28f29558b486" class="i field">_controllerBuilder</a> = <b>value</b>; }
+        }
+ 
+        <b>internal</b> <a href="ControllerTypeCache.cs.html#906b10dbc5f737c2" class="t t">ControllerTypeCache</a> <a id="d51e093e2a8ec23d" href="R/d51e093e2a8ec23d.html" target="n" data-glyph="104,1" class="i property">ControllerTypeCache</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#f976e7d6931ffe3e" class="i field">_instanceControllerTypeCache</a> ?? <a href="#de72e48990398e0f" class="i field">_staticControllerTypeCache</a>; }
+            <b>set</b> { <a href="#f976e7d6931ffe3e" class="i field">_instanceControllerTypeCache</a> = <b>value</b>; }
+        }
+ 
+        <b>internal static</b> <a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a> <a id="76a0aaa418d3c00a" href="R/76a0aaa418d3c00a.html" target="n" data-glyph="74,1" class="i method">CreateAmbiguousControllerException</a>(<a href="@0@System.Web/A.html#090919121320fbd1" class="t t">RouteBase</a> <span id="r4 rd" class="r4 r">route</span>, <b>string</b> <span id="r5 rd" class="r5 r">controllerName</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <span id="r6 rd" class="r6 r">matchingTypes</span>)
+        {
+            <span class="c">// we need to generate an exception containing all the controller types</span>
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r7 rd" class="r7 r">typeList</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r8 rd" class="r8 r">matchedType</span> <b>in</b> <span class="r6 r">matchingTypes</span>)
+            {
+                <span class="r7 r">typeList</span>.<a href="@0@mscorlib/A.html#c0554798fe05ba4f" class="i method">AppendLine</a>();
+                <span class="r7 r">typeList</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r8 r">matchedType</span>.<a href="@0@mscorlib/A.html#976443bb39dc37cd" class="i property">FullName</a>);
+            }
+ 
+            <b>string</b> <span id="r9 rd" class="r9 r">errorText</span>;
+            <a href="@0@System.Web/A.html#7709a57a53b95f39" class="t t">Route</a> <span id="r10 rd" class="r10 r">castRoute</span> = <span class="r4 r">route</span> <b>as</b> <a href="@0@System.Web/A.html#7709a57a53b95f39" class="t t">Route</a>;
+            <b>if</b> (<span class="r10 r">castRoute</span> != <b>null</b>)
+            {
+                <span class="r9 r">errorText</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>, <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#4c0609c29f8fcdf6" class="i property">DefaultControllerFactory_ControllerNameAmbiguous_WithRouteUrl</a>,
+                                          <span class="r5 r">controllerName</span>, <span class="r10 r">castRoute</span>.<a href="@0@System.Web/A.html#97b1de49279e20e8" class="i property">Url</a>, <span class="r7 r">typeList</span>, <a href="@0@mscorlib/A.html#7d2f1469d916fc63" class="t t">Environment</a>.<a href="@0@mscorlib/A.html#63a04833d43dd9d3" class="i property">NewLine</a>);
+            }
+            <b>else</b>
+            {
+                <span class="r9 r">errorText</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>, <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#901717265ea6a92c" class="i property">DefaultControllerFactory_ControllerNameAmbiguous_WithoutRouteUrl</a>,
+                                          <span class="r5 r">controllerName</span>, <span class="r7 r">typeList</span>, <a href="@0@mscorlib/A.html#7d2f1469d916fc63" class="t t">Environment</a>.<a href="@0@mscorlib/A.html#63a04833d43dd9d3" class="i property">NewLine</a>);
+            }
+ 
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="r9 r">errorText</span>);
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a> <a id="07c1dc947d5d58e6" href="R/07c1dc947d5d58e6.html" target="n" data-glyph="76,1" class="i method">CreateDirectRouteAmbiguousControllerException</a>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <span id="r11 rd" class="r11 r">matchingTypes</span>)
+        {
+            <span class="c">// we need to generate an exception containing all the controller types</span>
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r12 rd" class="r12 r">typeList</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r13 rd" class="r13 r">matchedType</span> <b>in</b> <span class="r11 r">matchingTypes</span>)
+            {
+                <span class="r12 r">typeList</span>.<a href="@0@mscorlib/A.html#c0554798fe05ba4f" class="i method">AppendLine</a>();
+                <span class="r12 r">typeList</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r13 r">matchedType</span>.<a href="@0@mscorlib/A.html#976443bb39dc37cd" class="i property">FullName</a>);
+            }
+ 
+            <b>string</b> <span id="r14 rd" class="r14 r">errorText</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(
+                <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>,
+                <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#375e1c76c1a4b26d" class="i property">DefaultControllerFactory_DirectRouteAmbiguous</a>,
+                <span class="r12 r">typeList</span>,
+                <a href="@0@mscorlib/A.html#7d2f1469d916fc63" class="t t">Environment</a>.<a href="@0@mscorlib/A.html#63a04833d43dd9d3" class="i property">NewLine</a>);
+ 
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="r14 r">errorText</span>);
+        }
+ 
+        <b>public virtual</b> <a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a> <a id="5613c383a0ea9dca" href="R/5613c383a0ea9dca.html" target="n" data-glyph="72,1" class="i method">CreateController</a>(<a href="@0@System.Web/A.html#eedd1fb7c5b6334c" class="t t">RequestContext</a> <span id="r15 rd" class="r15 r">requestContext</span>, <b>string</b> <span id="r16 rd" class="r16 r">controllerName</span>)
+        {
+            <b>if</b> (<span class="r15 r">requestContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;requestContext&quot;</span>);
+            }
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r16 r">controllerName</span>) &amp;&amp; !<span class="r15 r">requestContext</span>.<a href="@0@System.Web/A.html#66a25a5056592d0f" class="i property">RouteData</a>.<a href="Routing/DirectRouteExtensions.cs.html#41dece4c48b2a131" class="i method">HasDirectRouteMatch</a>())
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#b811ee329004b31f" class="i property">Common_NullOrEmpty</a>, <span class="s">&quot;controllerName&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r17 rd" class="r17 r">controllerType</span> = <a href="#97255effce453eeb" class="i method">GetControllerType</a>(<span class="r15 r">requestContext</span>, <span class="r16 r">controllerName</span>);
+            <a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a> <span id="r18 rd" class="r18 r">controller</span> = <a href="#25870ef7d30f5bb1" class="i method">GetControllerInstance</a>(<span class="r15 r">requestContext</span>, <span class="r17 r">controllerType</span>);
+            <b>return</b> <span class="r18 r">controller</span>;
+        }
+ 
+        <b>protected internal virtual</b> <a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a> <a id="25870ef7d30f5bb1" href="R/25870ef7d30f5bb1.html" target="n" data-glyph="75,1" class="i method">GetControllerInstance</a>(<a href="@0@System.Web/A.html#eedd1fb7c5b6334c" class="t t">RequestContext</a> <span id="r19 rd" class="r19 r">requestContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r20 rd" class="r20 r">controllerType</span>)
+        {
+            <b>if</b> (<span class="r20 r">controllerType</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@System.Web/A.html#2ce8d9e9ab0ad839" class="t constructor">HttpException</a>(404,
+                                        <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(
+                                            <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>,
+                                            <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#badb113b4b64360a" class="i property">DefaultControllerFactory_NoControllerFound</a>,
+                                            <span class="r19 r">requestContext</span>.<a href="@0@System.Web/A.html#8ba2ef6eebe87168" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#bf9eed8ebb48f81f" class="i property">Request</a>.<a href="@0@System.Web/A.html#ed4a6cb00a5dfa33" class="i property">Path</a>));
+            }
+            <b>if</b> (!<b>typeof</b>(<a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a>).<a href="@0@mscorlib/A.html#ba0cffea035fe210" class="i method">IsAssignableFrom</a>(<span class="r20 r">controllerType</span>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(
+                    <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(
+                        <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>,
+                        <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#2875a3199723e5fc" class="i property">DefaultControllerFactory_TypeDoesNotSubclassControllerBase</a>,
+                        <span class="r20 r">controllerType</span>),
+                    <span class="s">&quot;controllerType&quot;</span>);
+            }
+            <b>return</b> <a href="#5b6cbf0a7c2cfb87" class="i property">ControllerActivator</a>.<a href="IControllerActivator.cs.html#7f6238f51f4029e8" class="i method">Create</a>(<span class="r19 r">requestContext</span>, <span class="r20 r">controllerType</span>);
+        }
+ 
+        <b>protected internal virtual</b> <a href="@0@System.Web/A.html#3dab5efec233d235" class="t t">SessionStateBehavior</a> <a id="0277ce1caa44dc98" href="R/0277ce1caa44dc98.html" target="n" data-glyph="75,1" class="i method">GetControllerSessionBehavior</a>(<a href="@0@System.Web/A.html#eedd1fb7c5b6334c" class="t t">RequestContext</a> <span id="r21 rd" class="r21 r">requestContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r22 rd" class="r22 r">controllerType</span>)
+        {
+            <b>if</b> (<span class="r22 r">controllerType</span> == <b>null</b>)
+            {
+                <b>return</b> <a href="@0@System.Web/A.html#3dab5efec233d235" class="t t">SessionStateBehavior</a>.<a href="@0@System.Web/A.html#1e26228284a35fda" class="i field">Default</a>;
+            }
+ 
+            <b>return</b> <a href="#8d807b1f9e843a79" class="i field">_sessionStateCache</a>.<a href="@0@mscorlib/A.html#2f8bcdfbad10304f" class="i method">GetOrAdd</a>(
+                <span class="r22 r">controllerType</span>,
+                <span id="r23 rd" class="r23 r">type</span> =&gt;
+                {
+                    <a href="SessionStateAttribute.cs.html#54a6de7c9a531072" class="k">var</a> <span id="r24 rd" class="r24 r">attr</span> = <span class="r23 r">type</span>.<a href="@0@mscorlib/A.html#3988b4e75e269e91" class="i method">GetCustomAttributes</a>(<b>typeof</b>(<a href="SessionStateAttribute.cs.html#54a6de7c9a531072" class="t t">SessionStateAttribute</a>), <span class="r25 r">inherit</span>: <b>true</b>)
+                        .<a href="@0@System.Core/A.html#4ba4a3f8a5530e33" class="i method">OfType</a>&lt;<a href="SessionStateAttribute.cs.html#54a6de7c9a531072" class="t t">SessionStateAttribute</a>&gt;()
+                        .<a href="@0@System.Core/A.html#8087366974af11d2" class="i method">FirstOrDefault</a>();
+ 
+                    <b>return</b> (<span class="r24 r">attr</span> != <b>null</b>) ? <span class="r24 r">attr</span>.<a href="SessionStateAttribute.cs.html#07b2c4a72631122d" class="i property">Behavior</a> : <a href="@0@System.Web/A.html#3dab5efec233d235" class="t t">SessionStateBehavior</a>.<a href="@0@System.Web/A.html#1e26228284a35fda" class="i field">Default</a>;
+                });
+        }
+ 
+        <b>protected internal virtual</b> <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <a id="97255effce453eeb" href="R/97255effce453eeb.html" target="n" data-glyph="75,1" class="i method">GetControllerType</a>(<a href="@0@System.Web/A.html#eedd1fb7c5b6334c" class="t t">RequestContext</a> <span id="r26 rd" class="r26 r">requestContext</span>, <b>string</b> <span id="r27 rd" class="r27 r">controllerName</span>)
+        {
+            <b>if</b> (<span class="r26 r">requestContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;requestContext&quot;</span>);
+            }
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r27 r">controllerName</span>) &amp;&amp;
+                (<span class="r26 r">requestContext</span>.<a href="@0@System.Web/A.html#66a25a5056592d0f" class="i property">RouteData</a> == <b>null</b> || !<span class="r26 r">requestContext</span>.<a href="@0@System.Web/A.html#66a25a5056592d0f" class="i property">RouteData</a>.<a href="Routing/DirectRouteExtensions.cs.html#41dece4c48b2a131" class="i method">HasDirectRouteMatch</a>()))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#b811ee329004b31f" class="i property">Common_NullOrEmpty</a>, <span class="s">&quot;controllerName&quot;</span>);
+            }
+ 
+            <a href="@0@System.Web/A.html#39b7a1fd375ff358" class="t t">RouteData</a> <span id="r28 rd" class="r28 r">routeData</span> = <span class="r26 r">requestContext</span>.<a href="@0@System.Web/A.html#66a25a5056592d0f" class="i property">RouteData</a>;
+            <b>if</b> (<span class="r28 r">routeData</span> != <b>null</b> &amp;&amp; <span class="r28 r">routeData</span>.<a href="Routing/DirectRouteExtensions.cs.html#41dece4c48b2a131" class="i method">HasDirectRouteMatch</a>())
+            {
+                <b>return</b> <a href="#92b43e03bcfe0b82" class="i method">GetControllerTypeFromDirectRoute</a>(<span class="r28 r">routeData</span>);
+            }
+ 
+            <span class="c">// first search in the current route&#39;s namespace collection</span>
+            <b>object</b> <span id="r29 rd" class="r29 r">routeNamespacesObj</span>;
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r30 rd" class="r30 r">match</span>;
+            <b>if</b> (<span class="r28 r">routeData</span>.<a href="@0@System.Web/A.html#b400a635a7bbf5fd" class="i property">DataTokens</a>.<a href="@0@System.Web/A.html#fb1e7006d64c80d9" class="i method">TryGetValue</a>(<a href="Routing/RouteDataTokenKeys.cs.html#c1eb021dbf3812f6" class="t t">RouteDataTokenKeys</a>.<a href="Routing/RouteDataTokenKeys.cs.html#a711fe86f2712124" class="i field">Namespaces</a>, <b>out</b> <span class="r29 r">routeNamespacesObj</span>))
+            {
+                <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <span id="r31 rd" class="r31 r">routeNamespaces</span> = <span class="r29 r">routeNamespacesObj</span> <b>as</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt;;
+                <b>if</b> (<span class="r31 r">routeNamespaces</span> != <b>null</b> &amp;&amp; <span class="r31 r">routeNamespaces</span>.<a href="@0@System.Core/A.html#8788153112b7ffd0" class="i method">Any</a>())
+                {
+                    <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <span id="r32 rd" class="r32 r">namespaceHash</span> = <b>new</b> <a href="@0@System.Core/A.html#d0822f25708256c5" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;(<span class="r31 r">routeNamespaces</span>, <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+                    <span class="r30 r">match</span> = <a href="#10faa531694c3428" class="i method">GetControllerTypeWithinNamespaces</a>(<span class="r28 r">routeData</span>.<a href="@0@System.Web/A.html#95ee14084c585c0b" class="i property">Route</a>, <span class="r27 r">controllerName</span>, <span class="r32 r">namespaceHash</span>);
+ 
+                    <span class="c">// the UseNamespaceFallback key might not exist, in which case its value is implicitly &quot;true&quot;</span>
+                    <b>if</b> (<span class="r30 r">match</span> != <b>null</b> || <b>false</b>.<a href="@0@mscorlib/A.html#0bb4737ad44c98a4" class="i method">Equals</a>(<span class="r28 r">routeData</span>.<a href="@0@System.Web/A.html#b400a635a7bbf5fd" class="i property">DataTokens</a><a href="@0@System.Web/A.html#1a72f29106433553">[</a><a href="Routing/RouteDataTokenKeys.cs.html#c1eb021dbf3812f6" class="t t">RouteDataTokenKeys</a>.<a href="Routing/RouteDataTokenKeys.cs.html#b27b820bb062fbd2" class="i field">UseNamespaceFallback</a>]))
+                    {
+                        <span class="c">// got a match or the route requested we stop looking</span>
+                        <b>return</b> <span class="r30 r">match</span>;
+                    }
+                }
+            }
+ 
+            <span class="c">// then search in the application&#39;s default namespace collection</span>
+            <b>if</b> (<a href="#e55a3483a04abcd5" class="i property">ControllerBuilder</a>.<a href="ControllerBuilder.cs.html#9b1e8398ec8edb4a" class="i property">DefaultNamespaces</a>.<a href="@0@System.Core/A.html#905bec8c22644c82" class="i property">Count</a> &gt; 0)
+            {
+                <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <span id="r33 rd" class="r33 r">namespaceDefaults</span> = <b>new</b> <a href="@0@System.Core/A.html#d0822f25708256c5" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;(<a href="#e55a3483a04abcd5" class="i property">ControllerBuilder</a>.<a href="ControllerBuilder.cs.html#9b1e8398ec8edb4a" class="i property">DefaultNamespaces</a>, <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+                <span class="r30 r">match</span> = <a href="#10faa531694c3428" class="i method">GetControllerTypeWithinNamespaces</a>(<span class="r28 r">routeData</span>.<a href="@0@System.Web/A.html#95ee14084c585c0b" class="i property">Route</a>, <span class="r27 r">controllerName</span>, <span class="r33 r">namespaceDefaults</span>);
+                <b>if</b> (<span class="r30 r">match</span> != <b>null</b>)
+                {
+                    <b>return</b> <span class="r30 r">match</span>;
+                }
+            }
+ 
+            <span class="c">// if all else fails, search every namespace</span>
+            <b>return</b> <a href="#10faa531694c3428" class="i method">GetControllerTypeWithinNamespaces</a>(<span class="r28 r">routeData</span>.<a href="@0@System.Web/A.html#95ee14084c585c0b" class="i property">Route</a>, <span class="r27 r">controllerName</span>, <b>null</b> <span class="c">/* namespaces */</span>);
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <a id="92b43e03bcfe0b82" href="R/92b43e03bcfe0b82.html" target="n" data-glyph="76,1" class="i method">GetControllerTypeFromDirectRoute</a>(<a href="@0@System.Web/A.html#39b7a1fd375ff358" class="t t">RouteData</a> <span id="r34 rd" class="r34 r">routeData</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r34 r">routeData</span> != <b>null</b>);
+ 
+            <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="k">var</a> <span id="r35 rd" class="r35 r">matchingRouteDatas</span> = <span class="r34 r">routeData</span>.<a href="Routing/DirectRouteExtensions.cs.html#2c5c8256e38b5dd0" class="i method">GetDirectRouteMatches</a>();
+ 
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <span id="r36 rd" class="r36 r">controllerTypes</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt;();
+            <b>foreach</b> (<a href="@0@System.Web/A.html#39b7a1fd375ff358" class="k">var</a> <span id="r37 rd" class="r37 r">directRouteData</span> <b>in</b> <span class="r35 r">matchingRouteDatas</span>)
+            {
+                <b>if</b> (<span class="r37 r">directRouteData</span> != <b>null</b>)
+                {
+                    <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r38 rd" class="r38 r">controllerType</span> = <span class="r37 r">directRouteData</span>.<a href="Routing/DirectRouteExtensions.cs.html#9738948a93e77150" class="i method">GetTargetControllerType</a>();
+                    <b>if</b> (<span class="r38 r">controllerType</span> == <b>null</b>)
+                    {
+                        <span class="c">// We don&#39;t expect this to happen, but it could happen if some code messes with the </span>
+                        <span class="c">// route data tokens and removes the key we&#39;re looking for. </span>
+                        <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#7dc514375cd5745c" class="i property">DirectRoute_MissingControllerType</a>);
+                    }
+ 
+                    <b>if</b> (!<span class="r36 r">controllerTypes</span>.<a href="@0@mscorlib/A.html#521b9f7129105e15" class="i method">Contains</a>(<span class="r38 r">controllerType</span>))
+                    {
+                        <span class="r36 r">controllerTypes</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r38 r">controllerType</span>);
+                    }
+                }
+            }
+ 
+            <span class="c">// We only want to handle the case where all matched direct routes refer to the same controller.</span>
+            <span class="c">// Handling the multiple-controllers case would put attribute routing down a totally different</span>
+            <span class="c">// path than traditional routing.</span>
+            <b>if</b> (<span class="r36 r">controllerTypes</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 0)
+            {
+                <b>return null</b>;
+            }
+            <b>else if</b> (<span class="r36 r">controllerTypes</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 1)
+            {
+                <b>return</b> <span class="r36 r">controllerTypes</span>[0];
+            }
+            <b>else</b>
+            {
+                <b>throw</b> <a href="#07c1dc947d5d58e6" class="i method">CreateDirectRouteAmbiguousControllerException</a>(<span class="r36 r">controllerTypes</span>);
+            }
+        }
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <a id="10faa531694c3428" href="R/10faa531694c3428.html" target="n" data-glyph="76,1" class="i method">GetControllerTypeWithinNamespaces</a>(<a href="@0@System.Web/A.html#090919121320fbd1" class="t t">RouteBase</a> <span id="r39 rd" class="r39 r">route</span>, <b>string</b> <span id="r40 rd" class="r40 r">controllerName</span>, <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <span id="r41 rd" class="r41 r">namespaces</span>)
+        {
+            <span class="c">// Once the master list of controllers has been created we can quickly index into it</span>
+            <a href="#d51e093e2a8ec23d" class="i property">ControllerTypeCache</a>.<a href="ControllerTypeCache.cs.html#8f3e334d983f8118" class="i method">EnsureInitialized</a>(<a href="#0980b7565d455af5" class="i property">BuildManager</a>);
+ 
+            <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <span id="r42 rd" class="r42 r">matchingTypes</span> = <a href="#d51e093e2a8ec23d" class="i property">ControllerTypeCache</a>.<a href="ControllerTypeCache.cs.html#46a6bdeb26613813" class="i method">GetControllerTypes</a>(<span class="r40 r">controllerName</span>, <span class="r41 r">namespaces</span>);
+            <b>switch</b> (<span class="r42 r">matchingTypes</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>)
+            {
+                <b>case</b> 0:
+                    <span class="c">// no matching types</span>
+                    <b>return null</b>;
+ 
+                <b>case</b> 1:
+                    <span class="c">// single matching type</span>
+                    <b>return</b> <span class="r42 r">matchingTypes</span>.<a href="@0@System.Core/A.html#bc8ae402a61dd9d6" class="i method">First</a>();
+ 
+                <b>default</b>:
+                    <span class="c">// multiple matching types</span>
+                    <b>throw</b> <a href="#76a0aaa418d3c00a" class="i method">CreateAmbiguousControllerException</a>(<span class="r39 r">route</span>, <span class="r40 r">controllerName</span>, <span class="r42 r">matchingTypes</span>);
+            }
+        }
+ 
+        <b>public virtual void</b> <a id="c22c5c58eb391e66" href="R/c22c5c58eb391e66.html" target="n" data-glyph="72,1" class="i method">ReleaseController</a>(<a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a> <span id="r43 rd" class="r43 r">controller</span>)
+        {
+            <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a> <span id="r44 rd" class="r44 r">disposable</span> = <span class="r43 r">controller</span> <b>as</b> <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>;
+            <b>if</b> (<span class="r44 r">disposable</span> != <b>null</b>)
+            {
+                <span class="r44 r">disposable</span>.<a href="@0@mscorlib/A.html#4e23fed29bd598fa" class="i method">Dispose</a>();
+            }
+        }
+ 
+        <b>internal</b> <a href="@0@mscorlib/A.html#b040fb780bdd59f4" class="t t">IReadOnlyList</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <a id="25d249e23b53468c" href="R/25d249e23b53468c.html" target="n" data-glyph="74,1" class="i method">GetControllerTypes</a>()
+        {
+            <a href="#d51e093e2a8ec23d" class="i property">ControllerTypeCache</a>.<a href="ControllerTypeCache.cs.html#8f3e334d983f8118" class="i method">EnsureInitialized</a>(<a href="#0980b7565d455af5" class="i property">BuildManager</a>);
+            <b>return</b> <a href="#d51e093e2a8ec23d" class="i property">ControllerTypeCache</a>.<a href="ControllerTypeCache.cs.html#a4336baae4ebbe3c" class="i method">GetControllerTypes</a>();
+        }
+ 
+        <a href="@0@System.Web/A.html#3dab5efec233d235" class="t t">SessionStateBehavior</a> <a href="IControllerFactory.cs.html#fd3068446c31f300" class="t t">IControllerFactory</a>.<a href="IControllerFactory.cs.html#c11ab8b60448f5ed" class="i method">GetControllerSessionBehavior</a>(<a href="@0@System.Web/A.html#eedd1fb7c5b6334c" class="t t">RequestContext</a> <span id="r45 rd" class="r45 r">requestContext</span>, <b>string</b> <span id="r46 rd" class="r46 r">controllerName</span>)
+        {
+            <b>if</b> (<span class="r45 r">requestContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;requestContext&quot;</span>);
+            }
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r46 r">controllerName</span>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#b811ee329004b31f" class="i property">Common_NullOrEmpty</a>, <span class="s">&quot;controllerName&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r47 rd" class="r47 r">controllerType</span> = <a href="#97255effce453eeb" class="i method">GetControllerType</a>(<span class="r45 r">requestContext</span>, <span class="r46 r">controllerName</span>);
+            <b>return</b> <a href="#0277ce1caa44dc98" class="i method">GetControllerSessionBehavior</a>(<span class="r45 r">requestContext</span>, <span class="r47 r">controllerType</span>);
+        }
+ 
+        <b>private class</b> <a id="f15495307a8a8ce4" href="R/f15495307a8a8ce4.html" target="n" data-glyph="4,1" class="t t">DefaultControllerActivator</a> : <a href="IControllerActivator.cs.html#3aa2548d2ca81c51" class="t t">IControllerActivator</a>
+        {
+            <b>private</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a>&gt; <a id="49bd46cb8df55bcf" href="R/49bd46cb8df55bcf.html" target="n" data-glyph="46,2" class="i field">_resolverThunk</a>;
+ 
+            <b>public</b> <a id="b6110c6daea92607" href="R/../../0000000000.html" target="n" data-glyph="72,2" class="i constructor">DefaultControllerActivator</a>()
+                : <a href="#df2b4e820de6092b" class="k">this</a>(<b>null</b>)
+            {
+            }
+ 
+            <b>public</b> <a id="df2b4e820de6092b" href="R/df2b4e820de6092b.html" target="n" data-glyph="72,2" class="i constructor">DefaultControllerActivator</a>(<a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <span id="r48 rd" class="r48 r">resolver</span>)
+            {
+                <b>if</b> (<span class="r48 r">resolver</span> == <b>null</b>)
+                {
+                    <a href="#49bd46cb8df55bcf" class="i field">_resolverThunk</a> = () =&gt; <a href="DependencyResolver.cs.html#f7f1e1ffe6656fd3" class="t t">DependencyResolver</a>.<a href="DependencyResolver.cs.html#8fc55f46700cf2a9" class="i property">Current</a>;
+                }
+                <b>else</b>
+                {
+                    <a href="#49bd46cb8df55bcf" class="i field">_resolverThunk</a> = () =&gt; <span class="r48 r">resolver</span>;
+                }
+            }
+ 
+            <b>public</b> <a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a> <a id="ac0606e8c96cae47" href="R/ac0606e8c96cae47.html" target="n" data-glyph="72,2" class="i method">Create</a>(<a href="@0@System.Web/A.html#eedd1fb7c5b6334c" class="t t">RequestContext</a> <span id="r49 rd" class="r49 r">requestContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r50 rd" class="r50 r">controllerType</span>)
+            {
+                <b>try</b>
+                {
+                    <b>return</b> (<a href="IController.cs.html#18288b30d52b29f4" class="t t">IController</a>)(<a href="#49bd46cb8df55bcf" class="i field">_resolverThunk</a>().<a href="IDependencyResolver.cs.html#ce4946a6971ee816" class="i method">GetService</a>(<span class="r50 r">controllerType</span>) ?? <a href="@0@mscorlib/A.html#955a7437554c8efc" class="t t">Activator</a>.<a href="@0@mscorlib/A.html#4c7b92371a93f246" class="i method">CreateInstance</a>(<span class="r50 r">controllerType</span>));
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r51 rd" class="r51 r">ex</span>)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#34e9967ccd840525" class="t constructor">InvalidOperationException</a>(
+                        <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(
+                            <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>,
+                            <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#29674c89e454a926" class="i property">DefaultControllerFactory_ErrorCreatingController</a>,
+                            <span class="r50 r">controllerType</span>),
+                        <span class="r51 r">ex</span>);
+                }
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

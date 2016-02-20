@@ -1,0 +1,504 @@
+﻿<!DOCTYPE html>
+<html><head><title>ObjectReader.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(495);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/ObjectReader.cs" target="_top">NGit\ObjectReader.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Reads an</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectDatabase.cs.html#008098fa3f2fdd6a" class="t t">ObjectDatabase</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ObjectDatabase</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> for a single thread.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Readers that can support efficient reuse of pack encoded objects should also</span>
+	<span class="c">///</span><span class="c"> implement the companion interface</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Storage</span>.<span class="i n">Pack</span>.<a href="../NGit.Storage.Pack/ObjectReuseAsIs.cs.html#912ded332294f79a" class="t t">ObjectReuseAsIs</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Storage.Pack.ObjectReuseAsIs</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> .</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public abstract class</b> <a id="c7891701ba17c6fc" href="../R/c7891701ba17c6fc.html" target="n" data-glyph="0,0" class="t t"><span id="bc6f49ccedb58203">ObjectReader</span></a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Type hint indicating the caller doesn&#39;t know the type.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Type hint indicating the caller doesn&#39;t know the type.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public const int</b> <a id="dd8957dd153e9874" href="../R/dd8957dd153e9874.html" target="n" data-glyph="6,1" class="i field">OBJ_ANY</a> = -1;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a new reader from the same data.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a new reader from the same data.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Applications can use this method to build a new reader from the same data</span>
+		<span class="c">///</span><span class="c"> source, but for an different thread.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a brand new reader, using the same data source.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="4984106f81afa704" href="../R/4984106f81afa704.html" target="n" data-glyph="72,1" class="i method">NewReader</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain a unique abbreviation (prefix) of an object SHA-1.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain a unique abbreviation (prefix) of an object SHA-1.</span>
+		<span class="c">///</span><span class="c"> This method uses a reasonable default for the minimum length. Callers who</span>
+		<span class="c">///</span><span class="c"> don&#39;t care about the minimum length should prefer this method.</span>
+		<span class="c">///</span><span class="c"> The returned abbreviation would expand back to the argument ObjectId when</span>
+		<span class="c">///</span><span class="c"> passed to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6eb31bdf0fbc8145" class="i method">Resolve</a>(<a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Resolve(AbbreviatedObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , assuming no new objects</span>
+		<span class="c">///</span><span class="c"> are added to this repository between calls.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">object identity that needs to be abbreviated.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 abbreviation.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="f90bf4377f0672e8" href="../R/f90bf4377f0672e8.html" target="n" data-glyph="72,1" class="i method">Abbreviate</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r0 rd" class="r0 r">objectId</span>)
+		{
+			<b>return</b> <a href="#7411dcb22013f750" class="i method">Abbreviate</a>(<span class="r0 r">objectId</span>, 7);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain a unique abbreviation (prefix) of an object SHA-1.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain a unique abbreviation (prefix) of an object SHA-1.</span>
+		<span class="c">///</span><span class="c"> The returned abbreviation would expand back to the argument ObjectId when</span>
+		<span class="c">///</span><span class="c"> passed to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6eb31bdf0fbc8145" class="i method">Resolve</a>(<a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Resolve(AbbreviatedObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , assuming no new objects</span>
+		<span class="c">///</span><span class="c"> are added to this repository between calls.</span>
+		<span class="c">///</span><span class="c"> The default implementation of this method abbreviates the id to the</span>
+		<span class="c">///</span><span class="c"> minimum length, then resolves it to see if there are multiple results.</span>
+		<span class="c">///</span><span class="c"> When multiple results are found, the length is extended by 1 and resolve</span>
+		<span class="c">///</span><span class="c"> is tried again.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">object identity that needs to be abbreviated.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">len</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> minimum length of the abbreviated string. Must be in the range</span>
+		<span class="c">///</span><span class="c"> [2,</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">value</span><span class="c">&gt;</span><span class="c">Constants#OBJECT_ID_STRING_LENGTH</span><span class="c">&lt;/</span><span class="c">value</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ].</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> SHA-1 abbreviation. If no matching objects exist in the</span>
+		<span class="c">///</span><span class="c"> repository, the abbreviation will match the minimum length.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="7411dcb22013f750" href="../R/7411dcb22013f750.html" target="n" data-glyph="72,1" class="i method">Abbreviate</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r1 rd" class="r1 r">objectId</span>, <b>int</b> <span id="r2 rd" class="r2 r">len</span>)
+		{
+			<b>if</b> (<span class="r2 r">len</span> == <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#e25ec0ff53bdee32" class="i field">OBJECT_ID_STRING_LENGTH</a>)
+			{
+				<b>return</b> <a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>(<span class="r1 r">objectId</span>);
+			}
+			<a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <span id="r3 rd" class="r3 r">abbrev</span> = <span class="r1 r">objectId</span>.<a href="AnyObjectId.cs.html#3a1dc42a1d2c6224" class="i method">Abbreviate</a>(<span class="r2 r">len</span>);
+			<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt; <span id="r4 rd" class="r4 r">matches</span> = <a href="#6eb31bdf0fbc8145" class="i method">Resolve</a>(<span class="r3 r">abbrev</span>);
+			<b>while</b> (1 &lt; <span class="r4 r">matches</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &amp;&amp; <span class="r2 r">len</span> &lt; <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#e25ec0ff53bdee32" class="i field">OBJECT_ID_STRING_LENGTH</a>)
+			{
+				<span class="r3 r">abbrev</span> = <span class="r1 r">objectId</span>.<a href="AnyObjectId.cs.html#3a1dc42a1d2c6224" class="i method">Abbreviate</a>(++<span class="r2 r">len</span>);
+				<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt; <span id="r5 rd" class="r5 r">n</span> = <b>new</b> <a href="/Sharpen/A.html#50b9c0ebb7a18de8" class="t constructor">AList</a>&lt;<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt;(8);
+				<b>foreach</b> (<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r6 rd" class="r6 r">candidate</span> <b>in</b> <span class="r4 r">matches</span>)
+				{
+					<b>if</b> (<span class="r3 r">abbrev</span>.<a href="AbbreviatedObjectId.cs.html#3147075453c53a48" class="i method">PrefixCompare</a>(<span class="r6 r">candidate</span>) == 0)
+					{
+						<span class="r5 r">n</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r6 r">candidate</span>);
+					}
+				}
+				<b>if</b> (1 &lt; <span class="r5 r">n</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>)
+				{
+					<span class="r4 r">matches</span> = <span class="r5 r">n</span>;
+				}
+				<b>else</b>
+				{
+					<span class="r4 r">matches</span> = <a href="#6eb31bdf0fbc8145" class="i method">Resolve</a>(<span class="r3 r">abbrev</span>);
+				}
+			}
+			<b>return</b> <span class="r3 r">abbrev</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Resolve an abbreviated ObjectId to its full form.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Resolve an abbreviated ObjectId to its full form.</span>
+		<span class="c">///</span><span class="c"> This method searches for an ObjectId that begins with the abbreviation,</span>
+		<span class="c">///</span><span class="c"> and returns at least some matching candidates.</span>
+		<span class="c">///</span><span class="c"> If the returned collection is empty, no objects start with this</span>
+		<span class="c">///</span><span class="c"> abbreviation. The abbreviation doesn&#39;t belong to this repository, or the</span>
+		<span class="c">///</span><span class="c"> repository lacks the necessary objects to complete it.</span>
+		<span class="c">///</span><span class="c"> If the collection contains exactly one member, the abbreviation is</span>
+		<span class="c">///</span><span class="c"> (currently) unique within this database. There is a reasonably high</span>
+		<span class="c">///</span><span class="c"> probability that the returned id is what was previously abbreviated.</span>
+		<span class="c">///</span><span class="c"> If the collection contains 2 or more members, the abbreviation is not</span>
+		<span class="c">///</span><span class="c"> unique. In this case the implementation is only required to return at</span>
+		<span class="c">///</span><span class="c"> least 2 candidates to signal the abbreviation has conflicts. User</span>
+		<span class="c">///</span><span class="c"> friendly implementations should return as many candidates as reasonably</span>
+		<span class="c">///</span><span class="c"> possible, as the caller may be able to disambiguate further based on</span>
+		<span class="c">///</span><span class="c"> context. However since databases can be very large (e.g. 10 million</span>
+		<span class="c">///</span><span class="c"> objects) returning 625,000 candidates for the abbreviation &quot;0&quot; is simply</span>
+		<span class="c">///</span><span class="c"> unreasonable, so implementors should draw the line at around 256 matches.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> abbreviated id to resolve to a complete identity. The</span>
+		<span class="c">///</span><span class="c"> abbreviation must have a length of at least 2.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">candidates that begin with the abbreviated identity.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt; <a id="6eb31bdf0fbc8145" href="../R/6eb31bdf0fbc8145.html" target="n" data-glyph="72,1" class="i method">Resolve</a>(<a href="AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <span id="r7 rd" class="r7 r">id</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Does the requested object exist in this database?</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">identity of the object to test for existence of.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if the specified object is stored in this database.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="ab9bb0066cdd3732" href="../R/ab9bb0066cdd3732.html" target="n" data-glyph="72,1" class="i method">Has</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r8 rd" class="r8 r">objectId</span>)
+		{
+			<b>return</b> <a href="#5e5276973b665589" class="i method">Has</a>(<span class="r8 r">objectId</span>, <a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Does the requested object exist in this database?</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">identity of the object to test for existence of.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">typeHint</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> hint about the type of object being requested;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">OBJ_ANY</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the object type is not known, or does not</span>
+		<span class="c">///</span><span class="c"> matter to the caller.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if the specified object is stored in this database.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> typeHint was not OBJ_ANY, and the object&#39;s actual type does</span>
+		<span class="c">///</span><span class="c"> not match typeHint.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="5e5276973b665589" href="../R/5e5276973b665589.html" target="n" data-glyph="72,1" class="i method">Has</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r9 rd" class="r9 r">objectId</span>, <b>int</b> <span id="r10 rd" class="r10 r">typeHint</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#6f8fb17381cd3a38" class="i method">Open</a>(<span class="r9 r">objectId</span>, <span class="r10 r">typeHint</span>);
+				<b>return true</b>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a>)
+			{
+				<b>return false</b>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Open an object from this database.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Open an object from this database.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">identity of the object to open.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ObjectLoader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> for accessing the object.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object does not exist.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="074c2682fc658201" href="../R/074c2682fc658201.html" target="n" data-glyph="72,1" class="i method">Open</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r11 rd" class="r11 r">objectId</span>)
+		{
+			<b>return</b> <a href="#6f8fb17381cd3a38" class="i method">Open</a>(<span class="r11 r">objectId</span>, <a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Open an object from this database.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Open an object from this database.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">identity of the object to open.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">typeHint</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> hint about the type of object being requested;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">OBJ_ANY</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the object type is not known, or does not</span>
+		<span class="c">///</span><span class="c"> matter to the caller.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ObjectLoader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> for accessing the object.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object does not exist.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> typeHint was not OBJ_ANY, and the object&#39;s actual type does</span>
+		<span class="c">///</span><span class="c"> not match typeHint.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="6f8fb17381cd3a38" href="../R/6f8fb17381cd3a38.html" target="n" data-glyph="72,1" class="i method">Open</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r12 rd" class="r12 r">objectId</span>, <b>int</b> <span id="r13 rd" class="r13 r">typeHint</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Asynchronous object opening.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Asynchronous object opening.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">objectIds</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> objects to open from the object store. The supplied collection</span>
+		<span class="c">///</span><span class="c"> must not be modified until the queue has finished.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">reportMissing</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if true missing objects are reported by calling failure with a</span>
+		<span class="c">///</span><span class="c"> MissingObjectException. This may be more expensive for the</span>
+		<span class="c">///</span><span class="c"> implementation to guarantee. If false the implementation may</span>
+		<span class="c">///</span><span class="c"> choose to report MissingObjectException, or silently skip over</span>
+		<span class="c">///</span><span class="c"> the object with no warning.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">queue to read the objects from.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="AsyncObjectLoaderQueue.cs.html#8a34efb2424cb5bf" class="t t">AsyncObjectLoaderQueue</a>&lt;<span class="r16 r t">T</span>&gt; <a id="d23d17bdb1c65195" href="../R/d23d17bdb1c65195.html" target="n" data-glyph="72,1" class="i method">Open</a>&lt;<span id="r16 rd t" class="r16 r t">T</span>&gt;(<a href="/Sharpen/A.html#f5302991756850e2" class="t t">Iterable</a>&lt;<span class="r16 r t">T</span>&gt; <span id="r14 rd" class="r14 r">objectIds</span>, <b>bool</b> <span id="r15 rd" class="r15 r">reportMissing</span>
+			) <b>where</b> <span class="r16 r t">T</span>:<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>
+		{
+			<a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<span class="r16 r t">T</span>&gt; <span id="r17 rd" class="r17 r">idItr</span> = <span class="r14 r">objectIds</span>.<a href="/Sharpen/A.html#6480e4c20e27af13" class="i method">Iterator</a>();
+			<b>return</b> <b>new</b> <a href="#4078a4bb48ea6cd1" class="t constructor">_AsyncObjectLoaderQueue_272</a>&lt;<span class="r16 r t">T</span>&gt;(<a href="#c7891701ba17c6fc" class="k">this</a>, <span class="r17 r">idItr</span>);
+		}
+
+		<b>private sealed class</b> <a id="be95a2d47a1cae60" href="../R/be95a2d47a1cae60.html" target="n" data-glyph="4,1" class="t t">_AsyncObjectLoaderQueue_272</a>&lt;<span id="r18 rd t" class="r18 r t">T</span>&gt; : <a href="AsyncObjectLoaderQueue.cs.html#8a34efb2424cb5bf" class="t t">AsyncObjectLoaderQueue</a>&lt;<span class="r18 r t">T</span>&gt; <b>where</b> <span class="r18 r t">T</span>:<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>
+		{
+			<b>public</b> <a id="4078a4bb48ea6cd1" href="../R/4078a4bb48ea6cd1.html" target="n" data-glyph="72,2" class="i constructor">_AsyncObjectLoaderQueue_272</a>(<a href="#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r19 rd" class="r19 r">_enclosing</span>, <a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<span class="r18 r t">T</span>&gt; <span id="r20 rd" class="r20 r">idItr</span>)
+			{
+				<a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#36e544a61dbad5a3" class="i field">_enclosing</a> = <span class="r19 r">_enclosing</span>;
+				<a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#1ac4f0a10a108c60" class="i field">idItr</a> = <span class="r20 r">idItr</span>;
+			}
+
+			<b>private</b> <span class="r18 r t">T</span> <a id="9607208ad6e4d3b7" href="../R/9607208ad6e4d3b7.html" target="n" data-glyph="46,2" class="i field">cur</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="0bfee48a9f93af6e" href="../R/0bfee48a9f93af6e.html" target="n" data-glyph="72,2" class="i method">Next</a>()
+			{
+				<b>if</b> (<a href="#1ac4f0a10a108c60" class="i field">idItr</a>.<a href="/Sharpen/A.html#01d1ed1ee196fb09" class="i method">HasNext</a>())
+				{
+					<a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#9607208ad6e4d3b7" class="i field">cur</a> = <a href="#1ac4f0a10a108c60" class="i field">idItr</a>.<a href="/Sharpen/A.html#6360c9000cc5a921" class="i method">Next</a>();
+					<b>return true</b>;
+				}
+				<b>else</b>
+				{
+					<b>return false</b>;
+				}
+			}
+
+			<b>public</b> <span class="r18 r t">T</span> <a id="6fd5536002abf46d" href="../R/6fd5536002abf46d.html" target="n" data-glyph="72,2" class="i method">GetCurrent</a>()
+			{
+				<b>return</b> <a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#9607208ad6e4d3b7" class="i field">cur</a>;
+			}
+
+			<b>public</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="ef6acacf1e515949" href="../R/ef6acacf1e515949.html" target="n" data-glyph="72,2" class="i method">GetObjectId</a>()
+			{
+				<b>return</b> <a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#9607208ad6e4d3b7" class="i field">cur</a>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public</b> <a href="ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="cc3134c8a3eafa6d" href="../R/cc3134c8a3eafa6d.html" target="n" data-glyph="72,2" class="i method">Open</a>()
+			{
+				<b>return</b> <a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#36e544a61dbad5a3" class="i field">_enclosing</a>.<a href="#6f8fb17381cd3a38" class="i method">Open</a>(<a href="#be95a2d47a1cae60" class="k">this</a>.<a href="#9607208ad6e4d3b7" class="i field">cur</a>, <a href="#c7891701ba17c6fc" class="t t">ObjectReader</a>.<a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a>);
+			}
+
+			<b>public bool</b> <a id="2dd19b9ec2796eca" href="../R/2dd19b9ec2796eca.html" target="n" data-glyph="72,2" class="i method">Cancel</a>(<b>bool</b> <span id="r21 rd" class="r21 r">mayInterruptIfRunning</span>)
+			{
+				<b>return true</b>;
+			}
+
+			<b>public void</b> <a id="d9b3169e66060cfe" href="../R/d9b3169e66060cfe.html" target="n" data-glyph="72,2" class="i method">Release</a>()
+			{
+			}
+
+			<b>private readonly</b> <a href="#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="36e544a61dbad5a3" href="../R/36e544a61dbad5a3.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+
+			<b>private readonly</b> <a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<span class="r18 r t">T</span>&gt; <a id="1ac4f0a10a108c60" href="../R/1ac4f0a10a108c60.html" target="n" data-glyph="46,2" class="i field">idItr</a>;
+		}
+
+		<span class="c">// Since we are sequential by default, we don&#39;t</span>
+		<span class="c">// have any state to clean up if we terminate early.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get only the size of an object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get only the size of an object.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The default implementation of this method opens an ObjectLoader.</span>
+		<span class="c">///</span><span class="c"> Databases are encouraged to override this if a faster access method is</span>
+		<span class="c">///</span><span class="c"> available to them.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">identity of the object to open.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">typeHint</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> hint about the type of object being requested;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">OBJ_ANY</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the object type is not known, or does not</span>
+		<span class="c">///</span><span class="c"> matter to the caller.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">size of object in bytes.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object does not exist.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> typeHint was not OBJ_ANY, and the object&#39;s actual type does</span>
+		<span class="c">///</span><span class="c"> not match typeHint.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object store cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual long</b> <a id="56825eeee0b9c4f1" href="../R/56825eeee0b9c4f1.html" target="n" data-glyph="72,1" class="i method">GetObjectSize</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r22 rd" class="r22 r">objectId</span>, <b>int</b> <span id="r23 rd" class="r23 r">typeHint</span>)
+		{
+			<b>return</b> <a href="#6f8fb17381cd3a38" class="i method">Open</a>(<span class="r22 r">objectId</span>, <span class="r23 r">typeHint</span>).<a href="ObjectLoader.cs.html#4a1ad61b8fa1c675" class="i method">GetSize</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Asynchronous object size lookup.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Asynchronous object size lookup.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">objectIds</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> objects to get the size of from the object store. The supplied</span>
+		<span class="c">///</span><span class="c"> collection must not be modified until the queue has finished.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">reportMissing</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if true missing objects are reported by calling failure with a</span>
+		<span class="c">///</span><span class="c"> MissingObjectException. This may be more expensive for the</span>
+		<span class="c">///</span><span class="c"> implementation to guarantee. If false the implementation may</span>
+		<span class="c">///</span><span class="c"> choose to report MissingObjectException, or silently skip over</span>
+		<span class="c">///</span><span class="c"> the object with no warning.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">queue to read object sizes from.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="AsyncObjectSizeQueue.cs.html#2c6f65c682c10650" class="t t">AsyncObjectSizeQueue</a>&lt;<span class="r26 r t">T</span>&gt; <a id="e9f085fd638d0c69" href="../R/e9f085fd638d0c69.html" target="n" data-glyph="72,1" class="i method">GetObjectSize</a>&lt;<span id="r26 rd t" class="r26 r t">T</span>&gt;(<a href="/Sharpen/A.html#f5302991756850e2" class="t t">Iterable</a>&lt;<span class="r26 r t">T</span>&gt; <span id="r24 rd" class="r24 r">objectIds</span>, <b>bool</b>
+			 <span id="r25 rd" class="r25 r">reportMissing</span>) <b>where</b> <span class="r26 r t">T</span>:<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>
+		{
+			<a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<span class="r26 r t">T</span>&gt; <span id="r27 rd" class="r27 r">idItr</span> = <span class="r24 r">objectIds</span>.<a href="/Sharpen/A.html#6480e4c20e27af13" class="i method">Iterator</a>();
+			<b>return</b> <b>new</b> <a href="#819584acaac99077" class="t constructor">_AsyncObjectSizeQueue_354</a>&lt;<span class="r26 r t">T</span>&gt;(<a href="#c7891701ba17c6fc" class="k">this</a>, <span class="r27 r">idItr</span>);
+		}
+
+		<b>private sealed class</b> <a id="a83bb1c059230aaf" href="../R/a83bb1c059230aaf.html" target="n" data-glyph="4,1" class="t t">_AsyncObjectSizeQueue_354</a>&lt;<span id="r28 rd t" class="r28 r t">T</span>&gt;: <a href="AsyncObjectSizeQueue.cs.html#2c6f65c682c10650" class="t t">AsyncObjectSizeQueue</a>&lt;<span class="r28 r t">T</span>&gt; <b>where</b> <span class="r28 r t">T</span>:<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>
+		{
+			<b>public</b> <a id="819584acaac99077" href="../R/819584acaac99077.html" target="n" data-glyph="72,2" class="i constructor">_AsyncObjectSizeQueue_354</a>(<a href="#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r29 rd" class="r29 r">_enclosing</span>, <a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<span class="r28 r t">T</span>&gt; <span id="r30 rd" class="r30 r">idItr</span>)
+			{
+				<a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#a100f84f6b39abcf" class="i field">_enclosing</a> = <span class="r29 r">_enclosing</span>;
+				<a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#dca248a89c6692b3" class="i field">idItr</a> = <span class="r30 r">idItr</span>;
+			}
+
+			<b>private</b> <span class="r28 r t">T</span> <a id="d4ce89f6992acd8c" href="../R/d4ce89f6992acd8c.html" target="n" data-glyph="46,2" class="i field">cur</a>;
+
+			<b>private long</b> <a id="5a1b5fba3f04bd2b" href="../R/5a1b5fba3f04bd2b.html" target="n" data-glyph="46,2" class="i field">sz</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="723785017fb012e6" href="../R/723785017fb012e6.html" target="n" data-glyph="72,2" class="i method">Next</a>()
+			{
+				<b>if</b> (<a href="#dca248a89c6692b3" class="i field">idItr</a>.<a href="/Sharpen/A.html#01d1ed1ee196fb09" class="i method">HasNext</a>())
+				{
+					<a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#d4ce89f6992acd8c" class="i field">cur</a> = <a href="#dca248a89c6692b3" class="i field">idItr</a>.<a href="/Sharpen/A.html#6360c9000cc5a921" class="i method">Next</a>();
+					<a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#5a1b5fba3f04bd2b" class="i field">sz</a> = <a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#a100f84f6b39abcf" class="i field">_enclosing</a>.<a href="#56825eeee0b9c4f1" class="i method">GetObjectSize</a>(<a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#d4ce89f6992acd8c" class="i field">cur</a>, <a href="#c7891701ba17c6fc" class="t t">ObjectReader</a>.<a href="#dd8957dd153e9874" class="i field">OBJ_ANY</a>);
+					<b>return true</b>;
+				}
+				<b>else</b>
+				{
+					<b>return false</b>;
+				}
+			}
+
+			<b>public</b> <span class="r28 r t">T</span> <a id="b5879db45189b304" href="../R/b5879db45189b304.html" target="n" data-glyph="72,2" class="i method">GetCurrent</a>()
+			{
+				<b>return</b> <a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#d4ce89f6992acd8c" class="i field">cur</a>;
+			}
+
+			<b>public</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="c8da8fe6bcb022da" href="../R/c8da8fe6bcb022da.html" target="n" data-glyph="72,2" class="i method">GetObjectId</a>()
+			{
+				<b>return</b> <a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#d4ce89f6992acd8c" class="i field">cur</a>;
+			}
+
+			<b>public long</b> <a id="333a183d62d2e6b6" href="../R/333a183d62d2e6b6.html" target="n" data-glyph="72,2" class="i method">GetSize</a>()
+			{
+				<b>return</b> <a href="#a83bb1c059230aaf" class="k">this</a>.<a href="#5a1b5fba3f04bd2b" class="i field">sz</a>;
+			}
+
+			<b>public bool</b> <a id="98c4edbb02cbd4bd" href="../R/98c4edbb02cbd4bd.html" target="n" data-glyph="72,2" class="i method">Cancel</a>(<b>bool</b> <span id="r31 rd" class="r31 r">mayInterruptIfRunning</span>)
+			{
+				<b>return true</b>;
+			}
+
+			<b>public void</b> <a id="b2a3928c76b37ffc" href="../R/b2a3928c76b37ffc.html" target="n" data-glyph="72,2" class="i method">Release</a>()
+			{
+			}
+
+			<b>private readonly</b> <a href="#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="a100f84f6b39abcf" href="../R/a100f84f6b39abcf.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+
+			<b>private readonly</b> <a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<span class="r28 r t">T</span>&gt; <a id="dca248a89c6692b3" href="../R/dca248a89c6692b3.html" target="n" data-glyph="46,2" class="i field">idItr</a>;
+		}
+
+		<span class="c">// Since we are sequential by default, we don&#39;t</span>
+		<span class="c">// have any state to clean up if we terminate early.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Advice from a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> that a walk is starting from these roots.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">walk</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the revision pool that is using this reader.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">roots</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> starting points of the revision walk. The starting points have</span>
+		<span class="c">///</span><span class="c"> their headers parsed, but might be missing bodies.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the reader cannot initialize itself to support the walk.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="f41df9951af9135d" href="../R/f41df9951af9135d.html" target="n" data-glyph="72,1" class="i method">WalkAdviceBeginCommits</a>(<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r32 rd" class="r32 r">walk</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt; <span id="r33 rd" class="r33 r">roots</span>
+			)
+		{
+		}
+
+		<span class="c">// Do nothing by default, most readers don&#39;t want or need advice.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Advice from an</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/ObjectWalk.cs.html#8572f3181c1d65ce" class="t t">ObjectWalk</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.ObjectWalk</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> that trees will be traversed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">ow</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object pool that is using this reader.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">min</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the first commit whose root tree will be read.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">max</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the last commit whose root tree will be read.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the reader cannot initialize itself to support the walk.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="1dacb2e2e1d00df0" href="../R/1dacb2e2e1d00df0.html" target="n" data-glyph="72,1" class="i method">WalkAdviceBeginTrees</a>(<a href="../NGit.Revwalk/ObjectWalk.cs.html#8572f3181c1d65ce" class="t t">ObjectWalk</a> <span id="r34 rd" class="r34 r">ow</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r35 rd" class="r35 r">min</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> 
+			<span id="r36 rd" class="r36 r">max</span>)
+		{
+		}
+
+		<span class="c">// Do nothing by default, most readers don&#39;t want or need advice.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Advice from that a walk is over.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Advice from that a walk is over.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="47ab7da7cb3522d9" href="../R/47ab7da7cb3522d9.html" target="n" data-glyph="72,1" class="i method">WalkAdviceEnd</a>()
+		{
+		}
+
+		<span class="c">// Do nothing by default, most readers don&#39;t want or need advice.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Release any resources used by this reader.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Release any resources used by this reader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A reader that has been released can be used again, but may need to be</span>
+		<span class="c">///</span><span class="c"> released after the subsequent usage.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="9b75a15983357803" href="../R/9b75a15983357803.html" target="n" data-glyph="72,1" class="i method">Release</a>()
+		{
+		}
+		<span class="c">// Do nothing.</span>
+	}
+}
+</pre></td></tr></table></div></body></html>

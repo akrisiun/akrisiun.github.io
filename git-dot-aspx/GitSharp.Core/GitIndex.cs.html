@@ -1,0 +1,1241 @@
+﻿<!DOCTYPE html>
+<html><head><title>GitIndex.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(1232);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/GitIndex.cs" target="_top">GitIndex.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Dave Watson &lt;dwatson@mimvista.com&gt;
+ * Copyright (C) 2007, Robin Rosenberg &lt;me@lathund.dewire.com&gt;
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Roger C. Soares &lt;rogersoares@intelinet.com.br&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">MiscUtil</span>.<span class="i n">Conversion</span>;
+<b>using</b> <span class="i n">MiscUtil</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A representation of the Git index.</span>
+	<span class="c">///</span><span class="c"> </span>
+	<span class="c">///</span><span class="c"> The index points to the objects currently checked out or in the process of</span>
+	<span class="c">///</span><span class="c"> being prepared for committing or objects involved in an unfinished merge.</span>
+	<span class="c">///</span><span class="c"> </span>
+	<span class="c">///</span><span class="c"> The abstract format is:</span><span class="c">&lt;</span><span class="c">br</span><span class="c">/&gt;</span><span class="c"> path stage flags statdata SHA-1</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">Path is the relative path in the workdir</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">stage is 0 (normally), but when</span>
+	<span class="c">///</span><span class="c"> merging 1 is the common ancestor version, 2 is &#39;our&#39; version and 3 is &#39;their&#39;</span>
+	<span class="c">///</span><span class="c"> version. A fully resolved merge only contains stage 0.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">flags is the object type and information of validity</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">statdata is the size of this object and some other file system specifics,</span>
+	<span class="c">///</span><span class="c"> some of it ignored by JGit</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">SHA-1 represents the content of the references object</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> An index can also contain a tree cache which we ignore for now. We drop the</span>
+	<span class="c">///</span><span class="c"> tree cache when writing the index.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">//[Obsolete(&quot;Use DirCache instead.&quot;)]</span>
+	<b>public class</b> <a id="f85fef7d9e501a33" href="R/f85fef7d9e501a33.html" target="n" data-glyph="0,0" class="t t">GitIndex</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Stage 0 represents merged entries.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private const int</b> <a id="8114016fc9bfbdfe" href="R/8114016fc9bfbdfe.html" target="n" data-glyph="10,1" class="i field">STAGE_0</a> = 0;
+		<b>private static bool</b>? <a id="efe638769a9ad56a" href="R/efe638769a9ad56a.html" target="n" data-glyph="46,1" class="i field">filemode</a> = <b>null</b>; <span class="c">// needed for testing.</span>
+
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>byte</b>[], <a href="#ada66cbaf2f188da" class="t t">Entry</a>&gt; <a id="e3ad28589a0851dd" href="R/e3ad28589a0851dd.html" target="n" data-glyph="46,1" class="i field">_entries</a>;
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="8e7bf8f4a1fcf10d" href="R/8e7bf8f4a1fcf10d.html" target="n" data-glyph="46,1" class="i field">_cacheFile</a>;
+
+		<span class="c">// Index is modified</span>
+		<b>private bool</b> <a id="35dba0c4a9f10136" href="R/35dba0c4a9f10136.html" target="n" data-glyph="46,1" class="i field">_changed</a>;
+		<b>private</b> <a href="#83b624e37f83488c" class="t t">Header</a> <a id="d89f366ce6741c0b" href="R/d89f366ce6741c0b.html" target="n" data-glyph="46,1" class="i field">_header</a>;
+		<b>private long</b> <a id="5b1f5daf552ce32f" href="R/5b1f5daf552ce32f.html" target="n" data-glyph="46,1" class="i field">_lastCacheTime</a>;
+		<b>private bool</b> <a id="7de7a9c3dba015d6" href="R/7de7a9c3dba015d6.html" target="n" data-glyph="46,1" class="i field">_statDirty</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Encoding that is used for encoding / decoding filenames only</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">//public Encoding FilenameEncoding</span>
+		<span class="c">//{</span>
+		<span class="c">//   get;</span>
+		<span class="c">//   set;</span>
+		<span class="c">//}</span>
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a Git index representation.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="0b44614a9a7cfd94" href="R/0b44614a9a7cfd94.html" target="n" data-glyph="72,1" class="i constructor">GitIndex</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r0 rd" class="r0 r">db</span>)
+		{
+			<span class="c">//FilenameEncoding = Constants.CHARSET; //  defaults to UTF8 actually</span>
+			<a href="#e3ad28589a0851dd" class="i field">_entries</a> = <b>new</b> <a href="@0@System/A.html#97064012f2a3fcb7" class="t constructor">SortedDictionary</a>&lt;<b>byte</b>[], <a href="#ada66cbaf2f188da" class="t t">Entry</a>&gt;(<b>new</b> <a href="#49614b989ccae92b" class="t constructor">ByteVectorComparer</a>());
+			<a href="#b74ff8682fa0ad0b" class="i property">Repository</a> = <span class="r0 r">db</span>;
+			<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a> = <span class="r0 r">db</span>.<a href="Repository.cs.html#d34bfd10f7960cc7" class="i method">getIndexFile</a>();
+		}
+
+		<b>public</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="b74ff8682fa0ad0b" href="R/b74ff8682fa0ad0b.html" target="n" data-glyph="102,1" class="i property">Repository</a> { <b>get</b>; <b>private set</b>; }
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> True if we have modified the index in memory since reading it from disk.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="531eaeee807e590f" href="R/531eaeee807e590f.html" target="n" data-glyph="102,1" class="i property">IsChanged</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#35dba0c4a9f10136" class="i field">_changed</a> || <a href="#7de7a9c3dba015d6" class="i field">_statDirty</a>; }
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Return the members of the index sorted by the unsigned byte</span>
+		<span class="c">///</span><span class="c">	values of the path names.</span>
+		<span class="c">///</span><span class="c">	</span>
+		<span class="c">///</span><span class="c">	Small beware: Unaccounted for are unmerged entries. You may want</span>
+		<span class="c">///</span><span class="c">	to abort if members with stage != 0 are found if you are doing</span>
+		<span class="c">///</span><span class="c">	any updating operations. All stages will be found after one another</span>
+		<span class="c">///</span><span class="c">	here later. Currently only one stage per name is returned.	</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> The index entries sorted </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="#ada66cbaf2f188da" class="t t">Entry</a>&gt; <a id="5768ca967b11648d" href="R/5768ca967b11648d.html" target="n" data-glyph="102,1" class="i property">Members</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>.<a href="@0@System.Core/A.html#e276d6892241255b" class="i method">ToList</a>(); }
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reread index data from disk if the index file has been changed</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="42148351d6aeb41d" href="R/42148351d6aeb41d.html" target="n" data-glyph="72,1" class="i method">RereadIfNecessary</a>()
+		{
+            <a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+			<b>if</b> (<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a> &amp;&amp; <a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() != <a href="#5b1f5daf552ce32f" class="i field">_lastCacheTime</a>)
+			{
+				<a href="#e0ebbc0131ba1b87" class="i method">Read</a>();
+				<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>.<a href="Repository.cs.html#64ab5ae6fd3bb6b4" class="i method">fireIndexChanged</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add the content of a file to the index.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> workdir </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> the file </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> a new or updated index entry for the path represented by f</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#ada66cbaf2f188da" class="t t">Entry</a> <a id="d27534d6f48def1b" href="R/d27534d6f48def1b.html" target="n" data-glyph="72,1" class="i method">add</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r1 rd" class="r1 r">wd</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r2 rd" class="r2 r">f</span>)
+		{
+			<b>return</b> <a href="#6b01f58d0ef6b374" class="i method">add</a>(<span class="r1 r">wd</span>, <span class="r2 r">f</span>, <b>null</b>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add the content of a file to the index.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">content</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">content of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> a new or updated index entry for the path represented by f </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#ada66cbaf2f188da" class="t t">Entry</a> <a id="6b01f58d0ef6b374" href="R/6b01f58d0ef6b374.html" target="n" data-glyph="72,1" class="i method">add</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r3 rd" class="r3 r">wd</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r4 rd" class="r4 r">f</span>, <b>byte</b>[] <span id="r5 rd" class="r5 r">content</span>)
+		{
+			<b>byte</b>[] <span id="r6 rd" class="r6 r">key</span> = <a href="#935e56bff67ad696" class="i method">MakeKey</a>(<span class="r3 r">wd</span>, <span class="r4 r">f</span>);
+			<a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r7 rd" class="r7 r">e</span>;
+
+			<b>if</b> (!<a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#6b9f9049901aacea" class="i method">TryGetValue</a>(<span class="r6 r">key</span>, <b>out</b> <span class="r7 r">e</span>))
+			{
+				<span class="r7 r">e</span> = <b>new</b> <a href="#acd5f1021a4034c1" class="t constructor">Entry</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>, <span class="r6 r">key</span>, <span class="r4 r">f</span>, <a href="#8114016fc9bfbdfe" class="i field">STAGE_0</a>, <span class="r5 r">content</span>);
+				<a href="#e3ad28589a0851dd" class="i field">_entries</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><span class="r6 r">key</span>] = <span class="r7 r">e</span>;
+			}
+			<b>else</b>
+			{
+				<span class="r7 r">e</span>.<a href="#78143ce5f164369d" class="i method">update</a>(<span class="r4 r">f</span>);
+			}
+
+			<b>return</b> <span class="r7 r">e</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add the encoded filename and content of a file to the index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">relative_filename</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">relative filename with respect to the working directory</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">content</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#ada66cbaf2f188da" class="t t">Entry</a> <a id="9304922061976547" href="R/9304922061976547.html" target="n" data-glyph="72,1" class="i method">add</a>(<b>byte</b>[] <span id="r8 rd" class="r8 r">relative_filename</span>, <b>byte</b>[] <span id="r9 rd" class="r9 r">content</span>)
+		{
+			<b>byte</b>[] <span id="r10 rd" class="r10 r">key</span> = <span class="r8 r">relative_filename</span>;
+			<a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r11 rd" class="r11 r">e</span>;
+
+			<b>if</b> (!<a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#6b9f9049901aacea" class="i method">TryGetValue</a>(<span class="r10 r">key</span>, <b>out</b> <span class="r11 r">e</span>))
+			{
+				<span class="r11 r">e</span> = <b>new</b> <a href="#acd5f1021a4034c1" class="t constructor">Entry</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>, <span class="r10 r">key</span>, <b>null</b>, <a href="#8114016fc9bfbdfe" class="i field">STAGE_0</a>, <span class="r9 r">content</span>);
+				<a href="#e3ad28589a0851dd" class="i field">_entries</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><span class="r10 r">key</span>] = <span class="r11 r">e</span>;
+			}
+			<b>else</b>
+			{
+				<span class="r11 r">e</span>.<a href="#4635f0955ffd801c" class="i method">update</a>(<b>null</b>, <span class="r9 r">content</span>);
+			}
+
+			<b>return</b> <span class="r11 r">e</span>;
+		}
+
+		<b>public bool</b> <a id="1206181d4fee4cc3" href="R/1206181d4fee4cc3.html" target="n" data-glyph="72,1" class="i method">Remove</a>(<b>string</b> <span id="r12 rd" class="r12 r">relative_file_path</span>)
+		{
+			<b>if</b> (<b>string</b>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r12 r">relative_file_path</span>))
+				<b>return false</b>;
+			<b>var</b> <span id="r13 rd" class="r13 r">key</span> = <span class="i n">Core</span>.<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#6cad4279396ab06a" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r12 r">relative_file_path</span>));
+			<b>return</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#3682f274b2ca119f" class="i method">Remove</a>(<span class="r13 r">key</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Remove a path from the index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> workdir </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> the file whose path shall be removed. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if such a path was found (and thus removed) </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">  </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="4f2fea13b7cafa06" href="R/4f2fea13b7cafa06.html" target="n" data-glyph="72,1" class="i method">remove</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r14 rd" class="r14 r">wd</span>, <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r15 rd" class="r15 r">f</span>)
+		{
+			<b>byte</b>[] <span id="r16 rd" class="r16 r">key</span> = <a href="#935e56bff67ad696" class="i method">MakeKey</a>(<span class="r14 r">wd</span>, <span class="r15 r">f</span>);
+			<b>return</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#3682f274b2ca119f" class="i method">Remove</a>(<span class="r16 r">key</span>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Read the cache file into memory.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="e0ebbc0131ba1b87" href="R/e0ebbc0131ba1b87.html" target="n" data-glyph="72,1" class="i method">Read</a>()
+		{
+			<a href="#35dba0c4a9f10136" class="i field">_changed</a> = <b>false</b>;
+			<a href="#7de7a9c3dba015d6" class="i field">_statDirty</a> = <b>false</b>;
+
+			<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+
+			<b>if</b> (!<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+			{
+				<a href="#d89f366ce6741c0b" class="i field">_header</a> = <b>null</b>;
+				<a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+				<a href="#5b1f5daf552ce32f" class="i field">_lastCacheTime</a> = 0;
+				<b>return</b>;
+			}
+
+			<b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r17 rd" class="r17 r">cache</span> = <b>new</b> <a href="@0@mscorlib/A.html#66c00a58470ce47d" class="t constructor">FileStream</a>(<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>))
+			<b>using</b> (<a href="Util/EndianBinaryReader.cs.html#14a62468d2339817" class="k">var</a> <span id="r18 rd" class="r18 r">buffer</span> = <b>new</b> <a href="Util/EndianBinaryReader.cs.html#3a70d2444f63260c" class="t constructor">EndianBinaryReader</a>(<b>new</b> <a href="Util/BigEndianBitConverter.cs.html#2fff50b8e4db9d06" class="t constructor">BigEndianBitConverter</a>(), <span class="r17 r">cache</span>))
+			{
+				<a href="#d89f366ce6741c0b" class="i field">_header</a> = <b>new</b> <a href="#518dbf4440ab3903" class="t constructor">Header</a>(<span class="r18 r">buffer</span>);
+				<a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+
+				<b>for</b> (<b>int</b> <span id="r19 rd" class="r19 r">i</span> = 0; <span class="r19 r">i</span> &lt; <a href="#d89f366ce6741c0b" class="i field">_header</a>.<a href="#1aab6baa009460f8" class="i property">Entries</a>; ++<span class="r19 r">i</span>)
+				{
+					<a href="#ada66cbaf2f188da" class="k">var</a> <span id="r20 rd" class="r20 r">entry</span> = <b>new</b> <a href="#cf0f64608ca8c6a3" class="t constructor">Entry</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>, <span class="r18 r">buffer</span>);
+					<a href="#e3ad28589a0851dd" class="i field">_entries</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r20 r">entry</span>.<a href="#c9f28b2aa347b1ef" class="i property">Name</a>)] = <span class="r20 r">entry</span>;
+				}
+
+				<a href="#5b1f5daf552ce32f" class="i field">_lastCacheTime</a> = <a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Write content of index to disk.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="9b062f27c1057bff" href="R/9b062f27c1057bff.html" target="n" data-glyph="72,1" class="i method">write</a>()
+		{
+			<a href="#226395a31dd77980" class="i method">CheckWriteOk</a>();
+			<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r21 rd" class="r21 r">tmpIndex</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;.tmp&quot;</span>);
+			<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r22 rd" class="r22 r">@lock</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;.lock&quot;</span>);
+
+			<b>try</b>
+			{
+				<b>using</b> (<span class="r22 r">@lock</span>.<a href="@0@mscorlib/A.html#fb467578f562d58a" class="i method">Create</a>())
+				{
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Index file is in use&quot;</span>);
+			}
+
+			<b>try</b>
+			{
+				<b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r23 rd" class="r23 r">fileOutputStream</span> = <b>new</b> <a href="@0@mscorlib/A.html#66c00a58470ce47d" class="t constructor">FileStream</a>(<span class="r21 r">tmpIndex</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#71f93211e2965551" class="i field">CreateNew</a>))
+				<b>using</b> (<a href="Util/EndianBinaryWriter.cs.html#dbc7d3235677908a" class="k">var</a> <span id="r24 rd" class="r24 r">writer</span> = <b>new</b> <a href="Util/EndianBinaryWriter.cs.html#bcf3e46647b6688a" class="t constructor">EndianBinaryWriter</a>(<b>new</b> <a href="Util/BigEndianBitConverter.cs.html#2fff50b8e4db9d06" class="t constructor">BigEndianBitConverter</a>(), <span class="r23 r">fileOutputStream</span>))
+				{
+					<a href="Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <span id="r25 rd" class="r25 r">newMessageDigest</span> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c3b287d96df31211" class="i method">newMessageDigest</a>();
+					<a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r26 rd" class="r26 r">ms</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>();
+
+					<a href="#d89f366ce6741c0b" class="i field">_header</a> = <b>new</b> <a href="#7801077eab534671" class="t constructor">Header</a>(<a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a> <b>as</b> <a href="@0@mscorlib/A.html#cde8022b6e680e40" class="t t">ICollection</a>);
+					<a href="#d89f366ce6741c0b" class="i field">_header</a>.<a href="#0ae01979ad595ee4" class="i method">Write</a>(<span class="r26 r">ms</span>);
+
+					<span class="r25 r">newMessageDigest</span>.<a href="Util/MessageDigest.cs.html#3c8fc7c35c752c3b" class="i method">Update</a>(<span class="r26 r">ms</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+					<span class="r24 r">writer</span>.<a href="Util/EndianBinaryWriter.cs.html#b398bb025687caf7" class="i method">Write</a>(<span class="r26 r">ms</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+
+					<b>foreach</b> (<a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r27 rd" class="r27 r">entry</span> <b>in</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+					{
+						<span class="r26 r">ms</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>();
+
+						<span class="r27 r">entry</span>.<a href="#888b5f25a36c919f" class="i method">Write</a>(<span class="r26 r">ms</span>);
+						<span class="r25 r">newMessageDigest</span>.<a href="Util/MessageDigest.cs.html#3c8fc7c35c752c3b" class="i method">Update</a>(<span class="r26 r">ms</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+						<span class="r24 r">writer</span>.<a href="Util/EndianBinaryWriter.cs.html#b398bb025687caf7" class="i method">Write</a>(<span class="r26 r">ms</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+					}
+
+					<span class="r26 r">ms</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>();
+
+					<b>byte</b>[] <span id="r28 rd" class="r28 r">digestBuffer</span> = <span class="r25 r">newMessageDigest</span>.<a href="Util/MessageDigest.cs.html#032ba42f3411690d" class="i method">Digest</a>();
+					<span class="r26 r">ms</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r28 r">digestBuffer</span>, 0, <span class="r28 r">digestBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+					<span class="r24 r">writer</span>.<a href="Util/EndianBinaryWriter.cs.html#f2a315c4c20590db" class="i method">Write</a>(<span class="r26 r">ms</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>(), 0, <span class="r28 r">digestBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				}
+
+				<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+				<b>if</b> (<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+				{
+					<b>try</b>
+					{
+						<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Could not rename delete old index&quot;</span>);
+					}
+				}
+
+				<b>if</b> (!<span class="r21 r">tmpIndex</span>.<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Could not rename temporary index file to index&quot;</span>);
+				}
+
+				<a href="#35dba0c4a9f10136" class="i field">_changed</a> = <b>false</b>;
+				<a href="#7de7a9c3dba015d6" class="i field">_statDirty</a> = <b>false</b>;
+			    <a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+				<a href="#5b1f5daf552ce32f" class="i field">_lastCacheTime</a> = <a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+				<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>.<a href="Repository.cs.html#64ab5ae6fd3bb6b4" class="i method">fireIndexChanged</a>();
+			}
+			<b>finally</b>
+			{
+				<b>try</b>
+				{
+					<span class="r22 r">@lock</span>.<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Could not delete lock file. Should not happen&quot;</span>);
+				}
+
+				<b>try</b>
+				{
+					<span class="r21 r">tmpIndex</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#8e7bf8f4a1fcf10d" class="i field">_cacheFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;.tmp&quot;</span>);
+					<b>if</b> (<span class="r21 r">tmpIndex</span>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+					{
+						<span class="r21 r">tmpIndex</span>.<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+					}
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Could not delete temporary index file. Should not happen&quot;</span>);
+				}
+			}
+		}
+
+		<b>private void</b> <a id="226395a31dd77980" href="R/226395a31dd77980.html" target="n" data-glyph="76,1" class="i method">CheckWriteOk</a>()
+		{
+			<b>foreach</b> (<a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r29 rd" class="r29 r">e</span> <b>in</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+			{
+				<b>if</b> (<span class="r29 r">e</span>.<a href="#56b826703af152ca" class="i property">Stage</a> != <a href="#8114016fc9bfbdfe" class="i field">STAGE_0</a>)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#3d3c2c03118be4f8" class="t constructor">NotSupportedException</a>(
+						 <span class="s">&quot;Cannot work with other stages than zero right now. Won&#39;t write corrupt index.&quot;</span>);
+				}
+			}
+		}
+
+		<b>private static bool</b> <a id="f829948fd6d20a83" href="R/f829948fd6d20a83.html" target="n" data-glyph="76,1" class="i method">FileCanExecute</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r30 rd" class="r30 r">f</span>)
+		{
+			<b>return</b> <a href="Util/FS.cs.html#c49f385e4a538de3" class="t t">FS</a>.<a href="Util/FS.cs.html#3f153b2dab90d204" class="i method">canExecute</a>(<span class="r30 r">f</span>);
+		}
+
+		<b>private static bool</b> <a id="9d23f24d6f67f97d" href="R/9d23f24d6f67f97d.html" target="n" data-glyph="76,1" class="i method">FileSetExecute</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r31 rd" class="r31 r">f</span>, <b>bool</b> <span id="r32 rd" class="r32 r">@value</span>)
+		{
+			<b>return</b> <a href="Util/FS.cs.html#c49f385e4a538de3" class="t t">FS</a>.<a href="Util/FS.cs.html#5b949f865c6b9d4c" class="i method">setExecute</a>(<span class="r31 r">f</span>, <span class="r32 r">@value</span>);
+		}
+
+		<b>private static bool</b> <a id="60d99baaf95a1b19" href="R/60d99baaf95a1b19.html" target="n" data-glyph="76,1" class="i method">FileHasExecute</a>()
+		{
+			<b>return</b> <a href="Util/FS.cs.html#c49f385e4a538de3" class="t t">FS</a>.<a href="Util/FS.cs.html#c0badb1cf69ab40b" class="i method">supportsExecute</a>();
+		}
+
+		<b>private byte</b>[] <a id="935e56bff67ad696" href="R/935e56bff67ad696.html" target="n" data-glyph="76,1" class="i method">MakeKey</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r33 rd" class="r33 r">wd</span>, <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r34 rd" class="r34 r">f</span>)
+		{
+			<b>if</b> (!<b>string</b>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r34 r">f</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>()) &amp;&amp;
+				 <span class="r33 r">wd</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>() &amp;&amp; <span class="r33 r">wd</span>.<a href="@0@mscorlib/A.html#3c656179878c4d6a" class="i property">Exists</a> &amp;&amp;
+				 !<span class="r34 r">f</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r33 r">wd</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>()))
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#df2d82d91ca29e40" class="t constructor">Exception</a>(<span class="s">&quot;Path is not in working dir&quot;</span>);
+			}
+
+			<b>string</b> <span id="r35 rd" class="r35 r">relName</span> = <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#85fefa5ffb656935" class="i method">StripWorkDir</a>(<span class="r33 r">wd</span>, <span class="r34 r">f</span>);
+			<b>return</b> <span class="i n">Core</span>.<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#6cad4279396ab06a" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r35 r">relName</span>));
+		}
+
+		<b>private static bool</b> <a id="e0b0664f6fac13e4" href="R/e0b0664f6fac13e4.html" target="n" data-glyph="76,1" class="i method">ConfigFilemode</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r36 rd" class="r36 r">repository</span>)
+		{
+			<span class="c">// temporary til we can actually set parameters. We need to be able</span>
+			<span class="c">// to change this for testing.</span>
+			<b>if</b> (<a href="#efe638769a9ad56a" class="i field">filemode</a> != <b>null</b>)
+			{
+				<b>return</b> <a href="#efe638769a9ad56a" class="i field">filemode</a>.<a href="@0@mscorlib/A.html#7b38d1fa76071c95" class="i property">Value</a>;
+			}
+
+			<a href="RepositoryConfig.cs.html#cfe59cda5a797e80" class="t t">RepositoryConfig</a> <span id="r37 rd" class="r37 r">config</span> = <span class="r36 r">repository</span>.<a href="Repository.cs.html#5bc9cbfb2f0922eb" class="i property">Config</a>;
+			<b>return</b> <span class="r37 r">config</span>.<a href="Config.cs.html#837ad873a3e9358a" class="i method">getBoolean</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;filemode&quot;</span>, <b>true</b>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Read a Tree recursively into the index</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">t</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The tree to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="b9226881ab738a9b" href="R/b9226881ab738a9b.html" target="n" data-glyph="72,1" class="i method">ReadTree</a>(<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r38 rd" class="r38 r">t</span>)
+		{
+			<a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+			<a href="#6740fb568600f6ea" class="i method">ReadTree</a>(<b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>, <span class="r38 r">t</span>);
+		}
+
+		<b>private void</b> <a id="6740fb568600f6ea" href="R/6740fb568600f6ea.html" target="n" data-glyph="76,1" class="i method">ReadTree</a>(<b>string</b> <span id="r39 rd" class="r39 r">prefix</span>, <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r40 rd" class="r40 r">t</span>)
+		{
+			<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a>[] <span id="r41 rd" class="r41 r">members</span> = <span class="r40 r">t</span>.<a href="Tree.cs.html#9883e64bacef8470" class="i property">Members</a>;
+			<b>for</b> (<b>int</b> <span id="r42 rd" class="r42 r">i</span> = 0; <span class="r42 r">i</span> &lt; <span class="r41 r">members</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r42 r">i</span>)
+			{
+				<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r43 rd" class="r43 r">te</span> = <span class="r41 r">members</span>[<span class="r42 r">i</span>];
+				<b>string</b> <span id="r44 rd" class="r44 r">name</span>;
+				<b>if</b> (<span class="r39 r">prefix</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+				{
+					<span class="r44 r">name</span> = <span class="r39 r">prefix</span> + <span class="s">&quot;/&quot;</span> + <span class="r43 r">te</span>.<a href="TreeEntry.cs.html#7a79dfb946aba405" class="i property">Name</a>;
+				}
+				<b>else</b>
+				{
+					<span class="r44 r">name</span> = <span class="r43 r">te</span>.<a href="TreeEntry.cs.html#7a79dfb946aba405" class="i property">Name</a>;
+				}
+				<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r45 rd" class="r45 r">tr</span> = (<span class="r43 r">te</span> <b>as</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a>);
+				<b>if</b> (<span class="r45 r">tr</span> != <b>null</b>)
+				{
+					<a href="#6740fb568600f6ea" class="i method">ReadTree</a>(<span class="r44 r">name</span>, <span class="r45 r">tr</span>);
+				}
+				<b>else</b>
+				{
+					<a href="#ada66cbaf2f188da" class="k">var</a> <span id="r46 rd" class="r46 r">e</span> = <b>new</b> <a href="#cb9dae8305278b4d" class="t constructor">Entry</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>, <span class="r43 r">te</span>, 0);
+					<a href="#e3ad28589a0851dd" class="i field">_entries</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r44 r">name</span>)] = <span class="r46 r">e</span>;
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add tree entry to index</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r47 r">te</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> tree entry </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> new or modified index entry </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#ada66cbaf2f188da" class="t t">Entry</a> <a id="6d287df8a9f1c6e1" href="R/6d287df8a9f1c6e1.html" target="n" data-glyph="72,1" class="i method">addEntry</a>(<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r47 rd" class="r47 r">te</span>)
+		{
+			<b>byte</b>[] <span id="r48 rd" class="r48 r">key</span> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r47 r">te</span>.<a href="TreeEntry.cs.html#f2fc52ae001c479c" class="i property">FullName</a>);
+			<a href="#ada66cbaf2f188da" class="k">var</a> <span id="r49 rd" class="r49 r">e</span> = <b>new</b> <a href="#cb9dae8305278b4d" class="t constructor">Entry</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>, <span class="r47 r">te</span>, 0);
+			<a href="#e3ad28589a0851dd" class="i field">_entries</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><span class="r48 r">key</span>] = <span class="r49 r">e</span>;
+			<b>return</b> <span class="r49 r">e</span>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Check out content of the content represented by the index</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r50 r">workDir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="ecc0a20b82c9a53b" href="R/ecc0a20b82c9a53b.html" target="n" data-glyph="72,1" class="i method">checkout</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r50 rd" class="r50 r">workDir</span>)
+		{
+			<b>foreach</b> (<a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r51 rd" class="r51 r">e</span> <b>in</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+			{
+				<b>if</b> (<span class="r51 r">e</span>.<a href="#56b826703af152ca" class="i property">Stage</a> != <a href="#8114016fc9bfbdfe" class="i field">STAGE_0</a>)
+				{
+					<b>continue</b>;
+				}
+
+				<a href="#334fa795b5d1b4ce" class="i method">checkoutEntry</a>(<span class="r50 r">workDir</span>, <span class="r51 r">e</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Check out content of the specified index entry</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r52 r">workDir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r53 r">e</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">index entry</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="334fa795b5d1b4ce" href="R/334fa795b5d1b4ce.html" target="n" data-glyph="72,1" class="i method">checkoutEntry</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r52 rd" class="r52 r">workDir</span>, <a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r53 rd" class="r53 r">e</span>)
+		{
+			<a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r54 rd" class="r54 r">ol</span> = <a href="#b74ff8682fa0ad0b" class="i property">Repository</a>.<a href="Repository.cs.html#620dd24281450a4b" class="i method">OpenBlob</a>(<span class="r53 r">e</span>.<a href="#84bb78eccc718597" class="i property">ObjectId</a>);
+			<b>byte</b>[] <span id="r55 rd" class="r55 r">bytes</span> = <span class="r54 r">ol</span>.<a href="ObjectLoader.cs.html#d883e0b16803f8fb" class="i property">Bytes</a>;
+
+			<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r56 rd" class="r56 r">file</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<span class="r52 r">workDir</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>(), <span class="r53 r">e</span>.<a href="#c9f28b2aa347b1ef" class="i property">Name</a>));
+
+			<b>if</b> (<span class="r56 r">file</span>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+			{
+				<span class="r56 r">file</span>.<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+			}
+
+			<span class="r56 r">file</span>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+
+			<b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r57 rd" class="r57 r">fs</span> = <b>new</b> <a href="@0@mscorlib/A.html#66c00a58470ce47d" class="t constructor">FileStream</a>(<span class="r56 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#71f93211e2965551" class="i field">CreateNew</a>))
+			{
+				<a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r58 rd" class="r58 r">ms</span> = <b>new</b> <a href="@0@mscorlib/A.html#f92fa270fda9a82b" class="t constructor">MemoryStream</a>(<span class="r55 r">bytes</span>);
+				<span class="r58 r">ms</span>.<a href="@0@mscorlib/A.html#105c7dee035386ce" class="i method">WriteTo</a>(<span class="r57 r">fs</span>);
+			}
+
+			<b>if</b> (<a href="#e0b0664f6fac13e4" class="i method">ConfigFilemode</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>) &amp;&amp; <a href="#60d99baaf95a1b19" class="i method">FileHasExecute</a>())
+			{
+				<b>if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r53 r">e</span>.<a href="#972ad0a5975f25d4" class="i property">Mode</a>))
+				{
+					<b>if</b> (!<a href="#f829948fd6d20a83" class="i method">FileCanExecute</a>(<span class="r56 r">file</span>))
+					{
+						<a href="#9d23f24d6f67f97d" class="i method">FileSetExecute</a>(<span class="r56 r">file</span>, <b>true</b>);
+					}
+				}
+				<b>else if</b> (<a href="#f829948fd6d20a83" class="i method">FileCanExecute</a>(<span class="r56 r">file</span>))
+				{
+					<a href="#9d23f24d6f67f97d" class="i method">FileSetExecute</a>(<span class="r56 r">file</span>, <b>false</b>);
+				}
+			}
+
+			<span class="r53 r">e</span>.<a href="#c70e5c398de4b889" class="i property">Mtime</a> = <span class="r56 r">file</span>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() * 1000000L;
+			<span class="r53 r">e</span>.<a href="#8971b04d3d4e1961" class="i property">Ctime</a> = <span class="r53 r">e</span>.<a href="#c70e5c398de4b889" class="i property">Mtime</a>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct and write tree out of index.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> SHA-1 of the constructed tree</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="8b75423d7f490963" href="R/8b75423d7f490963.html" target="n" data-glyph="72,1" class="i method">writeTree</a>()
+		{
+			<a href="#226395a31dd77980" class="i method">CheckWriteOk</a>();
+			<a href="ObjectWriter.cs.html#edd7e08e5ab8145e" class="k">var</a> <span id="r59 rd" class="r59 r">writer</span> = <b>new</b> <a href="ObjectWriter.cs.html#81656ecc2c2175d2" class="t constructor">ObjectWriter</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>);
+			<a href="Tree.cs.html#5c7834780fcb0bc3" class="k">var</a> <span id="r60 rd" class="r60 r">current</span> = <b>new</b> <a href="Tree.cs.html#f2cd72703b360079" class="t constructor">Tree</a>(<a href="#b74ff8682fa0ad0b" class="i property">Repository</a>);
+			<a href="@0@System/A.html#c5371bef044c6ab6" class="k">var</a> <span id="r61 rd" class="r61 r">trees</span> = <b>new</b> <a href="@0@System/A.html#692a18e31afb7ef9" class="t constructor">Stack</a>&lt;<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a>&gt;();
+			<span class="r61 r">trees</span>.<a href="@0@System/A.html#83b1a3864aaa7198" class="i method">Push</a>(<span class="r60 r">current</span>);
+			<b>var</b> <span id="r62 rd" class="r62 r">prevName</span> = <b>new</b> <b>string</b>[0];
+
+			<b>foreach</b> (<a href="#ada66cbaf2f188da" class="t t">Entry</a> <span id="r63 rd" class="r63 r">e</span> <b>in</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+			{
+				<b>if</b> (<span class="r63 r">e</span>.<a href="#56b826703af152ca" class="i property">Stage</a> != <a href="#8114016fc9bfbdfe" class="i field">STAGE_0</a>)
+				{
+					<b>continue</b>;
+				}
+
+				<b>string</b>[] <span id="r64 rd" class="r64 r">newName</span> = <a href="#6d244a62057f7553" class="i method">SplitDirPath</a>(<span class="r63 r">e</span>.<a href="#c9f28b2aa347b1ef" class="i property">Name</a>);
+				<b>int</b> <span id="r65 rd" class="r65 r">c</span> = <a href="#3abebcd62f53f18f" class="i method">LongestCommonPath</a>(<span class="r62 r">prevName</span>, <span class="r64 r">newName</span>);
+				<b>while</b> (<span class="r65 r">c</span> &lt; <span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1)
+				{
+					<span class="r60 r">current</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a> = <span class="r59 r">writer</span>.<a href="ObjectWriter.cs.html#d5ee2ee55acc21f3" class="i method">WriteTree</a>(<span class="r60 r">current</span>);
+					<span class="r61 r">trees</span>.<a href="@0@System/A.html#fd86d7436e55c84b" class="i method">Pop</a>();
+					<span class="r60 r">current</span> = <span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> == 0 ? <b>null</b> : <span class="r61 r">trees</span>.<a href="@0@System/A.html#20264e6773140faf" class="i method">Peek</a>();
+				}
+
+				<b>while</b> (<span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> &lt; <span class="r64 r">newName</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<b>if</b> (!<span class="r60 r">current</span>.<a href="Tree.cs.html#9bba66177560bf4a" class="i method">ExistsTree</a>(<span class="r64 r">newName</span>[<span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1]))
+					{
+						<span class="r60 r">current</span> = <b>new</b> <a href="Tree.cs.html#458bcf8f79ff96be" class="t constructor">Tree</a>(<span class="r60 r">current</span>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r64 r">newName</span>[<span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1]));
+						<span class="r60 r">current</span>.<a href="TreeEntry.cs.html#9960f104c00cc77f" class="i property">Parent</a>.<a href="Tree.cs.html#4e55144ee51a0cb1" class="i method">AddEntry</a>(<span class="r60 r">current</span>);
+						<span class="r61 r">trees</span>.<a href="@0@System/A.html#83b1a3864aaa7198" class="i method">Push</a>(<span class="r60 r">current</span>);
+					}
+					<b>else</b>
+					{
+						<span class="r60 r">current</span> = (<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a>)<span class="r60 r">current</span>.<a href="Tree.cs.html#60a0f93d56dc6a93" class="i method">findTreeMember</a>(<span class="r64 r">newName</span>[<span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1]);
+						<span class="r61 r">trees</span>.<a href="@0@System/A.html#83b1a3864aaa7198" class="i method">Push</a>(<span class="r60 r">current</span>);
+					}
+				}
+
+				<a href="FileTreeEntry.cs.html#f78c3e064b2bbe39" class="k">var</a> <span id="r66 rd" class="r66 r">ne</span> = <b>new</b> <a href="FileTreeEntry.cs.html#aff375e54e09490e" class="t constructor">FileTreeEntry</a>(<span class="r60 r">current</span>, <span class="r63 r">e</span>.<a href="#84bb78eccc718597" class="i property">ObjectId</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r64 r">newName</span>[<span class="r64 r">newName</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1]),
+													(<span class="r63 r">e</span>.<a href="#972ad0a5975f25d4" class="i property">Mode</a> &amp; <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>) == <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>);
+				<span class="r60 r">current</span>.<a href="Tree.cs.html#4e55144ee51a0cb1" class="i method">AddEntry</a>(<span class="r66 r">ne</span>);
+			}
+
+			<b>while</b> (<span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> != 0)
+			{
+				<span class="r60 r">current</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a> = <span class="r59 r">writer</span>.<a href="ObjectWriter.cs.html#d5ee2ee55acc21f3" class="i method">WriteTree</a>(<span class="r60 r">current</span>);
+				<span class="r61 r">trees</span>.<a href="@0@System/A.html#fd86d7436e55c84b" class="i method">Pop</a>();
+
+				<b>if</b> (<span class="r61 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> != 0)
+				{
+					<span class="r60 r">current</span> = <span class="r61 r">trees</span>.<a href="@0@System/A.html#20264e6773140faf" class="i method">Peek</a>();
+				}
+			}
+
+			<b>return</b> <span class="r60 r">current</span>.<a href="Tree.cs.html#5dac5a8ef0122c99" class="i property">TreeId</a>;
+		}
+
+		<b>internal string</b>[] <a id="6d244a62057f7553" href="R/6d244a62057f7553.html" target="n" data-glyph="74,1" class="i method">SplitDirPath</a>(<b>string</b> <span id="r67 rd" class="r67 r">name</span>)
+		{
+			<span class="c">// TODO : Maybe should we rely on a plain string.Split(). Seems to deliver the expected output.</span>
+			<b>var</b> <span id="r68 rd" class="r68 r">tmp</span> = <b>new</b> <b>string</b>[<span class="r67 r">name</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> / 2 + 1];
+			<b>int</b> <span id="r69 rd" class="r69 r">p0</span> = -1;
+			<b>int</b> <span id="r70 rd" class="r70 r">p1</span>;
+			<b>int</b> <span id="r71 rd" class="r71 r">c</span> = 0;
+			<b>while</b> ((<span class="r70 r">p1</span> = <span class="r67 r">name</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;/&#39;</span>, <span class="r69 r">p0</span> + 1)) != -1)
+			{
+				<span class="r68 r">tmp</span>[<span class="r71 r">c</span>++] = <span class="r67 r">name</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(<span class="r69 r">p0</span> + 1, <span class="r70 r">p1</span>);
+				<span class="r69 r">p0</span> = <span class="r70 r">p1</span>;
+			}
+			<span class="r68 r">tmp</span>[<span class="r71 r">c</span>++] = <span class="r67 r">name</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r69 r">p0</span> + 1);
+			<b>var</b> <span id="r72 rd" class="r72 r">ret</span> = <b>new</b> <b>string</b>[<span class="r71 r">c</span>];
+			<b>for</b> (<b>int</b> <span id="r73 rd" class="r73 r">i</span> = 0; <span class="r73 r">i</span> &lt; <span class="r71 r">c</span>; ++<span class="r73 r">i</span>)
+			{
+				<span class="r72 r">ret</span>[<span class="r73 r">i</span>] = <span class="r68 r">tmp</span>[<span class="r73 r">i</span>];
+			}
+			<b>return</b> <span class="r72 r">ret</span>;
+		}
+
+		<b>internal int</b> <a id="3abebcd62f53f18f" href="R/3abebcd62f53f18f.html" target="n" data-glyph="74,1" class="i method">LongestCommonPath</a>(<b>string</b>[] <span id="r74 rd" class="r74 r">a</span>, <b>string</b>[] <span id="r75 rd" class="r75 r">b</span>)
+		{
+			<b>int</b> <span id="r76 rd" class="r76 r">i</span>;
+
+			<b>for</b> (<span class="r76 r">i</span> = 0; <span class="r76 r">i</span> &lt; <span class="r74 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r76 r">i</span> &lt; <span class="r75 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r76 r">i</span>)
+			{
+				<b>if</b> (!<span class="r74 r">a</span>[<span class="r76 r">i</span>].<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r75 r">b</span>[<span class="r76 r">i</span>]))
+				{
+					<b>return</b> <span class="r76 r">i</span>;
+				}
+			}
+
+			<b>return</b> <span class="r76 r">i</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Look up an entry with the specified path.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r77 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Index entry for the path or null if not in index.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#ada66cbaf2f188da" class="t t">Entry</a> <a id="90f168d780eef362" href="R/90f168d780eef362.html" target="n" data-glyph="72,1" class="i method">GetEntry</a>(<b>string</b> <span id="r77 rd" class="r77 r">path</span>)
+		{
+			<b>byte</b>[] <span id="r78 rd" class="r78 r">val</span> = <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#6cad4279396ab06a" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r77 r">path</span>));
+			<b>return</b> <a href="#e3ad28589a0851dd" class="i field">_entries</a>.<a href="@0@System.Core/A.html#e73922753675387a" class="i method">Where</a>(<span id="r79 rd" class="r79 r">e</span> =&gt; <span class="r79 r">e</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a>.<a href="@0@System.Core/A.html#9bdd6ef7ba6a5615" class="i method">SequenceEqual</a>(<span class="r78 r">val</span>)).<a href="@0@System.Core/A.html#8087366974af11d2" class="i method">FirstOrDefault</a>().<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a>;
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: ByteVectorComparer
+
+		<b>private class</b> <a id="49614b989ccae92b" href="R/49614b989ccae92b.html" target="n" data-glyph="4,1" class="t t"><span id="0ed32c132312d875">ByteVectorComparer</span></a> : <a href="@0@mscorlib/A.html#6bf8828f51320498" class="t t">IComparer</a>&lt;<b>byte</b>[]&gt;
+		{
+			<span class="k preprocess">#</span><span class="k preprocess">region</span> IComparer&lt;byte[]&gt; Members
+
+			<b>public int</b> <a id="95aa07f49ba13a01" href="R/95aa07f49ba13a01.html" target="n" data-glyph="72,2" class="i method">Compare</a>(<b>byte</b>[] <span id="r80 rd" class="r80 r">x</span>, <b>byte</b>[] <span id="r81 rd" class="r81 r">y</span>)
+			{
+				<b>for</b> (<b>int</b> <span id="r82 rd" class="r82 r">i</span> = 0; <span class="r82 r">i</span> &lt; <span class="r80 r">x</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r82 r">i</span> &lt; <span class="r81 r">y</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r82 r">i</span>)
+				{
+					<b>int</b> <span id="r83 rd" class="r83 r">c</span> = <span class="r80 r">x</span>[<span class="r82 r">i</span>] - <span class="r81 r">y</span>[<span class="r82 r">i</span>];
+					<b>if</b> (<span class="r83 r">c</span> != 0)
+					{
+						<b>return</b> <span class="r83 r">c</span>;
+					}
+				}
+
+				<b>if</b> (<span class="r80 r">x</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <span class="r81 r">y</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<b>return</b> -1;
+				}
+
+				<b>if</b> (<span class="r80 r">x</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &gt; <span class="r81 r">y</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<b>return</b> 1;
+				}
+
+				<b>return</b> 0;
+			}
+
+			<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: Entry
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> An index entry</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public class</b> <a id="ada66cbaf2f188da" href="R/ada66cbaf2f188da.html" target="n" data-glyph="0,1" class="t t">Entry</a>
+		{
+			<b>private readonly int</b> <a id="2cd1c13031792802" href="R/2cd1c13031792802.html" target="n" data-glyph="46,2" class="i field">_dev</a>;
+			<b>private readonly int</b> <a id="c968f7ce415d1f8a" href="R/c968f7ce415d1f8a.html" target="n" data-glyph="46,2" class="i field">_gid</a>;
+			<b>private readonly int</b> <a id="c18afff1b4edf789" href="R/c18afff1b4edf789.html" target="n" data-glyph="46,2" class="i field">_ino</a>;
+			<b>private readonly byte</b>[] <a id="df02af65f9b9612b" href="R/df02af65f9b9612b.html" target="n" data-glyph="46,2" class="i field">_name</a>;
+			<b>private readonly int</b> <a id="6d9ca3bb8d73abf4" href="R/6d9ca3bb8d73abf4.html" target="n" data-glyph="46,2" class="i field">_uid</a>;
+
+			<b>private short</b> <a id="bca049eb00707209" href="R/bca049eb00707209.html" target="n" data-glyph="46,2" class="i field">_flags</a>;
+			<b>private int</b> <a id="a01903f80437b5e9" href="R/a01903f80437b5e9.html" target="n" data-glyph="46,2" class="i field">_size</a>;
+
+			<b>internal</b> <a id="641ced4592cdea26" href="R/../../0000000000.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r84 rd" class="r84 r">repository</span>, <b>byte</b>[] <span id="r85 rd" class="r85 r">key</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r86 rd" class="r86 r">f</span>, <b>int</b> <span id="r87 rd" class="r87 r">stage</span>)
+				: <a href="#acd5f1021a4034c1" class="k">this</a>(<span class="r84 r">repository</span>, <span class="r85 r">key</span>, <span class="r86 r">f</span>, <span class="r87 r">stage</span>, <b>null</b>)
+			{
+			}
+
+			<b>internal</b> <a id="acd5f1021a4034c1" href="R/acd5f1021a4034c1.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r88 rd" class="r88 r">repository</span>, <b>byte</b>[] <span id="r89 rd" class="r89 r">key</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r90 rd" class="r90 r">f</span>, <b>int</b> <span id="r91 rd" class="r91 r">stage</span>, <b>byte</b>[] <span id="r92 rd" class="r92 r">newContent</span>)
+				: <a href="#f803bec1fffa75ec" class="k">this</a>(<span class="r88 r">repository</span>)
+			{
+				<b>if</b> (<span class="r92 r">newContent</span> == <b>null</b> &amp;&amp; <span class="r90 r">f</span> == <b>null</b>)
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;either file or newContent must be non-null&quot;</span>);
+
+				<a href="#8971b04d3d4e1961" class="i property">Ctime</a> = <span class="r90 r">f</span>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() * 1000000L;
+			    <a href="#c70e5c398de4b889" class="i property">Mtime</a> = <a href="#8971b04d3d4e1961" class="i property">Ctime</a>; <span class="c">// we use same here</span>
+				<a href="#2cd1c13031792802" class="i field">_dev</a> = -1;
+				<a href="#c18afff1b4edf789" class="i field">_ino</a> = -1;
+
+				<b>if</b> (<a href="#e0b0664f6fac13e4" class="i method">ConfigFilemode</a>(<a href="#6c53d77a903de8d1" class="i property">Repository</a>) &amp;&amp; <a href="#f829948fd6d20a83" class="i method">FileCanExecute</a>(<span class="r90 r">f</span>))
+				{
+					<a href="#972ad0a5975f25d4" class="i property">Mode</a> = <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>;
+				}
+				<b>else</b>
+				{
+					<a href="#972ad0a5975f25d4" class="i property">Mode</a> = <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#be784a832405c1cc" class="i field">RegularFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>;
+				}
+
+				<a href="#6d9ca3bb8d73abf4" class="i field">_uid</a> = -1;
+				<a href="#c968f7ce415d1f8a" class="i field">_gid</a> = -1;
+				<a href="#a01903f80437b5e9" class="i field">_size</a> = ((<span class="r92 r">newContent</span> == <b>null</b> || <span class="r92 r">newContent</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0) &amp;&amp; <span class="r90 r">f</span> != <b>null</b>) ? (<b>int</b>)(<span class="r90 r">f</span>).<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a> : <span class="r92 r">newContent</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+				<a href="ObjectWriter.cs.html#edd7e08e5ab8145e" class="k">var</a> <span id="r93 rd" class="r93 r">writer</span> = <b>new</b> <a href="ObjectWriter.cs.html#81656ecc2c2175d2" class="t constructor">ObjectWriter</a>(<a href="#6c53d77a903de8d1" class="i property">Repository</a>);
+				<b>if</b> ((<span class="r92 r">newContent</span> == <b>null</b> || <span class="r92 r">newContent</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0) &amp;&amp; <span class="r90 r">f</span> != <b>null</b>)
+				{
+					<a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r93 r">writer</span>.<a href="ObjectWriter.cs.html#ce5a23cc3ba75504" class="i method">WriteBlob</a>(<span class="r90 r">f</span>);
+				}
+				<b>else</b>
+				{
+					<a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r93 r">writer</span>.<a href="ObjectWriter.cs.html#09bc1ecf3a7883ba" class="i method">WriteBlob</a>(<span class="r92 r">newContent</span>);
+				}
+				<a href="#df02af65f9b9612b" class="i field">_name</a> = <span class="r89 r">key</span>;
+				<a href="#bca049eb00707209" class="i field">_flags</a> = (<b>short</b>)((<span class="r91 r">stage</span> &lt;&lt; 12) | <a href="#df02af65f9b9612b" class="i field">_name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>); <span class="c">// TODO: fix _flags</span>
+			}
+
+			<b>internal</b> <a id="cb9dae8305278b4d" href="R/cb9dae8305278b4d.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r94 rd" class="r94 r">repository</span>, <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r95 rd" class="r95 r">f</span>, <b>int</b> <span id="r96 rd" class="r96 r">stage</span>)
+				: <a href="#f803bec1fffa75ec" class="k">this</a>(<span class="r94 r">repository</span>)
+			{
+				<a href="#8971b04d3d4e1961" class="i property">Ctime</a> = -1; <span class="c">// hmm</span>
+				<a href="#c70e5c398de4b889" class="i property">Mtime</a> = -1;
+				<a href="#2cd1c13031792802" class="i field">_dev</a> = -1;
+				<a href="#c18afff1b4edf789" class="i field">_ino</a> = -1;
+				<a href="#972ad0a5975f25d4" class="i property">Mode</a> = <span class="r95 r">f</span>.<a href="TreeEntry.cs.html#16a0bfc267995533" class="i property">Mode</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>;
+				<a href="#6d9ca3bb8d73abf4" class="i field">_uid</a> = -1;
+				<a href="#c968f7ce415d1f8a" class="i field">_gid</a> = -1;
+				<b>try</b>
+				{
+					<a href="#a01903f80437b5e9" class="i field">_size</a> = (<b>int</b>)<a href="#6c53d77a903de8d1" class="i property">Repository</a>.<a href="Repository.cs.html#620dd24281450a4b" class="i method">OpenBlob</a>(<span class="r95 r">f</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>).<a href="ObjectLoader.cs.html#e8f1fd86096d0447" class="i property">Size</a>;
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r97 rd" class="r97 r">e</span>)
+				{
+					<span class="r97 r">e</span>.<a href="Exceptions/ExceptionExtensions.cs.html#56b0ee88765b35b5" class="i method">printStackTrace</a>();
+					<a href="#a01903f80437b5e9" class="i field">_size</a> = -1;
+				}
+				<a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r95 r">f</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>;
+				<a href="#df02af65f9b9612b" class="i field">_name</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r95 r">f</span>.<a href="TreeEntry.cs.html#f2fc52ae001c479c" class="i property">FullName</a>);
+				<a href="#bca049eb00707209" class="i field">_flags</a> = (<b>short</b>)((<span class="r96 r">stage</span> &lt;&lt; 12) | <a href="#df02af65f9b9612b" class="i field">_name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>); <span class="c">// TODO: fix _flags</span>
+			}
+
+			<b>internal</b> <a id="cf0f64608ca8c6a3" href="R/cf0f64608ca8c6a3.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r98 rd" class="r98 r">repository</span>, <a href="Util/EndianBinaryReader.cs.html#14a62468d2339817" class="t t">EndianBinaryReader</a> <span id="r99 rd" class="r99 r">b</span>)
+				: <a href="#f803bec1fffa75ec" class="k">this</a>(<span class="r98 r">repository</span>)
+			{
+				<b>long</b> <span id="r100 rd" class="r100 r">startposition</span> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#e8a227bf3f5ddf69" class="i property">BaseStream</a>.<a href="@0@mscorlib/A.html#35112b2a53fb536a" class="i property">Position</a>;
+				<a href="#8971b04d3d4e1961" class="i property">Ctime</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>() * 1000000000L + (<span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>() % 1000000000L);
+				<a href="#c70e5c398de4b889" class="i property">Mtime</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>() * 1000000000L + (<span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>() % 1000000000L);
+				<a href="#2cd1c13031792802" class="i field">_dev</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#c18afff1b4edf789" class="i field">_ino</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#972ad0a5975f25d4" class="i property">Mode</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#6d9ca3bb8d73abf4" class="i field">_uid</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#c968f7ce415d1f8a" class="i field">_gid</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#a01903f80437b5e9" class="i field">_size</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<b>byte</b>[] <span id="r101 rd" class="r101 r">sha1Bytes</span> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#ca2ee0b744c42e28" class="i method">ReadBytes</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>);
+				<a href="#84bb78eccc718597" class="i property">ObjectId</a> = <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a84de848edbd5661" class="i method">FromRaw</a>(<span class="r101 r">sha1Bytes</span>);
+				<a href="#bca049eb00707209" class="i field">_flags</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#a8bce88cec4dfcd1" class="i method">ReadInt16</a>();
+				<a href="#df02af65f9b9612b" class="i field">_name</a> = <span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#ca2ee0b744c42e28" class="i method">ReadBytes</a>(<a href="#bca049eb00707209" class="i field">_flags</a> &amp; 0xFFF);
+				<span class="r99 r">b</span>.<a href="Util/EndianBinaryReader.cs.html#e8a227bf3f5ddf69" class="i property">BaseStream</a>.<a href="@0@mscorlib/A.html#35112b2a53fb536a" class="i property">Position</a> = <span class="r100 r">startposition</span> +
+												((8 + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 20 + 2 + <a href="#df02af65f9b9612b" class="i field">_name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> + 8) &amp; ~7);
+			}
+
+			<b>private</b> <a id="f803bec1fffa75ec" href="R/f803bec1fffa75ec.html" target="n" data-glyph="76,2" class="i constructor">Entry</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r102 rd" class="r102 r">repository</span>)
+			{
+				<a href="#6c53d77a903de8d1" class="i property">Repository</a> = <span class="r102 r">repository</span>;
+				<a href="#93ec140b91a98ec3" class="i property">ConfigFileMode</a> = <a href="#e0b0664f6fac13e4" class="i method">ConfigFilemode</a>(<span class="r102 r">repository</span>);
+			}
+
+			<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="84bb78eccc718597" href="R/84bb78eccc718597.html" target="n" data-glyph="102,2" class="i property">ObjectId</a> { <b>get</b>; <b>private set</b>; }
+			<b>public</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="6c53d77a903de8d1" href="R/6c53d77a903de8d1.html" target="n" data-glyph="102,2" class="i property">Repository</a> { <b>get</b>; <b>private set</b>; }
+			<b>public bool</b> <a id="93ec140b91a98ec3" href="R/93ec140b91a98ec3.html" target="n" data-glyph="102,2" class="i property">ConfigFileMode</a> { <b>get</b>; <b>private set</b>; }
+			<b>public int</b> <a id="972ad0a5975f25d4" href="R/972ad0a5975f25d4.html" target="n" data-glyph="102,2" class="i property">Mode</a> { <b>get</b>; <b>private set</b>; }
+
+			<b>public long</b> <a id="8971b04d3d4e1961" href="R/8971b04d3d4e1961.html" target="n" data-glyph="102,2" class="i property">Ctime</a> { <b>get</b>; <b>set</b>; }
+			<b>public long</b> <a id="c70e5c398de4b889" href="R/c70e5c398de4b889.html" target="n" data-glyph="102,2" class="i property">Mtime</a> { <b>get</b>; <b>set</b>; }
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> path name for this entry </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public string</b> <a id="c9f28b2aa347b1ef" href="R/c9f28b2aa347b1ef.html" target="n" data-glyph="102,2" class="i property">Name</a>
+			{
+				<b>get</b> { <b>return</b> <a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#7b0958d23f8e00a2" class="i method">decode</a>(<a href="#df02af65f9b9612b" class="i field">_name</a>); }
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> path name for this entry as byte array, hopefully UTF-8 encoded </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public byte</b>[] <a id="c5bac6f2d38b87f7" href="R/c5bac6f2d38b87f7.html" target="n" data-glyph="102,2" class="i property">NameUTF8</a>
+			{
+				<b>get</b> { <b>return</b> <a href="#df02af65f9b9612b" class="i field">_name</a>; }
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> the stage this entry is in </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public int</b> <a id="56b826703af152ca" href="R/56b826703af152ca.html" target="n" data-glyph="102,2" class="i property">Stage</a>
+			{
+				<b>get</b> { <b>return</b> (<a href="#bca049eb00707209" class="i field">_flags</a> &amp; 0x3000) &gt;&gt; 12; }
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> size of disk object </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public int</b> <a id="e375056d0c173600" href="R/../../0000000000.html" target="n" data-glyph="102,2" class="i property">Size</a>
+			{
+				<b>get</b> { <b>return</b> <a href="#a01903f80437b5e9" class="i field">_size</a>; }
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Update this index entry with stat and SHA-1 information if it looks</span>
+			<span class="c">///</span><span class="c"> like the file has been modified in the workdir.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r103 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">file in work dir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if a change occurred </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="78143ce5f164369d" href="R/78143ce5f164369d.html" target="n" data-glyph="72,2" class="i method">update</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r103 rd" class="r103 r">f</span>)
+			{
+				<b>long</b> <span id="r104 rd" class="r104 r">lm</span> = <span class="r103 r">f</span>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() * 1000000L;
+				<b>bool</b> <span id="r105 rd" class="r105 r">modified</span> = <a href="#c70e5c398de4b889" class="i property">Mtime</a> != <span class="r104 r">lm</span>;
+				<a href="#c70e5c398de4b889" class="i property">Mtime</a> = <span class="r104 r">lm</span>;
+
+				<b>if</b> (<a href="#a01903f80437b5e9" class="i field">_size</a> != <span class="r103 r">f</span>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>)
+				{
+					<span class="r105 r">modified</span> = <b>true</b>;
+				}
+
+				<b>if</b> (<a href="#93ec140b91a98ec3" class="i property">ConfigFileMode</a>)
+				{
+					<b>if</b> (<a href="#f829948fd6d20a83" class="i method">FileCanExecute</a>(<span class="r103 r">f</span>) != <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<a href="#972ad0a5975f25d4" class="i property">Mode</a>))
+					{
+						<a href="#972ad0a5975f25d4" class="i property">Mode</a> = <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>;
+						<span class="r105 r">modified</span> = <b>true</b>;
+					}
+				}
+
+				<b>if</b> (<span class="r105 r">modified</span>)
+				{
+					<a href="#a01903f80437b5e9" class="i field">_size</a> = (<b>int</b>)<span class="r103 r">f</span>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>;
+					<a href="ObjectWriter.cs.html#edd7e08e5ab8145e" class="k">var</a> <span id="r106 rd" class="r106 r">writer</span> = <b>new</b> <a href="ObjectWriter.cs.html#81656ecc2c2175d2" class="t constructor">ObjectWriter</a>(<a href="#6c53d77a903de8d1" class="i property">Repository</a>);
+					<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r107 rd" class="r107 r">newsha1</span> = <a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r106 r">writer</span>.<a href="ObjectWriter.cs.html#ce5a23cc3ba75504" class="i method">WriteBlob</a>(<span class="r103 r">f</span>);
+
+					<span class="r105 r">modified</span> = !<span class="r107 r">newsha1</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<a href="#84bb78eccc718597" class="i property">ObjectId</a>);
+					<a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r107 r">newsha1</span>;
+				}
+
+				<b>return</b> <span class="r105 r">modified</span>;
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Update this index entry with stat and SHA-1 information if it looks</span>
+			<span class="c">///</span><span class="c"> like the file has been modified in the workdir.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r108 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">file in work dir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r109 r">newContent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new content of the file </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if a change occurred </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="4635f0955ffd801c" href="R/4635f0955ffd801c.html" target="n" data-glyph="72,2" class="i method">update</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r108 rd" class="r108 r">f</span>, <b>byte</b>[] <span id="r109 rd" class="r109 r">newContent</span>) <span class="c">//[henon] TODO: remove parameter f as it is useless</span>
+			{
+				<b>bool</b> <span id="r110 rd" class="r110 r">modified</span> = <b>false</b>;
+				<a href="#a01903f80437b5e9" class="i field">_size</a> = <span class="r109 r">newContent</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+				<a href="ObjectWriter.cs.html#edd7e08e5ab8145e" class="k">var</a> <span id="r111 rd" class="r111 r">writer</span> = <b>new</b> <a href="ObjectWriter.cs.html#81656ecc2c2175d2" class="t constructor">ObjectWriter</a>(<a href="#6c53d77a903de8d1" class="i property">Repository</a>);
+				<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r112 rd" class="r112 r">newsha1</span> = <a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r111 r">writer</span>.<a href="ObjectWriter.cs.html#09bc1ecf3a7883ba" class="i method">WriteBlob</a>(<span class="r109 r">newContent</span>);
+
+				<b>if</b> (!<span class="r112 r">newsha1</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<a href="#84bb78eccc718597" class="i property">ObjectId</a>))
+				{
+					<span class="r110 r">modified</span> = <b>true</b>;
+				}
+
+				<a href="#84bb78eccc718597" class="i property">ObjectId</a> = <span class="r112 r">newsha1</span>;
+				<b>return</b> <span class="r110 r">modified</span>;
+			}
+
+			<b>internal void</b> <a id="888b5f25a36c919f" href="R/888b5f25a36c919f.html" target="n" data-glyph="74,2" class="i method">Write</a>(<a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="t t">MemoryStream</a> <span id="r113 rd" class="r113 r">buf</span>)
+			{
+				<a href="Util/BigEndianBitConverter.cs.html#2fff50b8e4db9d06" class="k">var</a> <span id="r114 rd" class="r114 r">t</span> = <b>new</b> <a href="Util/BigEndianBitConverter.cs.html#2fff50b8e4db9d06" class="t constructor">BigEndianBitConverter</a>();
+
+				<b>long</b> <span id="r115 rd" class="r115 r">startposition</span> = <span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#ad08f8ca81a5a763" class="i property">Position</a>;
+
+				<b>var</b> <span id="r116 rd" class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<b>int</b>)(<a href="#8971b04d3d4e1961" class="i property">Ctime</a> / 1000000000L));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<b>int</b>)(<a href="#8971b04d3d4e1961" class="i property">Ctime</a> % 1000000000L));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<b>int</b>)(<a href="#c70e5c398de4b889" class="i property">Mtime</a> / 1000000000L));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<b>int</b>)(<a href="#c70e5c398de4b889" class="i property">Mtime</a> % 1000000000L));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<a href="#2cd1c13031792802" class="i field">_dev</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<a href="#c18afff1b4edf789" class="i field">_ino</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<a href="#972ad0a5975f25d4" class="i property">Mode</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<a href="#6d9ca3bb8d73abf4" class="i field">_uid</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<a href="#c968f7ce415d1f8a" class="i field">_gid</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>((<a href="#a01903f80437b5e9" class="i field">_size</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<a href="#84bb78eccc718597" class="i property">ObjectId</a>.<a href="AnyObjectId.cs.html#76733ba2b587238b" class="i method">copyRawTo</a>(<span class="r113 r">buf</span>);
+
+				<span class="r116 r">tmpBuffer</span> = <span class="r114 r">t</span>.<a href="Util/EndianBitConverter.cs.html#4ccc9dd8e528acd6" class="i method">GetBytes</a>((<a href="#bca049eb00707209" class="i field">_flags</a>));
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r116 r">tmpBuffer</span>, 0, <span class="r116 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<a href="#df02af65f9b9612b" class="i field">_name</a>, 0, <a href="#df02af65f9b9612b" class="i field">_name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<b>long</b> <span id="r117 rd" class="r117 r">end</span> = <span class="r115 r">startposition</span>
+						  + ((8 + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 20 + 2 + <a href="#df02af65f9b9612b" class="i field">_name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> + 8) &amp; ~7);
+				<b>long</b> <span id="r118 rd" class="r118 r">remain</span> = <span class="r117 r">end</span> - <span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#ad08f8ca81a5a763" class="i property">Position</a>;
+				<b>while</b> (<span class="r118 r">remain</span>-- &gt; 0)
+				{
+					<span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#147bc75491cf2226" class="i method">WriteByte</a>(0);
+				}
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Check if an entry&#39;s content is different from the cache, </span>
+			<span class="c">///</span><span class="c"> </span>
+			<span class="c">///</span><span class="c"> File status information is used and status is same we</span>
+			<span class="c">///</span><span class="c">	consider the file identical to the state in the working</span>
+			<span class="c">///</span><span class="c"> directory. Native git uses more stat fields than we</span>
+			<span class="c">///</span><span class="c"> have accessible in Java.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r119 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> working directory to compare content with </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if content is most likely different. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">	 </span>
+			<b>public bool</b> <a id="bb86eba5be3c4cf1" href="R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">IsModified</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r119 rd" class="r119 r">wd</span>)
+			{
+				<b>return</b> <a href="#45ab4c97d3763160" class="i method">IsModified</a>(<span class="r119 r">wd</span>, <b>false</b>);
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Check if an entry&#39;s content is different from the cache, </span>
+			<span class="c">///</span><span class="c"> </span>
+			<span class="c">///</span><span class="c"> File status information is used and status is same we</span>
+			<span class="c">///</span><span class="c">	consider the file identical to the state in the working</span>
+			<span class="c">///</span><span class="c"> directory. Native git uses more stat fields than we</span>
+			<span class="c">///</span><span class="c"> have accessible in Java.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r120 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> working directory to compare content with </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r121 r">forceContentCheck</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span>
+			<span class="c">///</span><span class="c"> True if the actual file content should be checked if modification time differs.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if content is most likely different. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="45ab4c97d3763160" href="R/45ab4c97d3763160.html" target="n" data-glyph="72,2" class="i method">IsModified</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r120 rd" class="r120 r">wd</span>, <b>bool</b> <span id="r121 rd" class="r121 r">forceContentCheck</span>)
+			{
+				<b>if</b> (<a href="#c9699d0c03e03bac" class="i method">isAssumedValid</a>())
+				{
+					<b>return false</b>;
+				}
+
+				<b>if</b> (<a href="#aeba616f51f1ca1e" class="i method">isUpdateNeeded</a>())
+				{
+					<b>return true</b>;
+				}
+
+				<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r122 rd" class="r122 r">file</span> = <a href="#dd41eb985df57393" class="i method">getFile</a>(<span class="r120 r">wd</span>);
+				<b>if</b> (!<span class="r122 r">file</span>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+				{
+					<b>return true</b>;
+				}
+
+				<span class="c">// JDK1.6 has file.canExecute</span>
+				<span class="c">// if (file.canExecute() != FileMode.EXECUTABLE_FILE.equals(mode))</span>
+				<span class="c">// return true;</span>
+				<b>int</b> <span id="r123 rd" class="r123 r">exebits</span> = <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a> ^ <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#be784a832405c1cc" class="i field">RegularFile</a>.<a href="FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>;
+
+				<b>if</b> (<a href="#93ec140b91a98ec3" class="i property">ConfigFileMode</a> &amp;&amp; <a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#de582b398eff99ee" class="i field">ExecutableFile</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<a href="#972ad0a5975f25d4" class="i property">Mode</a>))
+				{
+					<b>if</b> (!<a href="#f829948fd6d20a83" class="i method">FileCanExecute</a>(<span class="r122 r">file</span>) &amp;&amp; <a href="#60d99baaf95a1b19" class="i method">FileHasExecute</a>())
+						<b>return true</b>;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#be784a832405c1cc" class="i field">RegularFile</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<a href="#972ad0a5975f25d4" class="i property">Mode</a> &amp; ~<span class="r123 r">exebits</span>))
+					{
+						<b>if</b> (!<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<span class="r122 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>) || <a href="#93ec140b91a98ec3" class="i property">ConfigFileMode</a> &amp;&amp; <a href="#f829948fd6d20a83" class="i method">FileCanExecute</a>(<span class="r122 r">file</span>) &amp;&amp; <a href="#60d99baaf95a1b19" class="i method">FileHasExecute</a>())
+						{
+							<b>return true</b>;
+						}
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#9389275b7fd29b59" class="i field">Symlink</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<a href="#972ad0a5975f25d4" class="i property">Mode</a>))
+						{
+							<b>return true</b>;
+						}
+
+						<b>if</b> (<a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>.<a href="FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<a href="#972ad0a5975f25d4" class="i property">Mode</a>))
+						{
+							<b>if</b> (!<a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#6a2a3bee6b62826f" class="i method">Exists</a>(<span class="r122 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+							{
+								<b>return true</b>;
+							}
+						}
+						<b>else</b>
+						{
+							<a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#5ac7c4fda643413b" class="i method">WriteLine</a>(<span class="s">&quot;Does not handle mode &quot;</span> + <a href="#972ad0a5975f25d4" class="i property">Mode</a> + <span class="s">&quot; (&quot;</span> + <span class="r122 r">file</span> + <span class="s">&quot;)&quot;</span>);
+							<b>return true</b>;
+						}
+					}
+				}
+
+				<b>if</b> (<span class="r122 r">file</span>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a> != <a href="#a01903f80437b5e9" class="i field">_size</a>)
+				{
+					<b>return true</b>;
+				}
+
+				<span class="c">// Git under windows only stores seconds so we round the timestamp</span>
+				<span class="c">// Java gives us if it looks like the timestamp in index is seconds</span>
+				<span class="c">// only. Otherwise we compare the timestamp at millisecond prevision.</span>
+				<b>long</b> <span id="r124 rd" class="r124 r">javamtime</span> = <a href="#c70e5c398de4b889" class="i property">Mtime</a> / 1000000L;
+				<b>long</b> <span id="r125 rd" class="r125 r">lastm</span> = <span class="r122 r">file</span>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+
+				<b>if</b> (<span class="r124 r">javamtime</span> % 1000 == 0)
+				{
+					<span class="r125 r">lastm</span> = <span class="r125 r">lastm</span> - <span class="r125 r">lastm</span> % 1000;
+				}
+				<b>if</b> (<span class="r125 r">lastm</span> != <span class="r124 r">javamtime</span>)
+				{
+                    <b>if</b> (!<span class="r121 r">forceContentCheck</span>)
+					<b>return true</b>;
+
+					<b>try</b>
+					{
+						<b>using</b> (<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r126 rd" class="r126 r">@is</span> = <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<span class="r122 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#0f1c68c756d0636b" class="i field">Read</a>))
+						{
+							<b>try</b>
+							{
+								<a href="ObjectWriter.cs.html#edd7e08e5ab8145e" class="k">var</a> <span id="r127 rd" class="r127 r">objectWriter</span> = <b>new</b> <a href="ObjectWriter.cs.html#81656ecc2c2175d2" class="t constructor">ObjectWriter</a>(<a href="#6c53d77a903de8d1" class="i property">Repository</a>);
+								<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r128 rd" class="r128 r">newId</span> = <span class="r127 r">objectWriter</span>.<a href="ObjectWriter.cs.html#ee9c12d49337df97" class="i method">ComputeBlobSha1</a>(<span class="r122 r">file</span>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>, <span class="r126 r">@is</span>);
+								<b>bool</b> <span id="r129 rd" class="r129 r">ret</span> = !<span class="r128 r">newId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<a href="#84bb78eccc718597" class="i property">ObjectId</a>);
+								<b>return</b> <span class="r129 r">ret</span>;
+							}
+							<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r130 rd" class="r130 r">e</span>)
+							{
+								<span class="r130 r">e</span>.<a href="Exceptions/ExceptionExtensions.cs.html#56b0ee88765b35b5" class="i method">printStackTrace</a>();
+							}
+							<b>finally</b>
+							{
+								<b>try</b>
+								{
+									<span class="r126 r">@is</span>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+								}
+								<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r131 rd" class="r131 r">e</span>)
+								{
+									<span class="c">// can&#39;t happen, but if it does we ignore it</span>
+									<span class="r131 r">e</span>.<a href="Exceptions/ExceptionExtensions.cs.html#56b0ee88765b35b5" class="i method">printStackTrace</a>();
+								}
+							}
+						}
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a> <span id="r132 rd" class="r132 r">e</span>)
+					{
+						<span class="c">// should not happen because we already checked this</span>
+						<span class="r132 r">e</span>.<a href="Exceptions/ExceptionExtensions.cs.html#56b0ee88765b35b5" class="i method">printStackTrace</a>();
+						<b>throw</b>;
+					}
+                }
+				<b>return false</b>;
+			}
+
+			<span class="c">// for testing</span>
+			<b>internal void</b> <a id="c9cd2f7822f63b34" href="R/../../0000000000.html" target="n" data-glyph="74,2" class="i method">forceRecheck</a>()
+			{
+				<a href="#c70e5c398de4b889" class="i property">Mtime</a> = -1;
+			}
+
+			<b>private</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="dd41eb985df57393" href="R/dd41eb985df57393.html" target="n" data-glyph="76,2" class="i method">getFile</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r133 rd" class="r133 r">wd</span>)
+			{
+				<b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<span class="r133 r">wd</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <a href="#c9f28b2aa347b1ef" class="i property">Name</a>));
+			}
+
+			<b>public override string</b> <a id="e39fec8378a11f5f" href="R/e39fec8378a11f5f.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+			{
+				<b>return</b> <a href="#c9f28b2aa347b1ef" class="i property">Name</a> + <span class="s">&quot;/SHA-1(&quot;</span> +
+						 <a href="#84bb78eccc718597" class="i property">ObjectId</a>.<a href="AnyObjectId.cs.html#90e7a293494044eb" class="i property">Name</a> + <span class="s">&quot;)/M:&quot;</span> +
+                         (<a href="#8971b04d3d4e1961" class="i property">Ctime</a> / 1000000L).<a href="Util/DateTimeExtensions.cs.html#f33c09f9d71bef8f" class="i method">MillisToUtcDateTime</a>() + <span class="s">&quot;/C:&quot;</span> +
+                         (<a href="#c70e5c398de4b889" class="i property">Mtime</a> / 1000000L).<a href="Util/DateTimeExtensions.cs.html#f33c09f9d71bef8f" class="i method">MillisToUtcDateTime</a>() + <span class="s">&quot;/d&quot;</span> +
+						 <a href="#2cd1c13031792802" class="i field">_dev</a> +
+						 <span class="s">&quot;/i&quot;</span> + <a href="#c18afff1b4edf789" class="i field">_ino</a> +
+						 <span class="s">&quot;/m&quot;</span> + <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#60c42f04fafc878e" class="i method">ToString</a>(<a href="#972ad0a5975f25d4" class="i property">Mode</a>, 8) +
+						 <span class="s">&quot;/u&quot;</span> + <a href="#6d9ca3bb8d73abf4" class="i field">_uid</a> +
+						 <span class="s">&quot;/g&quot;</span> + <a href="#c968f7ce415d1f8a" class="i field">_gid</a> +
+						 <span class="s">&quot;/s&quot;</span> + <a href="#a01903f80437b5e9" class="i field">_size</a> +
+						 <span class="s">&quot;/f&quot;</span> + <a href="#bca049eb00707209" class="i field">_flags</a> +
+						 <span class="s">&quot;/@&quot;</span> + <a href="#56b826703af152ca" class="i property">Stage</a>;
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if this entry shall be assumed valid </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="c9699d0c03e03bac" href="R/c9699d0c03e03bac.html" target="n" data-glyph="72,2" class="i method">isAssumedValid</a>()
+			{
+				<b>return</b> (<a href="#bca049eb00707209" class="i field">_flags</a> &amp; 0x8000) != 0;
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if this entry should be checked for changes </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public bool</b> <a id="aeba616f51f1ca1e" href="R/aeba616f51f1ca1e.html" target="n" data-glyph="72,2" class="i method">isUpdateNeeded</a>()
+			{
+				<b>return</b> (<a href="#bca049eb00707209" class="i field">_flags</a> &amp; 0x4000) != 0;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Set whether to always assume this entry valid</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r134 r">assumeValid</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> true to ignore changes </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<b>public void</b> <a id="ca2f415dd1f503b1" href="R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">setAssumeValid</a>(<b>bool</b> <span id="r134 rd" class="r134 r">assumeValid</span>)
+			{
+				<b>if</b> (<span class="r134 r">assumeValid</span>)
+				{
+					<a href="#bca049eb00707209" class="i field">_flags</a> = <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#f4f89303b35041f1" class="i method">ToInt16</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#3bdcd4f58daa0ba3" class="i method">ToInt32</a>(<a href="#bca049eb00707209" class="i field">_flags</a>) | 0x8000);
+				}
+				<b>else</b>
+				{
+					<a href="#bca049eb00707209" class="i field">_flags</a> = <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#f4f89303b35041f1" class="i method">ToInt16</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#3bdcd4f58daa0ba3" class="i method">ToInt32</a>(<a href="#bca049eb00707209" class="i field">_flags</a>) &amp; ~0x8000);
+				}
+			}
+
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Set whether this entry must be checked</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r135 r">updateNeeded</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<b>public void</b> <a id="ce413b08327cc4a8" href="R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">setUpdateNeeded</a>(<b>bool</b> <span id="r135 rd" class="r135 r">updateNeeded</span>)
+			{
+				<b>if</b> (<span class="r135 r">updateNeeded</span>)
+				{
+					<a href="#bca049eb00707209" class="i field">_flags</a> |= 0x4000;
+				}
+				<b>else</b>
+				{
+					<a href="#bca049eb00707209" class="i field">_flags</a> &amp;= ~0x4000;
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Return raw file mode bits. See </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a><span class="c">&quot;</span><span class="c">/&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> file mode bits </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public int</b> <a id="088bb0431775ddc4" href="R/088bb0431775ddc4.html" target="n" data-glyph="72,2" class="i method">getModeBits</a>()
+			{
+				<b>return</b> <a href="#972ad0a5975f25d4" class="i property">Mode</a>;
+			}
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: Header
+
+		<b>private class</b> <a id="83b624e37f83488c" href="R/83b624e37f83488c.html" target="n" data-glyph="4,1" class="t t">Header</a>
+		{
+			<b>private int</b> <a id="b968023223d9c15a" href="R/b968023223d9c15a.html" target="n" data-glyph="46,2" class="i field">_signature</a>;
+			<b>private int</b> <a id="06cf6ac6c7815d75" href="R/06cf6ac6c7815d75.html" target="n" data-glyph="46,2" class="i field">_version</a>;
+
+			<b>internal</b> <a id="518dbf4440ab3903" href="R/518dbf4440ab3903.html" target="n" data-glyph="74,2" class="i constructor">Header</a>(<a href="Util/EndianBinaryReader.cs.html#14a62468d2339817" class="t t">EndianBinaryReader</a> <span id="r136 rd" class="r136 r">map</span>)
+			{
+				<a href="#3b1f6a6d5479b9d3" class="i method">Read</a>(<span class="r136 r">map</span>);
+			}
+
+			<b>internal</b> <a id="7801077eab534671" href="R/7801077eab534671.html" target="n" data-glyph="74,2" class="i constructor">Header</a>(<a href="@0@mscorlib/A.html#cde8022b6e680e40" class="t t">ICollection</a> <span id="r137 rd" class="r137 r">entryset</span>)
+			{
+				<a href="#b968023223d9c15a" class="i field">_signature</a> = 0x44495243;
+				<a href="#06cf6ac6c7815d75" class="i field">_version</a> = 2;
+				<a href="#1aab6baa009460f8" class="i property">Entries</a> = <span class="r137 r">entryset</span>.<a href="@0@mscorlib/A.html#e961aba0053db107" class="i property">Count</a>;
+			}
+
+			<b>internal int</b> <a id="1aab6baa009460f8" href="R/1aab6baa009460f8.html" target="n" data-glyph="104,2" class="i property">Entries</a> { <b>get</b>; <b>private set</b>; }
+
+			<b>private void</b> <a id="3b1f6a6d5479b9d3" href="R/3b1f6a6d5479b9d3.html" target="n" data-glyph="76,2" class="i method">Read</a>(<a href="Util/EndianBinaryReader.cs.html#14a62468d2339817" class="t t">EndianBinaryReader</a> <span id="r138 rd" class="r138 r">buf</span>)
+			{
+				<a href="#b968023223d9c15a" class="i field">_signature</a> = <span class="r138 r">buf</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#06cf6ac6c7815d75" class="i field">_version</a> = <span class="r138 r">buf</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+				<a href="#1aab6baa009460f8" class="i property">Entries</a> = <span class="r138 r">buf</span>.<a href="Util/EndianBinaryReader.cs.html#1bd480c76a594a67" class="i method">ReadInt32</a>();
+
+				<b>if</b> (<a href="#b968023223d9c15a" class="i field">_signature</a> != 0x44495243)
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;Index signature is invalid: &quot;</span> + <a href="#b968023223d9c15a" class="i field">_signature</a>);
+				}
+
+				<b>if</b> (<a href="#06cf6ac6c7815d75" class="i field">_version</a> != 2)
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;Unknown index version (or corrupt index):&quot;</span> + <a href="#06cf6ac6c7815d75" class="i field">_version</a>);
+				}
+			}
+
+			<b>internal void</b> <a id="0ae01979ad595ee4" href="R/0ae01979ad595ee4.html" target="n" data-glyph="74,2" class="i method">Write</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r139 rd" class="r139 r">buf</span>)
+			{
+				<a href="Util/BigEndianBitConverter.cs.html#2fff50b8e4db9d06" class="k">var</a> <span id="r140 rd" class="r140 r">t</span> = <b>new</b> <a href="Util/BigEndianBitConverter.cs.html#2fff50b8e4db9d06" class="t constructor">BigEndianBitConverter</a>();
+				<b>var</b> <span id="r141 rd" class="r141 r">tmpBuffer</span> = <span class="r140 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>(<a href="#b968023223d9c15a" class="i field">_signature</a>);
+				<span class="r139 r">buf</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r141 r">tmpBuffer</span>, 0, <span class="r141 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r141 r">tmpBuffer</span> = <span class="r140 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>(<a href="#06cf6ac6c7815d75" class="i field">_version</a>);
+				<span class="r139 r">buf</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r141 r">tmpBuffer</span>, 0, <span class="r141 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+
+				<span class="r141 r">tmpBuffer</span> = <span class="r140 r">t</span>.<a href="Util/EndianBitConverter.cs.html#ba65d762f95040ef" class="i method">GetBytes</a>(<a href="#1aab6baa009460f8" class="i property">Entries</a>);
+				<span class="r139 r">buf</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r141 r">tmpBuffer</span>, 0, <span class="r141 r">tmpBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			}
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+}</pre></td></tr></table></div></body></html>

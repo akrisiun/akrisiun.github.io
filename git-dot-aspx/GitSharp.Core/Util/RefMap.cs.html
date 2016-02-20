@@ -1,0 +1,649 @@
+﻿<!DOCTYPE html>
+<html><head><title>RefMap.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(640);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/RefMap.cs" target="_top">Util\RefMap.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2010, Google Inc.
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Eclipse Foundation, Inc. nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">ObjectModel</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Specialized Map to present a {@code RefDatabase} namespace.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> Although not declared as a {@link java.util.SortedMap}, iterators from this</span>
+    <span class="c">///</span><span class="c"> map&#39;s projections always return references in {@link RefComparator} ordering.</span>
+    <span class="c">///</span><span class="c"> The map&#39;s internal representation is a sorted array of {@link Ref} objects,</span>
+    <span class="c">///</span><span class="c"> which means lookup and replacement is O(log N), while insertion and removal</span>
+    <span class="c">///</span><span class="c"> can be as expensive as O(N + log N) while the list expands or contracts.</span>
+    <span class="c">///</span><span class="c"> Since this is not a general map implementation, all entries must be keyed by</span>
+    <span class="c">///</span><span class="c"> the reference name.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This class is really intended as a helper for {@code RefDatabase}, which</span>
+    <span class="c">///</span><span class="c"> needs to perform a merge-join of three sorted {@link RefList}s in order to</span>
+    <span class="c">///</span><span class="c"> present the unified namespace of the packed-refs file, the loose refs/</span>
+    <span class="c">///</span><span class="c"> directory tree, and the resolved form of any symbolic references.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="8d52db0270fdeeb9" href="../R/8d52db0270fdeeb9.html" target="n" data-glyph="0,0" class="t t">RefMap</a> : <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;
+    {
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Prefix denoting the reference subspace this map contains.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> All reference names in this map must start with this prefix. If the</span>
+        <span class="c">///</span><span class="c"> prefix is not the empty string, it must end with a &#39;/&#39;.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly string</b> <a id="c53a7dbe142046a3" href="../R/c53a7dbe142046a3.html" target="n" data-glyph="46,1" class="i field">_prefix</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Immutable collection of the packed references at construction time.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="9d659e2cf8d0abdd" href="../R/9d659e2cf8d0abdd.html" target="n" data-glyph="46,1" class="i field">_packed</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Immutable collection of the loose references at construction time.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If an entry appears here and in {@link #packed}, this entry must take</span>
+        <span class="c">///</span><span class="c"> precedence, as its more current. Symbolic references in this collection</span>
+        <span class="c">///</span><span class="c"> are typically unresolved, so they only tell us who their target is, but</span>
+        <span class="c">///</span><span class="c"> not the current value of the target.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="7b23c36834dfd392" href="../R/7b23c36834dfd392.html" target="n" data-glyph="46,1" class="i field">_loose</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Immutable collection of resolved symbolic references.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This collection contains only the symbolic references we were able to</span>
+        <span class="c">///</span><span class="c"> resolve at map construction time. Other loose references must be read</span>
+        <span class="c">///</span><span class="c"> from {@link #loose}. Every entry in this list must be matched by an entry</span>
+        <span class="c">///</span><span class="c"> in {@code loose}, otherwise it might be omitted by the map.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="ab5401b0fc8be9ca" href="../R/ab5401b0fc8be9ca.html" target="n" data-glyph="46,1" class="i field">_resolved</a>;
+
+        <b>private int</b> <a id="50e7d4239535ee5a" href="../R/50e7d4239535ee5a.html" target="n" data-glyph="46,1" class="i field">_size</a>;
+
+        <b>private bool</b> <a id="54ae26707d4b052f" href="../R/54ae26707d4b052f.html" target="n" data-glyph="46,1" class="i field">_sizeIsValid</a>;
+
+        <b>private</b> <a href="#35656e8356c77891" class="t t">EntrySet</a> <a id="71832c35634c6e99" href="../R/71832c35634c6e99.html" target="n" data-glyph="46,1" class="i field">_entrySet</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct an empty map with a small initial capacity.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a id="5022ad47fa989e5a" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">RefMap</a>()
+        {
+            <a href="#c53a7dbe142046a3" class="i field">_prefix</a> = <span class="s">&quot;&quot;</span>;
+            <a href="#9d659e2cf8d0abdd" class="i field">_packed</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+            <a href="#7b23c36834dfd392" class="i field">_loose</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+            <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct a map to merge 3 collections together.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">prefix</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> prefix used to slice the lists down. Only references whose</span>
+        <span class="c">///</span><span class="c"> names start with this prefix will appear to reside in the map.</span>
+        <span class="c">///</span><span class="c"> Must not be null, use {@code &quot;&quot;} (the empty string) to select</span>
+        <span class="c">///</span><span class="c"> all list items.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">packed</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> items from the packed reference list, this is the last list</span>
+        <span class="c">///</span><span class="c"> searched.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">loose</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> items from the loose reference list, this list overrides</span>
+        <span class="c">///</span><span class="c"> {@code packed} if a name appears in both.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">resolved</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> resolved symbolic references. This list overrides the prior</span>
+        <span class="c">///</span><span class="c"> list {@code loose}, if an item appears in both. Items in this</span>
+        <span class="c">///</span><span class="c"> list </span><span class="c">&lt;</span><span class="c">b</span><span class="c">&gt;</span><span class="c">must</span><span class="c">&lt;/</span><span class="c">b</span><span class="c">&gt;</span><span class="c"> also appear in {@code loose}.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="9895f823f0cf4731" href="../R/9895f823f0cf4731.html" target="n" data-glyph="72,1" class="i constructor">RefMap</a>(<b>string</b> <span id="r0 rd" class="r0 r">prefix</span>, <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r1 rd" class="r1 r">packed</span>, <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r2 rd" class="r2 r">loose</span>,
+                      <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r3 rd" class="r3 r">resolved</span>)
+        {
+            <a href="#8d52db0270fdeeb9" class="k">this</a>.<a href="#c53a7dbe142046a3" class="i field">_prefix</a> = <span class="r0 r">prefix</span>;
+            <a href="#8d52db0270fdeeb9" class="k">this</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a> = <span class="r1 r">packed</span>;
+            <a href="#8d52db0270fdeeb9" class="k">this</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a> = <span class="r2 r">loose</span>;
+            <a href="#8d52db0270fdeeb9" class="k">this</a>.<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a> = <span class="r3 r">resolved</span>;
+        }
+
+        <b>public bool</b> <a id="7b94ff150bd2b5bd" href="../R/7b94ff150bd2b5bd.html" target="n" data-glyph="72,1" class="i method">containsKey</a>(<b>string</b> <span id="r4 rd" class="r4 r">name</span>)
+        {
+            <b>return</b> <a href="#3a9bcec57ec9bc6a" class="i method">get</a>(<span class="r4 r">name</span>) != <b>null</b>;
+        }
+
+        <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="3a9bcec57ec9bc6a" href="../R/3a9bcec57ec9bc6a.html" target="n" data-glyph="72,1" class="i method">get</a>(<b>string</b> <span id="r5 rd" class="r5 r">key</span>)
+        {
+            <b>string</b> <span id="r6 rd" class="r6 r">name</span> = <a href="#030226b263f67a71" class="i method">toRefName</a>(<span class="r5 r">key</span>);
+            <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r7 rd" class="r7 r">@ref</span> = <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r6 r">name</span>);
+            <b>if</b> (<span class="r7 r">@ref</span> == <b>null</b>)
+                <span class="r7 r">@ref</span> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r6 r">name</span>);
+            <b>if</b> (<span class="r7 r">@ref</span> == <b>null</b>)
+                <span class="r7 r">@ref</span> = <a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r6 r">name</span>);
+            <b>return</b> <span class="r7 r">@ref</span>;
+        }
+
+        <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="b4a1e4589b7e090f" href="../R/b4a1e4589b7e090f.html" target="n" data-glyph="72,1" class="i method">put</a>(<b>string</b> <span id="r8 rd" class="r8 r">keyName</span>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r9 rd" class="r9 r">value</span>)
+        {
+            <b>string</b> <span id="r10 rd" class="r10 r">name</span> = <a href="#030226b263f67a71" class="i method">toRefName</a>(<span class="r8 r">keyName</span>);
+
+            <b>if</b> (!<span class="r10 r">name</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r9 r">value</span>.<a href="../Ref.cs.html#71407e74e2ebd777" class="i property">Name</a>))
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;keyName&quot;</span>);
+
+            <b>if</b> (!<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#c4c641247a078a43" class="i method">isEmpty</a>())
+            {
+                <span class="c">// Collapse the resolved list into the loose list so we</span>
+                <span class="c">// can discard it and stop joining the two together.</span>
+                <b>foreach</b> (<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r11 rd" class="r11 r">@ref</span> <b>in</b> <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>)
+                    <a href="#7b23c36834dfd392" class="i field">_loose</a> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#2293f74bbc3a0544" class="i method">put</a>(<span class="r11 r">@ref</span>);
+                <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+            }
+
+            <b>int</b> <span id="r12 rd" class="r12 r">idx</span> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r10 r">name</span>);
+            <b>if</b> (0 &lt;= <span class="r12 r">idx</span>)
+            {
+                <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r13 rd" class="r13 r">prior</span> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r10 r">name</span>);
+                <a href="#7b23c36834dfd392" class="i field">_loose</a> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#7ce5b33cd04e709e" class="i method">set</a>(<span class="r12 r">idx</span>, <span class="r9 r">value</span>);
+                <b>return</b> <span class="r13 r">prior</span>;
+            }
+            <b>else</b>
+            {
+                <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r14 rd" class="r14 r">prior</span> = <a href="#3a9bcec57ec9bc6a" class="i method">get</a>(<span class="r8 r">keyName</span>);
+                <a href="#7b23c36834dfd392" class="i field">_loose</a> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#299bb5b1ee6a6abd" class="i method">add</a>(<span class="r12 r">idx</span>, <span class="r9 r">value</span>);
+                <a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a> = <b>false</b>;
+                <b>return</b> <span class="r14 r">prior</span>;
+            }
+        }
+
+        <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="21b03fa05bf17432" href="../R/21b03fa05bf17432.html" target="n" data-glyph="72,1" class="i method">remove</a>(<b>string</b> <span id="r15 rd" class="r15 r">key</span>)
+        {
+            <b>string</b> <span id="r16 rd" class="r16 r">name</span> = <a href="#030226b263f67a71" class="i method">toRefName</a>(<span class="r15 r">key</span>);
+            <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r17 rd" class="r17 r">res</span> = <b>null</b>;
+            <b>int</b> <span id="r18 rd" class="r18 r">idx</span>;
+            <b>if</b> (0 &lt;= (<span class="r18 r">idx</span> = <a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r16 r">name</span>)))
+            {
+                <span class="r17 r">res</span> = <a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r16 r">name</span>);
+                <a href="#9d659e2cf8d0abdd" class="i field">_packed</a> = <a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r18 r">idx</span>);
+                <a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a> = <b>false</b>;
+            }
+            <b>if</b> (0 &lt;= (<span class="r18 r">idx</span> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r16 r">name</span>)))
+            {
+                <span class="r17 r">res</span> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r16 r">name</span>);
+                <a href="#7b23c36834dfd392" class="i field">_loose</a> = <a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r18 r">idx</span>);
+                <a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a> = <b>false</b>;
+            }
+            <b>if</b> (0 &lt;= (<span class="r18 r">idx</span> = <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r16 r">name</span>)))
+            {
+                <span class="r17 r">res</span> = <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r16 r">name</span>);
+                <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a> = <a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r18 r">idx</span>);
+                <a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a> = <b>false</b>;
+            }
+            <b>return</b> <span class="r17 r">res</span>;
+        }
+
+        <b>public bool</b> <a id="a8cd81d741ab05c7" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">isEmpty</a>()
+        {
+            <b>return</b> <a href="#c84341751bfbc925" class="i method">entrySet</a>().<a href="#29a47a7601d20b2d" class="i method">isEmpty</a>();
+        }
+
+        <b>public</b> <a href="#35656e8356c77891" class="t t">EntrySet</a> <a id="c84341751bfbc925" href="../R/c84341751bfbc925.html" target="n" data-glyph="72,1" class="i method">entrySet</a>()
+        {
+            <b>if</b> (<a href="#71832c35634c6e99" class="i field">_entrySet</a> == <b>null</b>)
+            {
+                <a href="#71832c35634c6e99" class="i field">_entrySet</a> = <b>new</b> <a href="#bc189b5fe212ba7c" class="t constructor">EntrySet</a>(<a href="#8d52db0270fdeeb9" class="k">this</a>);
+            }
+
+            <b>return</b> <a href="#71832c35634c6e99" class="i field">_entrySet</a>;
+        }
+
+        <b>public class</b> <a id="f3bfdfede1102605" href="../R/f3bfdfede1102605.html" target="n" data-glyph="0,1" class="t t">RefSet</a> : <a href="ListIterator.cs.html#148e348d83311e66" class="t t">IIterable</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;
+        {
+            <b>private readonly</b> <a href="#35656e8356c77891" class="t t">EntrySet</a> <a id="077b74e06de42eee" href="../R/077b74e06de42eee.html" target="n" data-glyph="46,2" class="i field">_entrySet</a>;
+
+            <b>public</b> <a id="fedb9242378d0a23" href="../R/fedb9242378d0a23.html" target="n" data-glyph="72,2" class="i constructor">RefSet</a>(<a href="#35656e8356c77891" class="t t">EntrySet</a> <span id="r19 rd" class="r19 r">entrySet</span>)
+            {
+                <a href="#077b74e06de42eee" class="i field">_entrySet</a> = <span class="r19 r">entrySet</span>;
+            }
+
+            <b>public</b> <a href="@0@mscorlib/A.html#893e8cdebffde2da" class="t t">IEnumerator</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="4b595c0f9d9af94e" href="../R/4b595c0f9d9af94e.html" target="n" data-glyph="72,2" class="i method">GetEnumerator</a>()
+            {
+                <b>return</b> <a href="#c3c78d0e0b49a86e" class="i method">iterator</a>();
+            }
+
+            <a href="@0@mscorlib/A.html#6624f38cb955bfe0" class="t t">IEnumerator</a> <a href="@0@mscorlib/A.html#9be451ac13d86a97" class="t t">IEnumerable</a>.<a href="@0@mscorlib/A.html#02a44b09e26b964f" class="i method">GetEnumerator</a>()
+            {
+                <b>return</b> <a href="#4b595c0f9d9af94e" class="i method">GetEnumerator</a>();
+            }
+
+            <b>public</b> <a href="ListIterator.cs.html#f5aabdda2862de56" class="t t">IteratorBase</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="c3c78d0e0b49a86e" href="../R/c3c78d0e0b49a86e.html" target="n" data-glyph="72,2" class="i method">iterator</a>()
+            {
+                <b>return</b> <b>new</b> <a href="ListIterator.cs.html#1efb4d3e7a81c9ed" class="t constructor">LambdaConverterIterator</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(<a href="#077b74e06de42eee" class="i field">_entrySet</a>.<a href="#054751ea97b9320e" class="i method">iterator</a>(), <span id="r20 rd" class="r20 r">ent</span> =&gt; <span class="r20 r">ent</span>.<a href="#c3adba0cff3b3b22" class="i method">getValue</a>());
+            }
+
+            <b>public int</b> <a id="06d406508562b45b" href="../R/06d406508562b45b.html" target="n" data-glyph="72,2" class="i method">size</a>()
+            {
+                <b>return</b> <a href="#077b74e06de42eee" class="i field">_entrySet</a>.<a href="#a579d577417f1ce6" class="i method">size</a>();
+            }
+
+            <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="3fcb7a1b77281945" href="../R/3fcb7a1b77281945.html" target="n" data-glyph="72,2" class="i method">get</a>(<b>int</b> <span id="r21 rd" class="r21 r">index</span>)
+            {
+                <a href="#81de82c096495945" class="t t">Ent</a> <span id="r22 rd" class="r22 r">ent</span> = <a href="#077b74e06de42eee" class="i field">_entrySet</a>.<a href="#3eef08ae4a127f82" class="i method">get</a>(<span class="r21 r">index</span>);
+                <b>return</b> <span class="r22 r">ent</span>.<a href="#c3adba0cff3b3b22" class="i method">getValue</a>();
+            }
+        }
+
+        <b>public class</b> <a id="35656e8356c77891" href="../R/35656e8356c77891.html" target="n" data-glyph="0,1" class="t t">EntrySet</a> : <a href="ListIterator.cs.html#148e348d83311e66" class="t t">IIterable</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>&gt;
+        {
+            <b>private readonly</b> <a href="#8d52db0270fdeeb9" class="t t">RefMap</a> <a id="c0592fa926a18ac4" href="../R/c0592fa926a18ac4.html" target="n" data-glyph="46,2" class="i field">_refMap</a>;
+
+            <b>public</b> <a id="bc189b5fe212ba7c" href="../R/bc189b5fe212ba7c.html" target="n" data-glyph="72,2" class="i constructor">EntrySet</a>(<a href="#8d52db0270fdeeb9" class="t t">RefMap</a> <span id="r23 rd" class="r23 r">refMap</span>)
+            {
+                <a href="#c0592fa926a18ac4" class="i field">_refMap</a> = <span class="r23 r">refMap</span>;
+            }
+
+            <b>public</b> <a href="@0@mscorlib/A.html#893e8cdebffde2da" class="t t">IEnumerator</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>&gt; <a id="490fe149bb46649a" href="../R/490fe149bb46649a.html" target="n" data-glyph="72,2" class="i method">GetEnumerator</a>()
+            {
+                <b>return</b> <a href="#054751ea97b9320e" class="i method">iterator</a>();
+            }
+
+            <b>public</b> <a href="ListIterator.cs.html#f5aabdda2862de56" class="t t">IteratorBase</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>&gt; <a id="054751ea97b9320e" href="../R/054751ea97b9320e.html" target="n" data-glyph="72,2" class="i method">iterator</a>()
+            {
+                <b>return</b> <b>new</b> <a href="#5cade58045660021" class="t constructor">SetIterator</a>(<a href="#c0592fa926a18ac4" class="i field">_refMap</a>);
+            }
+
+            <b>public int</b> <a id="a579d577417f1ce6" href="../R/a579d577417f1ce6.html" target="n" data-glyph="72,2" class="i method">size</a>()
+            {
+                <b>if</b> (!<a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a>)
+                {
+                    <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#50e7d4239535ee5a" class="i field">_size</a> = 0;
+                    <a href="ListIterator.cs.html#f5aabdda2862de56" class="t t">IteratorBase</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>&gt; <span id="r24 rd" class="r24 r">i</span> = <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#c84341751bfbc925" class="i method">entrySet</a>().<a href="#054751ea97b9320e" class="i method">iterator</a>();
+                    <b>for</b> (; <span class="r24 r">i</span>.<a href="ListIterator.cs.html#86ba867dc553ac54" class="i method">hasNext</a>(); <span class="r24 r">i</span>.<a href="ListIterator.cs.html#31c79af7342ea825" class="i method">next</a>())
+                        <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#50e7d4239535ee5a" class="i field">_size</a>++;
+                    <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a> = <b>true</b>;
+                }
+                <b>return</b> <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#50e7d4239535ee5a" class="i field">_size</a>;
+            }
+
+            <b>public bool</b> <a id="29a47a7601d20b2d" href="../R/29a47a7601d20b2d.html" target="n" data-glyph="72,2" class="i method">isEmpty</a>()
+            {
+                <b>if</b> (<a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a>)
+                    <b>return</b> 0 == <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#50e7d4239535ee5a" class="i field">_size</a>;
+                <b>return</b> !<a href="#054751ea97b9320e" class="i method">iterator</a>().<a href="ListIterator.cs.html#86ba867dc553ac54" class="i method">hasNext</a>();
+            }
+
+            <b>public void</b> <a id="fadae34437639dd8" href="../R/fadae34437639dd8.html" target="n" data-glyph="72,2" class="i method">clear</a>()
+            {
+                <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+                <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+                <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a> = <a href="RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>();
+                <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#50e7d4239535ee5a" class="i field">_size</a> = 0;
+                <a href="#c0592fa926a18ac4" class="i field">_refMap</a>.<a href="#54ae26707d4b052f" class="i field">_sizeIsValid</a> = <b>true</b>;
+            }
+
+            <b>public</b> <a href="#81de82c096495945" class="t t">Ent</a> <a id="3eef08ae4a127f82" href="../R/3eef08ae4a127f82.html" target="n" data-glyph="72,2" class="i method">get</a>(<b>int</b> <span id="r25 rd" class="r25 r">index</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+            }
+
+            <a href="@0@mscorlib/A.html#6624f38cb955bfe0" class="t t">IEnumerator</a> <a href="@0@mscorlib/A.html#9be451ac13d86a97" class="t t">IEnumerable</a>.<a href="@0@mscorlib/A.html#02a44b09e26b964f" class="i method">GetEnumerator</a>()
+            {
+                <b>return</b> <a href="#490fe149bb46649a" class="i method">GetEnumerator</a>();
+            }
+        }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#893e8cdebffde2da" class="t t">IEnumerator</a>&lt;<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;&gt; <a id="ed90a066d3065bf1" href="../R/ed90a066d3065bf1.html" target="n" data-glyph="72,1" class="i method">GetEnumerator</a>()
+        {
+            <b>return</b> <b>new</b> <a href="ListIterator.cs.html#1efb4d3e7a81c9ed" class="t constructor">LambdaConverterIterator</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>, <a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;&gt;(<a href="#c84341751bfbc925" class="i method">entrySet</a>().<a href="#054751ea97b9320e" class="i method">iterator</a>(), (<span id="r26 rd" class="r26 r">ent</span>) =&gt; <b>new</b> <a href="@0@mscorlib/A.html#0d04c81b31e41262" class="t constructor">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(<span class="r26 r">ent</span>.<a href="#f16420dd46052171" class="i method">getKey</a>(), <span class="r26 r">ent</span>.<a href="#c3adba0cff3b3b22" class="i method">getValue</a>()));
+        }
+
+        <b>public override string</b> <a id="d3e3ce8ac7fe58dd" href="../R/d3e3ce8ac7fe58dd.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r27 rd" class="r27 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <b>bool</b> <span id="r28 rd" class="r28 r">first</span> = <b>true</b>;
+            <span class="r27 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;[&#39;</span>);
+            <b>foreach</b> (<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r29 rd" class="r29 r">@ref</span> <b>in</b> <a href="#c3fb051398d13187" class="i method">values</a>())
+            {
+                <b>if</b> (<span class="r28 r">first</span>)
+                    <span class="r28 r">first</span> = <b>false</b>;
+                <b>else</b>
+                    <span class="r27 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;, &quot;</span>);
+                <span class="r27 r">r</span>.<a href="@0@mscorlib/A.html#7685cb28f3648166" class="i method">Append</a>(<span class="r29 r">@ref</span>);
+            }
+            <span class="r27 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;]&#39;</span>);
+            <b>return</b> <span class="r27 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+
+        <a href="@0@mscorlib/A.html#6624f38cb955bfe0" class="t t">IEnumerator</a> <a href="@0@mscorlib/A.html#9be451ac13d86a97" class="t t">IEnumerable</a>.<a href="@0@mscorlib/A.html#02a44b09e26b964f" class="i method">GetEnumerator</a>()
+        {
+            <b>return</b> <a href="#ed90a066d3065bf1" class="i method">GetEnumerator</a>();
+        }
+
+        <b>public</b> <a href="ListIterator.cs.html#148e348d83311e66" class="t t">IIterable</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="c3fb051398d13187" href="../R/c3fb051398d13187.html" target="n" data-glyph="72,1" class="i method">values</a>()
+        {
+            <b>return</b> <b>new</b> <a href="#fedb9242378d0a23" class="t constructor">RefSet</a>(<a href="#c84341751bfbc925" class="i method">entrySet</a>());
+        }
+
+        <b>private string</b> <a id="030226b263f67a71" href="../R/030226b263f67a71.html" target="n" data-glyph="76,1" class="i method">toRefName</a>(<b>string</b> <span id="r30 rd" class="r30 r">name</span>)
+        {
+            <b>if</b> (0 &lt; <a href="#c53a7dbe142046a3" class="i field">_prefix</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+                <span class="r30 r">name</span> = <a href="#c53a7dbe142046a3" class="i field">_prefix</a> + <span class="r30 r">name</span>;
+            <b>return</b> <span class="r30 r">name</span>;
+        }
+
+        <b>private string</b> <a id="c38aca8d1cfadf42" href="../R/c38aca8d1cfadf42.html" target="n" data-glyph="76,1" class="i method">toMapKey</a>(<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r31 rd" class="r31 r">@ref</span>)
+        {
+            <b>string</b> <span id="r32 rd" class="r32 r">name</span> = <span class="r31 r">@ref</span>.<a href="../Ref.cs.html#71407e74e2ebd777" class="i property">Name</a>;
+            <b>if</b> (0 &lt; <a href="#c53a7dbe142046a3" class="i field">_prefix</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+                <span class="r32 r">name</span> = <span class="r32 r">name</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="#c53a7dbe142046a3" class="i field">_prefix</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+            <b>return</b> <span class="r32 r">name</span>;
+        }
+
+        <b>private class</b> <a id="b8b01b13fb5e8c91" href="../R/b8b01b13fb5e8c91.html" target="n" data-glyph="4,1" class="t t">SetIterator</a> : <a href="ListIterator.cs.html#f5aabdda2862de56" class="t t">IteratorBase</a>&lt;<a href="#81de82c096495945" class="t t">Ent</a>&gt;
+        {
+            <b>private readonly</b> <a href="#8d52db0270fdeeb9" class="t t">RefMap</a> <a id="75de2b7f710b0832" href="../R/75de2b7f710b0832.html" target="n" data-glyph="46,2" class="i field">_refMap</a>;
+            <b>private int</b> <a id="4083c0d6e1b6e1fe" href="../R/4083c0d6e1b6e1fe.html" target="n" data-glyph="46,2" class="i field">packedIdx</a>;
+
+            <b>private int</b> <a id="9cd27b5b12e2a9dc" href="../R/9cd27b5b12e2a9dc.html" target="n" data-glyph="46,2" class="i field">looseIdx</a>;
+
+            <b>private int</b> <a id="d05f3a6d8924c385" href="../R/d05f3a6d8924c385.html" target="n" data-glyph="46,2" class="i field">resolvedIdx</a>;
+
+            <b>private</b> <a href="#81de82c096495945" class="t t">Ent</a> <a id="d16ac87613251b3d" href="../R/d16ac87613251b3d.html" target="n" data-glyph="46,2" class="i field">_next</a>;
+
+            <b>public</b> <a id="5cade58045660021" href="../R/5cade58045660021.html" target="n" data-glyph="72,2" class="i constructor">SetIterator</a>(<a href="#8d52db0270fdeeb9" class="t t">RefMap</a> <span id="r33 rd" class="r33 r">refMap</span>)
+            {
+                <a href="#75de2b7f710b0832" class="i field">_refMap</a> = <span class="r33 r">refMap</span>;
+                <b>if</b> (0 &lt; <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#c53a7dbe142046a3" class="i field">_prefix</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+                {
+                    <a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a> = -(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#c53a7dbe142046a3" class="i field">_prefix</a>) + 1);
+                    <a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a> = -(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#c53a7dbe142046a3" class="i field">_prefix</a>) + 1);
+                    <a href="#d05f3a6d8924c385" class="i field">resolvedIdx</a> = -(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#c53a7dbe142046a3" class="i field">_prefix</a>) + 1);
+                }
+            }
+
+            <b>public override bool</b> <a id="c8b6d7a24ded77b7" href="../R/c8b6d7a24ded77b7.html" target="n" data-glyph="72,2" class="i method">hasNext</a>()
+            {
+                <b>if</b> (<a href="#d16ac87613251b3d" class="i field">_next</a> == <b>null</b>)
+                    <a href="#d16ac87613251b3d" class="i field">_next</a> = <a href="#7e1df6fa933a0f39" class="i method">peek</a>();
+                <b>return</b> <a href="#d16ac87613251b3d" class="i field">_next</a> != <b>null</b>;
+            }
+
+            <b>protected override</b> <a href="#81de82c096495945" class="t t">Ent</a> <a id="5e8308a5e6958f8e" href="../R/5e8308a5e6958f8e.html" target="n" data-glyph="75,2" class="i method">InnerNext</a>()
+            {
+                <b>if</b> (<a href="#c8b6d7a24ded77b7" class="i method">hasNext</a>())
+                {
+                    <a href="#81de82c096495945" class="t t">Ent</a> <span id="r34 rd" class="r34 r">r</span> = <a href="#d16ac87613251b3d" class="i field">_next</a>;
+                    <a href="#d16ac87613251b3d" class="i field">_next</a> = <a href="#7e1df6fa933a0f39" class="i method">peek</a>();
+                    <b>return</b> <span class="r34 r">r</span>;
+                }
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#b9c8ef7b0f7b8fbc" class="t constructor">IndexOutOfRangeException</a>();
+            }
+
+            <b>private</b> <a href="#81de82c096495945" class="t t">Ent</a> <a id="7e1df6fa933a0f39" href="../R/7e1df6fa933a0f39.html" target="n" data-glyph="76,2" class="i method">peek</a>()
+            {
+                <b>if</b> (<a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a> &lt; <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>() &amp;&amp; <a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a> &lt; <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                {
+                    <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r35 rd" class="r35 r">p</span> = <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a>);
+                    <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r36 rd" class="r36 r">l</span> = <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a>);
+                    <b>int</b> <span id="r37 rd" class="r37 r">cmp</span> = <a href="../RefComparator.cs.html#535b403148f2ae44" class="t t">RefComparator</a>.<a href="../RefComparator.cs.html#6ddf06feb156d647" class="i method">compareTo</a>(<span class="r35 r">p</span>, <span class="r36 r">l</span>);
+                    <b>if</b> (<span class="r37 r">cmp</span> &lt; 0)
+                    {
+                        <a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a>++;
+                        <b>return</b> <a href="#b3125443e3f70b74" class="i method">toEntry</a>(<span class="r35 r">p</span>);
+                    }
+
+                    <b>if</b> (<span class="r37 r">cmp</span> == 0)
+                        <a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a>++;
+                    <a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a>++;
+                    <b>return</b> <a href="#b3125443e3f70b74" class="i method">toEntry</a>(<a href="#4a71d50a4b265b62" class="i method">resolveLoose</a>(<span class="r36 r">l</span>));
+                }
+
+                <b>if</b> (<a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a> &lt; <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                    <b>return</b> <a href="#b3125443e3f70b74" class="i method">toEntry</a>(<a href="#4a71d50a4b265b62" class="i method">resolveLoose</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a>++)));
+                <b>if</b> (<a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a> &lt; <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                    <b>return</b> <a href="#b3125443e3f70b74" class="i method">toEntry</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a>++));
+                <b>return null</b>;
+            }
+
+            <b>private</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="4a71d50a4b265b62" href="../R/4a71d50a4b265b62.html" target="n" data-glyph="76,2" class="i method">resolveLoose</a>(<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r38 rd" class="r38 r">l</span>)
+            {
+                <b>if</b> (<a href="#d05f3a6d8924c385" class="i field">resolvedIdx</a> &lt; <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                {
+                    <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r39 rd" class="r39 r">r</span> = <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#d05f3a6d8924c385" class="i field">resolvedIdx</a>);
+                    <b>int</b> <span id="r40 rd" class="r40 r">cmp</span> = <a href="../RefComparator.cs.html#535b403148f2ae44" class="t t">RefComparator</a>.<a href="../RefComparator.cs.html#6ddf06feb156d647" class="i method">compareTo</a>(<span class="r38 r">l</span>, <span class="r39 r">r</span>);
+                    <b>if</b> (<span class="r40 r">cmp</span> == 0)
+                    {
+                        <a href="#d05f3a6d8924c385" class="i field">resolvedIdx</a>++;
+                        <b>return</b> <span class="r39 r">r</span>;
+                    }
+                    <b>else if</b> (<span class="r40 r">cmp</span> &gt; 0)
+                    {
+                        <span class="c">// WTF, we have a symbolic entry but no match</span>
+                        <span class="c">// in the loose collection. That&#39;s an error.</span>
+                        <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8d6a52a5496ce078" class="t constructor">InvalidOperationException</a>();
+                    }
+                }
+                <b>return</b> <span class="r38 r">l</span>;
+            }
+
+            <b>private</b> <a href="#81de82c096495945" class="t t">Ent</a> <a id="b3125443e3f70b74" href="../R/b3125443e3f70b74.html" target="n" data-glyph="76,2" class="i method">toEntry</a>(<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r41 rd" class="r41 r">p</span>)
+            {
+                <b>if</b> (<span class="r41 r">p</span>.<a href="../Ref.cs.html#71407e74e2ebd777" class="i property">Name</a>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#c53a7dbe142046a3" class="i field">_prefix</a>))
+                    <b>return</b> <b>new</b> <a href="#996de4ab3a873a9e" class="t constructor">Ent</a>(<a href="#75de2b7f710b0832" class="i field">_refMap</a>, <span class="r41 r">p</span>);
+                <a href="#4083c0d6e1b6e1fe" class="i field">packedIdx</a> = <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#9d659e2cf8d0abdd" class="i field">_packed</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>();
+                <a href="#9cd27b5b12e2a9dc" class="i field">looseIdx</a> = <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#7b23c36834dfd392" class="i field">_loose</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>();
+                <a href="#d05f3a6d8924c385" class="i field">resolvedIdx</a> = <a href="#75de2b7f710b0832" class="i field">_refMap</a>.<a href="#ab5401b0fc8be9ca" class="i field">_resolved</a>.<a href="RefList.cs.html#0579aad08e1468f0" class="i method">size</a>();
+                <b>return null</b>;
+            }
+        }
+
+        <b>public class</b> <a id="81de82c096495945" href="../R/81de82c096495945.html" target="n" data-glyph="0,1" class="t t">Ent</a><span class="c">// implements Entry&lt;string, Ref&gt; </span>
+        {
+            <b>private readonly</b> <a href="#8d52db0270fdeeb9" class="t t">RefMap</a> <a id="d8b6fd1c4589ee3b" href="../R/d8b6fd1c4589ee3b.html" target="n" data-glyph="46,2" class="i field">_refMap</a>;
+            <b>private</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="41d3f7ccc4689a4c" href="../R/41d3f7ccc4689a4c.html" target="n" data-glyph="46,2" class="i field">@ref</a>;
+
+            <b>public</b> <a id="996de4ab3a873a9e" href="../R/996de4ab3a873a9e.html" target="n" data-glyph="72,2" class="i constructor">Ent</a>(<a href="#8d52db0270fdeeb9" class="t t">RefMap</a> <span id="r42 rd" class="r42 r">refMap</span>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r43 rd" class="r43 r">@ref</span>)
+            {
+                <a href="#d8b6fd1c4589ee3b" class="i field">_refMap</a> = <span class="r42 r">refMap</span>;
+                <a href="#81de82c096495945" class="k">this</a>.<a href="#41d3f7ccc4689a4c" class="i field">@ref</a> = <span class="r43 r">@ref</span>;
+            }
+
+            <b>public string</b> <a id="f16420dd46052171" href="../R/f16420dd46052171.html" target="n" data-glyph="72,2" class="i method">getKey</a>()
+            {
+                <b>return</b> <a href="#d8b6fd1c4589ee3b" class="i field">_refMap</a>.<a href="#c38aca8d1cfadf42" class="i method">toMapKey</a>(<a href="#41d3f7ccc4689a4c" class="i field">@ref</a>);
+            }
+
+            <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="c3adba0cff3b3b22" href="../R/c3adba0cff3b3b22.html" target="n" data-glyph="72,2" class="i method">getValue</a>()
+            {
+                <b>return</b> <a href="#41d3f7ccc4689a4c" class="i field">@ref</a>;
+            }
+
+            <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="6fa95000ee6d4b8d" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">setValue</a>(<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r44 rd" class="r44 r">value</span>)
+            {
+                <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r45 rd" class="r45 r">prior</span> = <a href="#d8b6fd1c4589ee3b" class="i field">_refMap</a>.<a href="#b4a1e4589b7e090f" class="i method">put</a>(<a href="#f16420dd46052171" class="i method">getKey</a>(), <span class="r44 r">value</span>);
+                <a href="#41d3f7ccc4689a4c" class="i field">@ref</a> = <span class="r44 r">value</span>;
+                <b>return</b> <span class="r45 r">prior</span>;
+            }
+
+            <b>public override int</b> <a id="9fbbdb0d3a173f05" href="../R/9fbbdb0d3a173f05.html" target="n" data-glyph="72,2" class="i method">GetHashCode</a>()
+            {
+                <b>return</b> <a href="#f16420dd46052171" class="i method">getKey</a>().<a href="@0@mscorlib/A.html#0a17bbac4851d0d4" class="i method">GetHashCode</a>();
+            }
+
+            <b>public override bool</b> <a id="69c6c0a6f23434d3" href="../R/69c6c0a6f23434d3.html" target="n" data-glyph="72,2" class="i method">Equals</a>(<a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="t t">Object</a> <span id="r46 rd" class="r46 r">obj</span>)
+            {
+                <b>if</b> (<span class="r46 r">obj</span> <b>is</b> <a href="#81de82c096495945" class="t t">Ent</a>)
+                {
+                    <a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="t t">Object</a> <span id="r47 rd" class="r47 r">key</span> = ((<a href="#81de82c096495945" class="t t">Ent</a>)<span class="r46 r">obj</span>).<a href="#f16420dd46052171" class="i method">getKey</a>();
+                    <a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="t t">Object</a> <span id="r48 rd" class="r48 r">val</span> = ((<a href="#81de82c096495945" class="t t">Ent</a>)<span class="r46 r">obj</span>).<a href="#c3adba0cff3b3b22" class="i method">getValue</a>();
+                    <b>if</b> (<span class="r47 r">key</span> <b>is string</b> &amp;&amp; <span class="r48 r">val</span> <b>is</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>)
+                    {
+                        <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r49 rd" class="r49 r">r</span> = (<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>)<span class="r48 r">val</span>;
+                        <b>if</b> (<span class="r49 r">r</span>.<a href="../Ref.cs.html#71407e74e2ebd777" class="i property">Name</a>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<a href="#41d3f7ccc4689a4c" class="i field">@ref</a>.<a href="../Ref.cs.html#71407e74e2ebd777" class="i property">Name</a>))
+                        {
+                            <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r50 rd" class="r50 r">a</span> = <span class="r49 r">r</span>.<a href="../Ref.cs.html#8d89227bc6e67ab0" class="i property">ObjectId</a>;
+                            <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r51 rd" class="r51 r">b</span> = <a href="#41d3f7ccc4689a4c" class="i field">@ref</a>.<a href="../Ref.cs.html#8d89227bc6e67ab0" class="i property">ObjectId</a>;
+                            <b>if</b> (<span class="r50 r">a</span> != <b>null</b> &amp;&amp; <span class="r51 r">b</span> != <b>null</b> &amp;&amp; <a href="../AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a>.<a href="../AnyObjectId.cs.html#aec55805a41552b1" class="i method">equals</a>(<span class="r50 r">a</span>, <span class="r51 r">b</span>))
+                                <b>return true</b>;
+                        }
+                    }
+                }
+
+                <b>return false</b>;
+            }
+
+            <b>public override string</b> <a id="be998596d11c0785" href="../R/be998596d11c0785.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+            {
+                <b>return</b> <a href="#41d3f7ccc4689a4c" class="i field">@ref</a>.<a href="@0@mscorlib/A.html#ff31a6bf27c58f89" class="i method">ToString</a>();
+            }
+        }
+
+        <b>public int</b> <a id="591b93554d22cb3f" href="../R/591b93554d22cb3f.html" target="n" data-glyph="72,1" class="i method">size</a>()
+        {
+            <b>return</b> <a href="#c84341751bfbc925" class="i method">entrySet</a>().<a href="#a579d577417f1ce6" class="i method">size</a>();
+        }
+
+        <b>public void</b> <a id="c9aa156301cb7fa1" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">clear</a>()
+        {
+            <a href="#c84341751bfbc925" class="i method">entrySet</a>().<a href="#fadae34437639dd8" class="i method">clear</a>();
+        }
+
+        <b>public</b> <a href="ListIterator.cs.html#148e348d83311e66" class="t t">IIterable</a>&lt;<b>string</b>&gt; <a id="05fbcb7cc50f5f90" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">keySet</a>()
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r52 rd" class="r52 r">keys</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+
+            <b>foreach</b> (<a href="#81de82c096495945" class="t t">Ent</a> <span id="r53 rd" class="r53 r">ent</span> <b>in</b> <a href="#c84341751bfbc925" class="i method">entrySet</a>())
+            {
+                <span class="r52 r">keys</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r53 r">ent</span>.<a href="#f16420dd46052171" class="i method">getKey</a>());
+            }
+
+            <b>return</b> <b>new</b> <a href="ListIterator.cs.html#f257642dd274ad4d" class="t constructor">BasicIterable</a>&lt;<b>string</b>&gt;(<span class="r52 r">keys</span>);
+        }
+
+        <b>public void</b> <a id="0183fa8009e5c706" href="../R/0183fa8009e5c706.html" target="n" data-glyph="72,1" class="i method">Add</a>(<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r54 rd" class="r54 r">item</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+
+        <b>public void</b> <a id="82ab0c1b75780707" href="../R/82ab0c1b75780707.html" target="n" data-glyph="72,1" class="i method">Clear</a>()
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+
+        <b>public bool</b> <a id="32bd3d25a5b0b514" href="../R/32bd3d25a5b0b514.html" target="n" data-glyph="72,1" class="i method">Contains</a>(<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r55 rd" class="r55 r">item</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+
+        <b>public void</b> <a id="f36617c9881c52b9" href="../R/f36617c9881c52b9.html" target="n" data-glyph="72,1" class="i method">CopyTo</a>(<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;[] <span id="r56 rd" class="r56 r">array</span>, <b>int</b> <span id="r57 rd" class="r57 r">arrayIndex</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+
+        <b>public bool</b> <a id="8c680c1fca12393c" href="../R/8c680c1fca12393c.html" target="n" data-glyph="72,1" class="i method">Remove</a>(<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r58 rd" class="r58 r">item</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+
+        <b>public int</b> <a id="a8eb0c88d8642634" href="../R/a8eb0c88d8642634.html" target="n" data-glyph="102,1" class="i property">Count</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#591b93554d22cb3f" class="i method">size</a>(); }
+        }
+
+        <b>public bool</b> <a id="62ca5b5f92682e1f" href="../R/62ca5b5f92682e1f.html" target="n" data-glyph="102,1" class="i property">IsReadOnly</a>
+        {
+            <b>get</b> { <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>(); }
+        }
+
+        <b>public bool</b> <a id="bb7b690240aa03b4" href="../R/bb7b690240aa03b4.html" target="n" data-glyph="72,1" class="i method">ContainsKey</a>(<b>string</b> <span id="r59 rd" class="r59 r">key</span>)
+        {
+            <b>return</b> <a href="#7b94ff150bd2b5bd" class="i method">containsKey</a>(<span class="r59 r">key</span>);
+        }
+
+        <b>public void</b> <a id="fe243e9de26ad6d4" href="../R/fe243e9de26ad6d4.html" target="n" data-glyph="72,1" class="i method">Add</a>(<b>string</b> <span id="r60 rd" class="r60 r">key</span>, <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r61 rd" class="r61 r">value</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+        }
+
+        <b>public bool</b> <a id="a01edffd193f3b7f" href="../R/a01edffd193f3b7f.html" target="n" data-glyph="72,1" class="i method">Remove</a>(<b>string</b> <span id="r62 rd" class="r62 r">key</span>)
+        {
+        	<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r63 rd" class="r63 r">val</span>;
+
+			<b>if</b>(<a href="#231471cd76f7b537" class="i method">TryGetValue</a>(<span class="r62 r">key</span>, <b>out</b> <span class="r63 r">val</span>))
+			{
+				<a href="#21b03fa05bf17432" class="i method">remove</a>(<span class="r62 r">key</span>);
+				<b>return true</b>;
+			}
+
+        	<b>return false</b>;
+        }
+
+        <b>public bool</b> <a id="231471cd76f7b537" href="../R/231471cd76f7b537.html" target="n" data-glyph="72,1" class="i method">TryGetValue</a>(<b>string</b> <span id="r64 rd" class="r64 r">key</span>, <b>out</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r65 rd" class="r65 r">value</span>)
+        {
+            <span class="r65 r">value</span> = <a href="#3a9bcec57ec9bc6a" class="i method">get</a>(<span class="r64 r">key</span>);
+            <b>return</b> (<span class="r65 r">value</span> != <b>null</b>);
+        }
+
+        <b>public</b> <a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="fc82b52057367310" href="../R/fc82b52057367310.html" target="n" data-glyph="102,1" class="k">this</a>[<b>string</b> <span id="r66 rd" class="r66 r">key</span>]
+        {
+            <b>get</b> { <b>return</b> <a href="#3a9bcec57ec9bc6a" class="i method">get</a>(<span class="r66 r">key</span>); }
+            <b>set</b> { <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>(); }
+        }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="057a675bda6e7d79" href="../R/057a675bda6e7d79.html" target="n" data-glyph="102,1" class="i property">Keys</a>
+        {
+            <b>get</b> { <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>(); }
+        }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="a689717e5cf00c19" href="../R/a689717e5cf00c19.html" target="n" data-glyph="102,1" class="i property">Values</a>
+        {
+            <b>get</b> { <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<a href="../Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(<a href="#c3fb051398d13187" class="i method">values</a>()).<a href="@0@mscorlib/A.html#2b710ab0bc8866ad" class="i method">AsReadOnly</a>(); }
+        }
+
+    }
+
+
+}</pre></td></tr></table></div></body></html>

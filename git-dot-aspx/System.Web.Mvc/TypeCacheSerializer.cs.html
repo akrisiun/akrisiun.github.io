@@ -1,0 +1,134 @@
+﻿<!DOCTYPE html>
+<html><head><title>TypeCacheSerializer.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(125);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/TypeCacheSerializer.cs" target="_top">TypeCacheSerializer.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Xml</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    <span class="c">// Processes files with this format:</span>
+    <span class="c">//</span>
+    <span class="c">// &lt;typeCache lastModified=... mvcVersionId=...&gt;</span>
+    <span class="c">//   &lt;assembly name=...&gt;</span>
+    <span class="c">//     &lt;module versionId=...&gt;</span>
+    <span class="c">//       &lt;type&gt;...&lt;/type&gt;</span>
+    <span class="c">//     &lt;/module&gt;</span>
+    <span class="c">//   &lt;/assembly&gt;</span>
+    <span class="c">// &lt;/typeCache&gt;</span>
+    <span class="c">//</span>
+    <span class="c">// This is used to store caches of files between AppDomain resets, leading to improved cold boot time</span>
+    <span class="c">// and more efficient use of memory.</span>
+ 
+    <b>internal sealed class</b> <a id="4fb09ebd59c38f50" href="R/4fb09ebd59c38f50.html" target="n" data-glyph="2,0" class="t t"><span id="ecaccd905fab79c3">TypeCacheSerializer</span></a>
+    {
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a> <a id="a1bf4b4d1e3ccb7e" href="R/a1bf4b4d1e3ccb7e.html" target="n" data-glyph="46,1" class="i field">_mvcVersionId</a> = <b>typeof</b>(<a href="#4fb09ebd59c38f50" class="t t">TypeCacheSerializer</a>).<a href="@0@mscorlib/A.html#92334631fb130a35" class="i property">Module</a>.<a href="@0@mscorlib/A.html#78fca7513fa39434" class="i property">ModuleVersionId</a>;
+ 
+        <span class="c">// used for unit testing</span>
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <a id="60bff78d7f12e729" href="R/60bff78d7f12e729.html" target="n" data-glyph="106,1" class="i property">CurrentDate</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#5cff2bb7bfb7430b" class="i property">CurrentDateOverride</a> ?? <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>; }
+        }
+ 
+        <b>internal</b> <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>? <a id="5cff2bb7bfb7430b" href="R/5cff2bb7bfb7430b.html" target="n" data-glyph="104,1" class="i property">CurrentDateOverride</a> { <b>get</b>; <b>set</b>; }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1822:MarkMembersAsStatic&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is an instance method for consistency with the SerializeTypes() method.&quot;</span>)]
+        <b>public</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <a id="2bbf19c92fb092f7" href="R/2bbf19c92fb092f7.html" target="n" data-glyph="72,1" class="i method">DeserializeTypes</a>(<a href="@0@mscorlib/A.html#7b5eff52b5bf1164" class="t t">TextReader</a> <span id="r0 rd" class="r0 r">input</span>)
+        {
+            <a href="@0@System.Xml/A.html#f82a4c1bd1f0ee12" class="t t">XmlDocument</a> <span id="r1 rd" class="r1 r">doc</span> = <b>new</b> <a href="@0@System.Xml/A.html#2d559a81f89e826f" class="t constructor">XmlDocument</a>();
+            <span class="r1 r">doc</span>.<a href="@0@System.Xml/A.html#be5cd32987353bf2" class="i method">Load</a>(<span class="r0 r">input</span>);
+            <a href="@0@System.Xml/A.html#184875ff599860f7" class="t t">XmlElement</a> <span id="r2 rd" class="r2 r">rootElement</span> = <span class="r1 r">doc</span>.<a href="@0@System.Xml/A.html#4bca68642816777a" class="i property">DocumentElement</a>;
+ 
+            <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a> <span id="r3 rd" class="r3 r">readMvcVersionId</span> = <b>new</b> <a href="@0@mscorlib/A.html#4329442fa037af5c" class="t constructor">Guid</a>(<span class="r2 r">rootElement</span>.<a href="@0@System.Xml/A.html#a4ead10fc0c65e44" class="i property">Attributes</a><a href="@0@System.Xml/A.html#c8fd259c2974dff0">[</a><span class="s">&quot;mvcVersionId&quot;</span>].<a href="@0@System.Xml/A.html#9bc9e8ad31fdcd66" class="i property">Value</a>);
+            <b>if</b> (<span class="r3 r">readMvcVersionId</span> != <a href="#a1bf4b4d1e3ccb7e" class="i field">_mvcVersionId</a>)
+            {
+                <span class="c">// The cache is outdated because the cache file was produced by a different version</span>
+                <span class="c">// of MVC.</span>
+                <b>return null</b>;
+            }
+ 
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <span id="r4 rd" class="r4 r">deserializedTypes</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt;();
+            <b>foreach</b> (<a href="@0@System.Xml/A.html#735249b64d244851" class="t t">XmlNode</a> <span id="r5 rd" class="r5 r">assemblyNode</span> <b>in</b> <span class="r2 r">rootElement</span>.<a href="@0@System.Xml/A.html#ce940d5c84a21523" class="i property">ChildNodes</a>)
+            {
+                <b>string</b> <span id="r6 rd" class="r6 r">assemblyName</span> = <span class="r5 r">assemblyNode</span>.<a href="@0@System.Xml/A.html#86643abd2a4fe7a2" class="i property">Attributes</a><a href="@0@System.Xml/A.html#c8fd259c2974dff0">[</a><span class="s">&quot;name&quot;</span>].<a href="@0@System.Xml/A.html#9bc9e8ad31fdcd66" class="i property">Value</a>;
+                <a href="@0@mscorlib/A.html#73b5be5e9c2474b2" class="t t">Assembly</a> <span id="r7 rd" class="r7 r">assembly</span> = <a href="@0@mscorlib/A.html#73b5be5e9c2474b2" class="t t">Assembly</a>.<a href="@0@mscorlib/A.html#c50dd34131d7461a" class="i method">Load</a>(<span class="r6 r">assemblyName</span>);
+ 
+                <b>foreach</b> (<a href="@0@System.Xml/A.html#735249b64d244851" class="t t">XmlNode</a> <span id="r8 rd" class="r8 r">moduleNode</span> <b>in</b> <span class="r5 r">assemblyNode</span>.<a href="@0@System.Xml/A.html#ce940d5c84a21523" class="i property">ChildNodes</a>)
+                {
+                    <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a> <span id="r9 rd" class="r9 r">moduleVersionId</span> = <b>new</b> <a href="@0@mscorlib/A.html#4329442fa037af5c" class="t constructor">Guid</a>(<span class="r8 r">moduleNode</span>.<a href="@0@System.Xml/A.html#86643abd2a4fe7a2" class="i property">Attributes</a><a href="@0@System.Xml/A.html#c8fd259c2974dff0">[</a><span class="s">&quot;versionId&quot;</span>].<a href="@0@System.Xml/A.html#9bc9e8ad31fdcd66" class="i property">Value</a>);
+ 
+                    <b>foreach</b> (<a href="@0@System.Xml/A.html#735249b64d244851" class="t t">XmlNode</a> <span id="r10 rd" class="r10 r">typeNode</span> <b>in</b> <span class="r8 r">moduleNode</span>.<a href="@0@System.Xml/A.html#ce940d5c84a21523" class="i property">ChildNodes</a>)
+                    {
+                        <b>string</b> <span id="r11 rd" class="r11 r">typeName</span> = <span class="r10 r">typeNode</span>.<a href="@0@System.Xml/A.html#66df5d2e6b0bf5ae" class="i property">InnerText</a>;
+                        <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r12 rd" class="r12 r">type</span> = <span class="r7 r">assembly</span>.<a href="@0@mscorlib/A.html#d2c38740a6b7facd" class="i method">GetType</a>(<span class="r11 r">typeName</span>);
+                        <b>if</b> (<span class="r12 r">type</span> == <b>null</b> || <span class="r12 r">type</span>.<a href="@0@mscorlib/A.html#92334631fb130a35" class="i property">Module</a>.<a href="@0@mscorlib/A.html#78fca7513fa39434" class="i property">ModuleVersionId</a> != <span class="r9 r">moduleVersionId</span>)
+                        {
+                            <span class="c">// The cache is outdated because we couldn&#39;t find a previously recorded</span>
+                            <span class="c">// type or the type&#39;s containing module was modified.</span>
+                            <b>return null</b>;
+                        }
+                        <b>else</b>
+                        {
+                            <span class="r4 r">deserializedTypes</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r12 r">type</span>);
+                        }
+                    }
+                }
+            }
+ 
+            <b>return</b> <span class="r4 r">deserializedTypes</span>;
+        }
+ 
+        <b>public void</b> <a id="4b8eec29ad01dcd8" href="R/4b8eec29ad01dcd8.html" target="n" data-glyph="72,1" class="i method">SerializeTypes</a>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>&gt; <span id="r13 rd" class="r13 r">types</span>, <a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r14 rd" class="r14 r">output</span>)
+        {
+            <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="k">var</a> <span id="r15 rd" class="r15 r">groupedByAssembly</span> = <b>from</b> <span class="i">type</span> <b>in</b> <span class="r13 r">types</span>
+                                    <b>group</b> <span class="i">type</span> <b>by</b> <span class="i">type</span>.<a href="@0@mscorlib/A.html#92334631fb130a35" class="i property">Module</a>
+                                        <b>into</b> <span class="i">groupedByModule</span>
+                                        <b>group</b> <span class="i">groupedByModule</span> <b>by</b> <span class="i">groupedByModule</span>.<a href="@0@System.Core/A.html#249797970861cc23" class="i property">Key</a>.<a href="@0@mscorlib/A.html#29a97154dcf154c8" class="i property">Assembly</a>;
+ 
+            <a href="@0@System.Xml/A.html#f82a4c1bd1f0ee12" class="t t">XmlDocument</a> <span id="r16 rd" class="r16 r">doc</span> = <b>new</b> <a href="@0@System.Xml/A.html#2d559a81f89e826f" class="t constructor">XmlDocument</a>();
+            <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#fa87f9fc7daeea9a" class="i method">AppendChild</a>(<span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#6684162264ba8187" class="i method">CreateComment</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#7d846c73472ce952" class="i property">TypeCache_DoNotModify</a>));
+ 
+            <a href="@0@System.Xml/A.html#184875ff599860f7" class="t t">XmlElement</a> <span id="r17 rd" class="r17 r">typeCacheElement</span> = <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#0de29b397ae3b792" class="i method">CreateElement</a>(<span class="s">&quot;typeCache&quot;</span>);
+            <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#fa87f9fc7daeea9a" class="i method">AppendChild</a>(<span class="r17 r">typeCacheElement</span>);
+            <span class="r17 r">typeCacheElement</span>.<a href="@0@System.Xml/A.html#763e334f9e96420c" class="i method">SetAttribute</a>(<span class="s">&quot;lastModified&quot;</span>, <a href="#60bff78d7f12e729" class="i property">CurrentDate</a>.<a href="@0@mscorlib/A.html#11d38858dedad166" class="i method">ToString</a>());
+            <span class="r17 r">typeCacheElement</span>.<a href="@0@System.Xml/A.html#763e334f9e96420c" class="i method">SetAttribute</a>(<span class="s">&quot;mvcVersionId&quot;</span>, <a href="#a1bf4b4d1e3ccb7e" class="i field">_mvcVersionId</a>.<a href="@0@mscorlib/A.html#a6547a472def7796" class="i method">ToString</a>());
+ 
+            <b>foreach</b> (<a href="@0@System.Core/A.html#2d96a4bb71c065c4" class="k">var</a> <span id="r18 rd" class="r18 r">assemblyGroup</span> <b>in</b> <span class="r15 r">groupedByAssembly</span>)
+            {
+                <a href="@0@System.Xml/A.html#184875ff599860f7" class="t t">XmlElement</a> <span id="r19 rd" class="r19 r">assemblyElement</span> = <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#0de29b397ae3b792" class="i method">CreateElement</a>(<span class="s">&quot;assembly&quot;</span>);
+                <span class="r17 r">typeCacheElement</span>.<a href="@0@System.Xml/A.html#fa87f9fc7daeea9a" class="i method">AppendChild</a>(<span class="r19 r">assemblyElement</span>);
+                <span class="r19 r">assemblyElement</span>.<a href="@0@System.Xml/A.html#763e334f9e96420c" class="i method">SetAttribute</a>(<span class="s">&quot;name&quot;</span>, <span class="r18 r">assemblyGroup</span>.<a href="@0@System.Core/A.html#249797970861cc23" class="i property">Key</a>.<a href="@0@mscorlib/A.html#c04eb189e6942872" class="i property">FullName</a>);
+ 
+                <b>foreach</b> (<a href="@0@System.Core/A.html#2d96a4bb71c065c4" class="k">var</a> <span id="r20 rd" class="r20 r">moduleGroup</span> <b>in</b> <span class="r18 r">assemblyGroup</span>)
+                {
+                    <a href="@0@System.Xml/A.html#184875ff599860f7" class="t t">XmlElement</a> <span id="r21 rd" class="r21 r">moduleElement</span> = <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#0de29b397ae3b792" class="i method">CreateElement</a>(<span class="s">&quot;module&quot;</span>);
+                    <span class="r19 r">assemblyElement</span>.<a href="@0@System.Xml/A.html#fa87f9fc7daeea9a" class="i method">AppendChild</a>(<span class="r21 r">moduleElement</span>);
+                    <span class="r21 r">moduleElement</span>.<a href="@0@System.Xml/A.html#763e334f9e96420c" class="i method">SetAttribute</a>(<span class="s">&quot;versionId&quot;</span>, <span class="r20 r">moduleGroup</span>.<a href="@0@System.Core/A.html#249797970861cc23" class="i property">Key</a>.<a href="@0@mscorlib/A.html#78fca7513fa39434" class="i property">ModuleVersionId</a>.<a href="@0@mscorlib/A.html#a6547a472def7796" class="i method">ToString</a>());
+ 
+                    <b>foreach</b> (<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r22 rd" class="r22 r">type</span> <b>in</b> <span class="r20 r">moduleGroup</span>)
+                    {
+                        <a href="@0@System.Xml/A.html#184875ff599860f7" class="t t">XmlElement</a> <span id="r23 rd" class="r23 r">typeElement</span> = <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#0de29b397ae3b792" class="i method">CreateElement</a>(<span class="s">&quot;type&quot;</span>);
+                        <span class="r21 r">moduleElement</span>.<a href="@0@System.Xml/A.html#fa87f9fc7daeea9a" class="i method">AppendChild</a>(<span class="r23 r">typeElement</span>);
+                        <span class="r23 r">typeElement</span>.<a href="@0@System.Xml/A.html#fa87f9fc7daeea9a" class="i method">AppendChild</a>(<span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#b2264e21532e454d" class="i method">CreateTextNode</a>(<span class="r22 r">type</span>.<a href="@0@mscorlib/A.html#976443bb39dc37cd" class="i property">FullName</a>));
+                    }
+                }
+            }
+ 
+            <span class="r16 r">doc</span>.<a href="@0@System.Xml/A.html#18a25d7180792adb" class="i method">Save</a>(<span class="r14 r">output</span>);
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

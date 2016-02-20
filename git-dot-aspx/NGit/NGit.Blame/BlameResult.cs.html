@@ -1,0 +1,399 @@
+﻿<!DOCTYPE html>
+<html><head><title>BlameResult.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(390);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Blame/BlameResult.cs" target="_top">NGit.Blame\BlameResult.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Collects line annotations for inspection by applications.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Collects line annotations for inspection by applications.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A result is usually updated incrementally as the BlameGenerator digs back</span>
+	<span class="c">///</span><span class="c"> further through history. Applications that want to lay annotations down text</span>
+	<span class="c">///</span><span class="c"> to the original source file in a viewer may find the BlameResult structure an</span>
+	<span class="c">///</span><span class="c"> easy way to acquire the information, at the expense of keeping tables in</span>
+	<span class="c">///</span><span class="c"> memory tracking every line of the result file.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This class is not thread-safe.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> During blame processing there are two files involved:</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">result - The file whose lines are being examined. This is the revision</span>
+	<span class="c">///</span><span class="c"> the user is trying to view blame/annotation information alongside of.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">source - The file that was blamed with supplying one or more lines of</span>
+	<span class="c">///</span><span class="c"> data into result. The source may be a different file path (due to copy or</span>
+	<span class="c">///</span><span class="c"> rename). Source line numbers may differ from result line numbers due to lines</span>
+	<span class="c">///</span><span class="c"> being added/removed in intermediate revisions.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="266c919cea5bcb31" href="../R/266c919cea5bcb31.html" target="n" data-glyph="0,0" class="t t">BlameResult</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a new BlameResult for a generator.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Construct a new BlameResult for a generator.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">gen</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the generator the result will consume records from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the new result object. null if the generator cannot find the path</span>
+		<span class="c">///</span><span class="c"> it starts from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#266c919cea5bcb31" class="t t">BlameResult</a> <a id="9db2e352da8885b3" href="../R/9db2e352da8885b3.html" target="n" data-glyph="72,1" class="i method">Create</a>(<a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <span id="r0 rd" class="r0 r">gen</span>)
+		{
+			<b>string</b> <span id="r1 rd" class="r1 r">path</span> = <span class="r0 r">gen</span>.<a href="BlameGenerator.cs.html#5c9ebef2680fd819" class="i method">GetResultPath</a>();
+			<a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r2 rd" class="r2 r">contents</span> = <span class="r0 r">gen</span>.<a href="BlameGenerator.cs.html#61a10db65b4931d0" class="i method">GetResultContents</a>();
+			<b>if</b> (<span class="r2 r">contents</span> == <b>null</b>)
+			{
+				<span class="r0 r">gen</span>.<a href="BlameGenerator.cs.html#572f4b05d53900ad" class="i method">Release</a>();
+				<b>return null</b>;
+			}
+			<b>return</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#f184a56a9aeb428c" class="t constructor">BlameResult</a>(<span class="r0 r">gen</span>, <span class="r1 r">path</span>, <span class="r2 r">contents</span>);
+		}
+
+		<b>private readonly string</b> <a id="211219726e55e4f3" href="../R/211219726e55e4f3.html" target="n" data-glyph="46,1" class="i field">resultPath</a>;
+
+		<b>private readonly</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>[] <a id="5727c73991c935d6" href="../R/5727c73991c935d6.html" target="n" data-glyph="46,1" class="i field">sourceCommits</a>;
+
+		<b>private readonly</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a>[] <a id="c2f8dd9cecb071c4" href="../R/c2f8dd9cecb071c4.html" target="n" data-glyph="46,1" class="i field">sourceAuthors</a>;
+
+		<b>private readonly</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a>[] <a id="d681b2f55ec17c92" href="../R/d681b2f55ec17c92.html" target="n" data-glyph="46,1" class="i field">sourceCommitters</a>;
+
+		<b>private readonly string</b>[] <a id="995879b319d716e5" href="../R/995879b319d716e5.html" target="n" data-glyph="46,1" class="i field">sourcePaths</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Warning: these are actually 1-based.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Warning: these are actually 1-based.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private readonly int</b>[] <a id="196f688b63b7bab3" href="../R/196f688b63b7bab3.html" target="n" data-glyph="46,1" class="i field">sourceLines</a>;
+
+		<b>private</b> <a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <a id="baceaae76760c49b" href="../R/baceaae76760c49b.html" target="n" data-glyph="46,1" class="i field">resultContents</a>;
+
+		<b>private</b> <a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="61066b06db0427a0" href="../R/61066b06db0427a0.html" target="n" data-glyph="46,1" class="i field">generator</a>;
+
+		<b>private int</b> <a id="b6e833e1acba9f45" href="../R/b6e833e1acba9f45.html" target="n" data-glyph="46,1" class="i field">lastLength</a>;
+
+		<b>internal</b> <a id="f184a56a9aeb428c" href="../R/f184a56a9aeb428c.html" target="n" data-glyph="74,1" class="i constructor">BlameResult</a>(<a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <span id="r3 rd" class="r3 r">bg</span>, <b>string</b> <span id="r4 rd" class="r4 r">path</span>, <a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r5 rd" class="r5 r">text</span>)
+		{
+			<a href="#61066b06db0427a0" class="i field">generator</a> = <span class="r3 r">bg</span>;
+			<a href="#211219726e55e4f3" class="i field">resultPath</a> = <span class="r4 r">path</span>;
+			<a href="#baceaae76760c49b" class="i field">resultContents</a> = <span class="r5 r">text</span>;
+			<b>int</b> <span id="r6 rd" class="r6 r">cnt</span> = <span class="r5 r">text</span>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>();
+			<a href="#5727c73991c935d6" class="i field">sourceCommits</a> = <b>new</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>[<span class="r6 r">cnt</span>];
+			<a href="#c2f8dd9cecb071c4" class="i field">sourceAuthors</a> = <b>new</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a>[<span class="r6 r">cnt</span>];
+			<a href="#d681b2f55ec17c92" class="i field">sourceCommitters</a> = <b>new</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a>[<span class="r6 r">cnt</span>];
+			<a href="#196f688b63b7bab3" class="i field">sourceLines</a> = <b>new</b> <b>int</b>[<span class="r6 r">cnt</span>];
+			<a href="#995879b319d716e5" class="i field">sourcePaths</a> = <b>new</b> <b>string</b>[<span class="r6 r">cnt</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">path of the file this result annotates.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="32cea1e226f908c6" href="../R/32cea1e226f908c6.html" target="n" data-glyph="72,1" class="i method">GetResultPath</a>()
+		{
+			<b>return</b> <a href="#211219726e55e4f3" class="i field">resultPath</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">contents of the result file, available for display.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <a id="87b1faea1bb127ea" href="../R/87b1faea1bb127ea.html" target="n" data-glyph="72,1" class="i method">GetResultContents</a>()
+		{
+			<b>return</b> <a href="#baceaae76760c49b" class="i field">resultContents</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Throw away the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#87b1faea1bb127ea" class="i method">GetResultContents</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetResultContents()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="2c7f2d94a6848e67" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">DiscardResultContents</a>()
+		{
+			<a href="#baceaae76760c49b" class="i field">resultContents</a> = <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Check if the given result line has been annotated yet.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Check if the given result line has been annotated yet.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line to read data of, 0 based.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if the data has been annotated, false otherwise.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="a1f5262ecacfba23" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">HasSourceData</a>(<b>int</b> <span id="r7 rd" class="r7 r">idx</span>)
+		{
+			<b>return</b> <a href="#196f688b63b7bab3" class="i field">sourceLines</a>[<span class="r7 r">idx</span>] != 0;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Check if the given result line has been annotated yet.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Check if the given result line has been annotated yet.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">first index to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">end</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">last index to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if the data has been annotated, false otherwise.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="6071c6b330f5038b" href="../R/6071c6b330f5038b.html" target="n" data-glyph="72,1" class="i method">HasSourceData</a>(<b>int</b> <span id="r8 rd" class="r8 r">start</span>, <b>int</b> <span id="r9 rd" class="r9 r">end</span>)
+		{
+			<b>for</b> (; <span class="r8 r">start</span> &lt; <span class="r9 r">end</span>; <span class="r8 r">start</span>++)
+			{
+				<b>if</b> (<a href="#196f688b63b7bab3" class="i field">sourceLines</a>[<span class="r8 r">start</span>] == 0)
+				{
+					<b>return false</b>;
+				}
+			}
+			<b>return true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the commit that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the commit that provided the specified line of the result.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The source commit may be null if the line was blamed to an uncommitted</span>
+		<span class="c">///</span><span class="c"> revision, such as the working tree copy, or during a reverse blame if the</span>
+		<span class="c">///</span><span class="c"> line survives to the end revision (e.g. the branch tip).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line to read data of, 0 based.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> commit that provided line</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . May be null.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="8b63a650a40f6ea5" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourceCommit</a>(<b>int</b> <span id="r10 rd" class="r10 r">idx</span>)
+		{
+			<b>return</b> <a href="#5727c73991c935d6" class="i field">sourceCommits</a>[<span class="r10 r">idx</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the author that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the author that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line to read data of, 0 based.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> author that provided line</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . May be null.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="c2aa0c64d529f604" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourceAuthor</a>(<b>int</b> <span id="r11 rd" class="r11 r">idx</span>)
+		{
+			<b>return</b> <a href="#c2f8dd9cecb071c4" class="i field">sourceAuthors</a>[<span class="r11 r">idx</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the committer that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the committer that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line to read data of, 0 based.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> committer that provided line</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . May be null.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="4b903527c1cc8635" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourceCommitter</a>(<b>int</b> <span id="r12 rd" class="r12 r">idx</span>)
+		{
+			<b>return</b> <a href="#d681b2f55ec17c92" class="i field">sourceCommitters</a>[<span class="r12 r">idx</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the file path that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the file path that provided the specified line of the result.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line to read data of, 0 based.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> source file path that provided line</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="e27cd66612c30505" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourcePath</a>(<b>int</b> <span id="r13 rd" class="r13 r">idx</span>)
+		{
+			<b>return</b> <a href="#995879b319d716e5" class="i field">sourcePaths</a>[<span class="r13 r">idx</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the corresponding line number in the source file.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the corresponding line number in the source file.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line to read data of, 0 based.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">matching line number in the source file.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="09a36663b5ffd92f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourceLine</a>(<b>int</b> <span id="r14 rd" class="r14 r">idx</span>)
+		{
+			<b>return</b> <a href="#196f688b63b7bab3" class="i field">sourceLines</a>[<span class="r14 r">idx</span>] - 1;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute all pending information.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Compute all pending information.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="de9f1e0d40a21d22" href="../R/de9f1e0d40a21d22.html" target="n" data-glyph="72,1" class="i method">ComputeAll</a>()
+		{
+			<a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <span id="r15 rd" class="r15 r">gen</span> = <a href="#61066b06db0427a0" class="i field">generator</a>;
+			<b>if</b> (<span class="r15 r">gen</span> == <b>null</b>)
+			{
+				<b>return</b>;
+			}
+			<b>try</b>
+			{
+				<b>while</b> (<span class="r15 r">gen</span>.<a href="BlameGenerator.cs.html#02739fda1ad06504" class="i method">Next</a>())
+				{
+					<a href="#1c221ad572c9301e" class="i method">LoadFrom</a>(<span class="r15 r">gen</span>);
+				}
+			}
+			<b>finally</b>
+			{
+				<span class="r15 r">gen</span>.<a href="BlameGenerator.cs.html#572f4b05d53900ad" class="i method">Release</a>();
+				<a href="#61066b06db0427a0" class="i field">generator</a> = <b>null</b>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the next available segment and return the first index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Compute the next available segment and return the first index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Computes one segment and returns to the caller the first index that is</span>
+		<span class="c">///</span><span class="c"> available. After return the caller can also inspect</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#bf9930513a13a627" class="i method">LastLength</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">LastLength()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to determine how many lines of the result were computed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">index that is now available. -1 if no more are available.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="2ac6b5a78d9c213b" href="../R/2ac6b5a78d9c213b.html" target="n" data-glyph="72,1" class="i method">ComputeNext</a>()
+		{
+			<a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <span id="r16 rd" class="r16 r">gen</span> = <a href="#61066b06db0427a0" class="i field">generator</a>;
+			<b>if</b> (<span class="r16 r">gen</span> == <b>null</b>)
+			{
+				<b>return</b> -1;
+			}
+			<b>if</b> (<span class="r16 r">gen</span>.<a href="BlameGenerator.cs.html#02739fda1ad06504" class="i method">Next</a>())
+			{
+				<a href="#1c221ad572c9301e" class="i method">LoadFrom</a>(<span class="r16 r">gen</span>);
+				<a href="#b6e833e1acba9f45" class="i field">lastLength</a> = <span class="r16 r">gen</span>.<a href="BlameGenerator.cs.html#f9e828e07f5a92ec" class="i method">GetRegionLength</a>();
+				<b>return</b> <span class="r16 r">gen</span>.<a href="BlameGenerator.cs.html#6bbf77afc509ed55" class="i method">GetResultStart</a>();
+			}
+			<b>else</b>
+			{
+				<span class="r16 r">gen</span>.<a href="BlameGenerator.cs.html#572f4b05d53900ad" class="i method">Release</a>();
+				<a href="#61066b06db0427a0" class="i field">generator</a> = <b>null</b>;
+				<b>return</b> -1;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> length of the last segment found by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#2ac6b5a78d9c213b" class="i method">ComputeNext</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ComputeNext()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="bf9930513a13a627" href="../R/bf9930513a13a627.html" target="n" data-glyph="72,1" class="i method">LastLength</a>()
+		{
+			<b>return</b> <a href="#b6e833e1acba9f45" class="i field">lastLength</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute until the entire range has been populated.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Compute until the entire range has been populated.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">first index to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">end</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">last index to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="104a45d808ea3537" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ComputeRange</a>(<b>int</b> <span id="r17 rd" class="r17 r">start</span>, <b>int</b> <span id="r18 rd" class="r18 r">end</span>)
+		{
+			<a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <span id="r19 rd" class="r19 r">gen</span> = <a href="#61066b06db0427a0" class="i field">generator</a>;
+			<b>if</b> (<span class="r19 r">gen</span> == <b>null</b>)
+			{
+				<b>return</b>;
+			}
+			<b>while</b> (<span class="r17 r">start</span> &lt; <span class="r18 r">end</span>)
+			{
+				<b>if</b> (<a href="#6071c6b330f5038b" class="i method">HasSourceData</a>(<span class="r17 r">start</span>, <span class="r18 r">end</span>))
+				{
+					<b>return</b>;
+				}
+				<b>if</b> (!<span class="r19 r">gen</span>.<a href="BlameGenerator.cs.html#02739fda1ad06504" class="i method">Next</a>())
+				{
+					<span class="r19 r">gen</span>.<a href="BlameGenerator.cs.html#572f4b05d53900ad" class="i method">Release</a>();
+					<a href="#61066b06db0427a0" class="i field">generator</a> = <b>null</b>;
+					<b>return</b>;
+				}
+				<a href="#1c221ad572c9301e" class="i method">LoadFrom</a>(<span class="r19 r">gen</span>);
+				<span class="c">// If the result contains either end of our current range bounds,</span>
+				<span class="c">// update the bounds to avoid scanning that section during the</span>
+				<span class="c">// next loop iteration.</span>
+				<b>int</b> <span id="r20 rd" class="r20 r">resLine</span> = <span class="r19 r">gen</span>.<a href="BlameGenerator.cs.html#6bbf77afc509ed55" class="i method">GetResultStart</a>();
+				<b>int</b> <span id="r21 rd" class="r21 r">resEnd</span> = <span class="r19 r">gen</span>.<a href="BlameGenerator.cs.html#91303a71d7a35acc" class="i method">GetResultEnd</a>();
+				<b>if</b> (<span class="r20 r">resLine</span> &lt;= <span class="r17 r">start</span> &amp;&amp; <span class="r17 r">start</span> &lt; <span class="r21 r">resEnd</span>)
+				{
+					<span class="r17 r">start</span> = <span class="r21 r">resEnd</span>;
+				}
+				<b>if</b> (<span class="r20 r">resLine</span> &lt;= <span class="r18 r">end</span> &amp;&amp; <span class="r18 r">end</span> &lt; <span class="r21 r">resEnd</span>)
+				{
+					<span class="r18 r">end</span> = <span class="r20 r">resLine</span>;
+				}
+			}
+		}
+
+		<b>public override string</b> <a id="6f1fcf7eae650a7a" href="../R/6f1fcf7eae650a7a.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+		{
+			<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r22 rd" class="r22 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+			<span class="r22 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;BlameResult: &quot;</span>);
+			<span class="r22 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#32cea1e226f908c6" class="i method">GetResultPath</a>());
+			<b>return</b> <span class="r22 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+		}
+
+		<b>private void</b> <a id="1c221ad572c9301e" href="../R/1c221ad572c9301e.html" target="n" data-glyph="76,1" class="i method">LoadFrom</a>(<a href="BlameGenerator.cs.html#a101cda0e1819516" class="t t">BlameGenerator</a> <span id="r23 rd" class="r23 r">gen</span>)
+		{
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r24 rd" class="r24 r">srcCommit</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>();
+			<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r25 rd" class="r25 r">srcAuthor</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#c4370d6aa9f96dba" class="i method">GetSourceAuthor</a>();
+			<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r26 rd" class="r26 r">srcCommitter</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#110890f0520ff190" class="i method">GetSourceCommitter</a>();
+			<b>string</b> <span id="r27 rd" class="r27 r">srcPath</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#30ccb544c47ac88b" class="i method">GetSourcePath</a>();
+			<b>int</b> <span id="r28 rd" class="r28 r">srcLine</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#2b15c0615fa7c745" class="i method">GetSourceStart</a>();
+			<b>int</b> <span id="r29 rd" class="r29 r">resLine</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#6bbf77afc509ed55" class="i method">GetResultStart</a>();
+			<b>int</b> <span id="r30 rd" class="r30 r">resEnd</span> = <span class="r23 r">gen</span>.<a href="BlameGenerator.cs.html#91303a71d7a35acc" class="i method">GetResultEnd</a>();
+			<b>for</b> (; <span class="r29 r">resLine</span> &lt; <span class="r30 r">resEnd</span>; <span class="r29 r">resLine</span>++)
+			{
+				<span class="c">// Reverse blame can generate multiple results for the same line.</span>
+				<span class="c">// Favor the first one selected, as this is the oldest and most</span>
+				<span class="c">// likely to be nearest to the inquiry made by the user.</span>
+				<b>if</b> (<a href="#196f688b63b7bab3" class="i field">sourceLines</a>[<span class="r29 r">resLine</span>] != 0)
+				{
+					<b>continue</b>;
+				}
+				<a href="#5727c73991c935d6" class="i field">sourceCommits</a>[<span class="r29 r">resLine</span>] = <span class="r24 r">srcCommit</span>;
+				<a href="#c2f8dd9cecb071c4" class="i field">sourceAuthors</a>[<span class="r29 r">resLine</span>] = <span class="r25 r">srcAuthor</span>;
+				<a href="#d681b2f55ec17c92" class="i field">sourceCommitters</a>[<span class="r29 r">resLine</span>] = <span class="r26 r">srcCommitter</span>;
+				<a href="#995879b319d716e5" class="i field">sourcePaths</a>[<span class="r29 r">resLine</span>] = <span class="r27 r">srcPath</span>;
+				<span class="c">// Since sourceLines is 1-based to permit hasSourceData to use 0 to</span>
+				<span class="c">// mean the line has not been annotated yet, pre-increment instead</span>
+				<span class="c">// of the traditional post-increment when making the assignment.</span>
+				<a href="#196f688b63b7bab3" class="i field">sourceLines</a>[<span class="r29 r">resLine</span>] = ++<span class="r28 r">srcLine</span>;
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

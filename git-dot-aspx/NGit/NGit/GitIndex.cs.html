@@ -1,0 +1,1281 @@
+﻿<!DOCTYPE html>
+<html><head><title>GitIndex.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(1272);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/GitIndex.cs" target="_top">NGit\GitIndex.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Events</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">A representation of the Git index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A representation of the Git index.</span>
+	<span class="c">///</span><span class="c"> The index points to the objects currently checked out or in the process of</span>
+	<span class="c">///</span><span class="c"> being prepared for committing or objects involved in an unfinished merge.</span>
+	<span class="c">///</span><span class="c"> The abstract format is:</span><span class="c">&lt;</span><span class="c">br</span><span class="c">/&gt;</span><span class="c"> path stage flags statdata SHA-1</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">Path is the relative path in the workdir</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">stage is 0 (normally), but when</span>
+	<span class="c">///</span><span class="c"> merging 1 is the common ancestor version, 2 is &#39;our&#39; version and 3 is &#39;their&#39;</span>
+	<span class="c">///</span><span class="c"> version. A fully resolved merge only contains stage 0.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">flags is the object type and information of validity</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">statdata is the size of this object and some other file system specifics,</span>
+	<span class="c">///</span><span class="c"> some of it ignored by JGit</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">SHA-1 represents the content of the references object</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> An index can also contain a tree cache which we ignore for now. We drop the</span>
+	<span class="c">///</span><span class="c"> tree cache when writing the index.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	[<span class="i n">System</span>.<a href="@0@mscorlib/A.html#66ed4e142f4e14e7" class="t constructor">ObsoleteAttribute</a>(<span class="s">@&quot;Use NGit.Dircache.DirCache instead.&quot;</span>)]
+	<b>public class</b> <a id="aae5f0c8cec33c4b" href="../R/aae5f0c8cec33c4b.html" target="n" data-glyph="0,0" class="t t">GitIndex</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Stage 0 represents merged entries.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Stage 0 represents merged entries.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public const int</b> <a id="18c451117ddac1c2" href="../R/../../0000000000.html" target="n" data-glyph="6,1" class="i field">STAGE_0</a> = 0;
+
+		<b>private</b> <a href="/Sharpen/A.html#4326a3e25a876036" class="t t">RandomAccessFile</a> <a id="fff92527e75657a2" href="../R/fff92527e75657a2.html" target="n" data-glyph="46,1" class="i field">cache</a>;
+
+		<b>private</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="dde1705d377e60da" href="../R/dde1705d377e60da.html" target="n" data-glyph="46,1" class="i field">cacheFile</a>;
+
+		<b>private bool</b> <a id="8b28b8c4ba032357" href="../R/8b28b8c4ba032357.html" target="n" data-glyph="46,1" class="i field">changed</a>;
+
+		<b>private bool</b> <a id="240b7dbf3dc0f8a9" href="../R/240b7dbf3dc0f8a9.html" target="n" data-glyph="46,1" class="i field">statDirty</a>;
+
+		<b>private</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#dbbfda1e4fed0e83" class="t t">Header</a> <a id="d7988b772ff56517" href="../R/d7988b772ff56517.html" target="n" data-glyph="46,1" class="i field">header</a>;
+
+		<b>private long</b> <a id="c00cb068f33d628f" href="../R/c00cb068f33d628f.html" target="n" data-glyph="46,1" class="i field">lastCacheTime</a>;
+
+		<b>private readonly</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="328d920c54eeb7d4" href="../R/328d920c54eeb7d4.html" target="n" data-glyph="46,1" class="i field">db</a>;
+
+		<b>private sealed class</b> <a id="2726f662c05b94f3" href="../R/2726f662c05b94f3.html" target="n" data-glyph="4,1" class="t t">_IComparer_122</a> : <a href="@0@mscorlib/A.html#6bf8828f51320498" class="t t">IComparer</a>&lt;<b>byte</b>[]&gt;
+		{
+			<b>public</b> <a id="2a78d27fba99e4e2" href="../R/2a78d27fba99e4e2.html" target="n" data-glyph="72,2" class="i constructor">_IComparer_122</a>()
+			{
+			}
+
+			<span class="c">// Index is modified</span>
+			<span class="c">// Stat information updated</span>
+			<b>public int</b> <a id="0183e9f42134d01b" href="../R/0183e9f42134d01b.html" target="n" data-glyph="72,2" class="i method">Compare</a>(<b>byte</b>[] <span id="r0 rd" class="r0 r">o1</span>, <b>byte</b>[] <span id="r1 rd" class="r1 r">o2</span>)
+			{
+				<b>for</b> (<b>int</b> <span id="r2 rd" class="r2 r">i</span> = 0; <span class="r2 r">i</span> &lt; <span class="r0 r">o1</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r2 r">i</span> &lt; <span class="r1 r">o2</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r2 r">i</span>)
+				{
+					<b>int</b> <span id="r3 rd" class="r3 r">c</span> = (<span class="r0 r">o1</span>[<span class="r2 r">i</span>] &amp; <b>unchecked</b>((<b>int</b>)(0xff))) - (<span class="r1 r">o2</span>[<span class="r2 r">i</span>] &amp; <b>unchecked</b>((<b>int</b>)(0xff)));
+					<b>if</b> (<span class="r3 r">c</span> != 0)
+					{
+						<b>return</b> <span class="r3 r">c</span>;
+					}
+				}
+				<b>if</b> (<span class="r0 r">o1</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <span class="r1 r">o2</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<b>return</b> -1;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r0 r">o1</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &gt; <span class="r1 r">o2</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+					{
+						<b>return</b> 1;
+					}
+				}
+				<b>return</b> 0;
+			}
+		}
+
+		<b>private</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>byte</b>[], <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>&gt; <a id="71e3b38914da32d2" href="../R/71e3b38914da32d2.html" target="n" data-glyph="46,1" class="i field">entries</a> = <b>new</b> <a href="@0@System/A.html#97064012f2a3fcb7" class="t constructor">SortedDictionary</a>&lt;<b>byte</b>[]
+			, <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>&gt;(<b>new</b> <a href="#2a78d27fba99e4e2" class="t constructor">_IComparer_122</a>());
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a Git index representation.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Construct a Git index representation.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="6532976e90ca5567" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">GitIndex</a>(<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r4 rd" class="r4 r">db</span>)
+		{
+			<a href="#aae5f0c8cec33c4b" class="k">this</a>.<a href="#328d920c54eeb7d4" class="i field">db</a> = <span class="r4 r">db</span>;
+			<a href="#aae5f0c8cec33c4b" class="k">this</a>.<a href="#dde1705d377e60da" class="i field">cacheFile</a> = <span class="r4 r">db</span>.<a href="Repository.cs.html#d9351402e54c05bf" class="i method">GetIndexFile</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if we have modified the index in memory since reading it from disk</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="4a5f6e4f59252956" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">IsChanged</a>()
+		{
+			<b>return</b> <a href="#8b28b8c4ba032357" class="i field">changed</a> || <a href="#240b7dbf3dc0f8a9" class="i field">statDirty</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Reread index data from disk if the index file has been changed</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="966ef39c2de5e929" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">RereadIfNecessary</a>()
+		{
+			<b>if</b> (<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>() &amp;&amp; <a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>() != <a href="#c00cb068f33d628f" class="i field">lastCacheTime</a>)
+			{
+				<a href="#47037aa7645c8040" class="i method">Read</a>();
+				<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#996eb11bb194bed7" class="i method">FireEvent</a>(<b>new</b> <a href="../NGit.Events/IndexChangedEvent.cs.html#db711c5cee6ff394" class="t constructor">IndexChangedEvent</a>());
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add the content of a file to the index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Add the content of a file to the index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a new or updated index entry for the path represented by f</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <a id="e99497e4eb46f44e" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Add</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r5 rd" class="r5 r">wd</span>, <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r6 rd" class="r6 r">f</span>)
+		{
+			<b>byte</b>[] <span id="r7 rd" class="r7 r">key</span> = <a href="#ca7942cf9fd5c081" class="i method">MakeKey</a>(<span class="r5 r">wd</span>, <span class="r6 r">f</span>);
+			<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r8 rd" class="r8 r">e</span> = <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<span class="r7 r">key</span>);
+			<b>if</b> (<span class="r8 r">e</span> == <b>null</b>)
+			{
+				<span class="r8 r">e</span> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#85dfedc5fef4401e" class="t constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="k">this</a>, <span class="r7 r">key</span>, <span class="r6 r">f</span>, 0);
+				<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#a7c201171ab1d7de" class="i method">Put</a>(<span class="r7 r">key</span>, <span class="r8 r">e</span>);
+			}
+			<b>else</b>
+			{
+				<span class="r8 r">e</span>.<a href="#c48d3db9683d03e5" class="i method">Update</a>(<span class="r6 r">f</span>);
+			}
+			<b>return</b> <span class="r8 r">e</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add the content of a file to the index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Add the content of a file to the index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">content</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">content of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a new or updated index entry for the path represented by f</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <a id="bcf59e0c993a88be" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Add</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r9 rd" class="r9 r">wd</span>, <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r10 rd" class="r10 r">f</span>, <b>byte</b>[] <span id="r11 rd" class="r11 r">content</span>)
+		{
+			<b>byte</b>[] <span id="r12 rd" class="r12 r">key</span> = <a href="#ca7942cf9fd5c081" class="i method">MakeKey</a>(<span class="r9 r">wd</span>, <span class="r10 r">f</span>);
+			<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r13 rd" class="r13 r">e</span> = <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<span class="r12 r">key</span>);
+			<b>if</b> (<span class="r13 r">e</span> == <b>null</b>)
+			{
+				<span class="r13 r">e</span> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#8d012cf2f5ae7986" class="t constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="k">this</a>, <span class="r12 r">key</span>, <span class="r10 r">f</span>, 0, <span class="r11 r">content</span>);
+				<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#a7c201171ab1d7de" class="i method">Put</a>(<span class="r12 r">key</span>, <span class="r13 r">e</span>);
+			}
+			<b>else</b>
+			{
+				<span class="r13 r">e</span>.<a href="#2e240d992e467842" class="i method">Update</a>(<span class="r10 r">f</span>, <span class="r11 r">content</span>);
+			}
+			<b>return</b> <span class="r13 r">e</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Remove a path from the index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Remove a path from the index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file whose path shall be removed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if such a path was found (and thus removed)</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="6a690ca51f5c7d57" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Remove</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r14 rd" class="r14 r">wd</span>, <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r15 rd" class="r15 r">f</span>)
+		{
+			<b>byte</b>[] <span id="r16 rd" class="r16 r">key</span> = <a href="#ca7942cf9fd5c081" class="i method">MakeKey</a>(<span class="r14 r">wd</span>, <span class="r15 r">f</span>);
+			<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#a0d455a8d8645bff" class="i method">Remove</a>(<a href="#71e3b38914da32d2" class="i field">entries</a>, <span class="r16 r">key</span>) != <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Read the cache file into memory.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Read the cache file into memory.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="47037aa7645c8040" href="../R/47037aa7645c8040.html" target="n" data-glyph="72,1" class="i method">Read</a>()
+		{
+			<a href="#8b28b8c4ba032357" class="i field">changed</a> = <b>false</b>;
+			<a href="#240b7dbf3dc0f8a9" class="i field">statDirty</a> = <b>false</b>;
+			<b>if</b> (!<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>())
+			{
+				<a href="#d7988b772ff56517" class="i field">header</a> = <b>null</b>;
+				<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+				<a href="#c00cb068f33d628f" class="i field">lastCacheTime</a> = 0;
+				<b>return</b>;
+			}
+			<a href="#fff92527e75657a2" class="i field">cache</a> = <b>new</b> <a href="/Sharpen/A.html#28197f8304320fe0" class="t constructor">RandomAccessFile</a>(<a href="#dde1705d377e60da" class="i field">cacheFile</a>, <span class="s">&quot;r&quot;</span>);
+			<b>try</b>
+			{
+				<a href="/Sharpen/A.html#24b7576a0636823a" class="t t">FileChannel</a> <span id="r17 rd" class="r17 r">channel</span> = <a href="#fff92527e75657a2" class="i field">cache</a>.<a href="/Sharpen/A.html#28a3bace168b42cc" class="i method">GetChannel</a>();
+				<a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r18 rd" class="r18 r">buffer</span> = <a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a>.<a href="/Sharpen/A.html#512d576cb22df60f" class="i method">AllocateDirect</a>((<b>int</b>)<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>());
+				<span class="r18 r">buffer</span>.<a href="/Sharpen/A.html#39ad77915fd6988b" class="i method">Order</a>(<a href="/Sharpen/A.html#22d4d96d0a5b76fc" class="t t">ByteOrder</a>.<a href="/Sharpen/A.html#530bfdb84718f0c8" class="i field">BIG_ENDIAN</a>);
+				<b>int</b> <span id="r19 rd" class="r19 r">j</span> = <span class="r17 r">channel</span>.<a href="/Sharpen/A.html#4e84fea4db17099a" class="i method">Read</a>(<span class="r18 r">buffer</span>);
+				<b>if</b> (<span class="r19 r">j</span> != <span class="r18 r">buffer</span>.<a href="/Sharpen/A.html#d92882309774da7b" class="i method">Capacity</a>())
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#2e213c6df40808aa" class="i field">couldNotReadIndexInOneGo</a>
+						, <span class="r19 r">j</span>, <span class="r18 r">buffer</span>.<a href="/Sharpen/A.html#d92882309774da7b" class="i method">Capacity</a>()));
+				}
+				<span class="r18 r">buffer</span>.<a href="/Sharpen/A.html#93f6ded5aa5b4cf9" class="i method">Flip</a>();
+				<a href="#d7988b772ff56517" class="i field">header</a> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#b00230b0f6f479dc" class="t constructor">Header</a>(<span class="r18 r">buffer</span>);
+				<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+				<b>for</b> (<b>int</b> <span id="r20 rd" class="r20 r">i</span> = 0; <span class="r20 r">i</span> &lt; <a href="#d7988b772ff56517" class="i field">header</a>.<a href="#f84ad0fef76b194c" class="i field">entries</a>; ++<span class="r20 r">i</span>)
+				{
+					<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r21 rd" class="r21 r">entry</span> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#5a8bd6800578265f" class="t constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="k">this</a>, <span class="r18 r">buffer</span>);
+					<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r22 rd" class="r22 r">existing</span> = <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<span class="r21 r">entry</span>.<a href="#a4213982f1d3aef1" class="i field">name</a>);
+					<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#a7c201171ab1d7de" class="i method">Put</a>(<span class="r21 r">entry</span>.<a href="#a4213982f1d3aef1" class="i field">name</a>, <span class="r21 r">entry</span>);
+					<b>if</b> (<span class="r22 r">existing</span> != <b>null</b>)
+					{
+						<span class="r21 r">entry</span>.<a href="#c38e23f326e2a478" class="i field">stages</a> |= <span class="r22 r">existing</span>.<a href="#c38e23f326e2a478" class="i field">stages</a>;
+					}
+				}
+				<a href="#c00cb068f33d628f" class="i field">lastCacheTime</a> = <a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#fff92527e75657a2" class="i field">cache</a>.<a href="/Sharpen/A.html#b47627cabfe2b8d6" class="i method">Close</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Write content of index to disk.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Write content of index to disk.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="7613845e3317dbfe" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Write</a>()
+		{
+			<a href="#910854628d4b57d5" class="i method">CheckWriteOk</a>();
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r23 rd" class="r23 r">tmpIndex</span> = <b>new</b> <a href="/Sharpen/A.html#1af448df3a111ba7" class="t constructor">FilePath</a>(<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#3f118afc82cb62ec" class="i method">GetAbsoluteFile</a>() + <span class="s">&quot;.tmp&quot;</span>);
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r24 rd" class="r24 r">Lock</span> = <b>new</b> <a href="/Sharpen/A.html#1af448df3a111ba7" class="t constructor">FilePath</a>(<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#3f118afc82cb62ec" class="i method">GetAbsoluteFile</a>() + <span class="s">&quot;.lock&quot;</span>);
+			<b>if</b> (!<span class="r24 r">Lock</span>.<a href="/Sharpen/A.html#de07cde7097bb640" class="i method">CreateNewFile</a>())
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#547934ac19c8c683" class="i field">indexFileIsInUse</a>);
+			}
+			<b>try</b>
+			{
+				<a href="/Sharpen/A.html#593039b4e998beb4" class="t t">FileOutputStream</a> <span id="r25 rd" class="r25 r">fileOutputStream</span> = <b>new</b> <a href="/Sharpen/A.html#60d0d5bbf527518d" class="t constructor">FileOutputStream</a>(<span class="r23 r">tmpIndex</span>);
+				<a href="/Sharpen/A.html#24b7576a0636823a" class="t t">FileChannel</a> <span id="r26 rd" class="r26 r">fc</span> = <span class="r25 r">fileOutputStream</span>.<a href="/Sharpen/A.html#06e179e39292a22b" class="i method">GetChannel</a>();
+				<a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r27 rd" class="r27 r">buf</span> = <a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a>.<a href="/Sharpen/A.html#7be4f866b161dcf2" class="i method">Allocate</a>(4096);
+				<a href="/Sharpen/A.html#a356dea4cd4a7bb5" class="t t">MessageDigest</a> <span id="r28 rd" class="r28 r">newMessageDigest</span> = <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#ee1f85a30fbc4f87" class="i method">NewMessageDigest</a>();
+				<a href="#d7988b772ff56517" class="i field">header</a> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#022ae41d3a79c708" class="t constructor">Header</a>(<a href="#71e3b38914da32d2" class="i field">entries</a>);
+				<a href="#d7988b772ff56517" class="i field">header</a>.<a href="#d52ae2a28a3572c7" class="i method">Write</a>(<span class="r27 r">buf</span>);
+				<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#93f6ded5aa5b4cf9" class="i method">Flip</a>();
+				<span class="r28 r">newMessageDigest</span>.<a href="/Sharpen/A.html#20cafcf60b0ce7a8" class="i method">Update</a>(((<b>byte</b>[])<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#54ed5cd8ac1c6e11" class="i method">Array</a>()), <span class="r27 r">buf</span>.<a href="/Sharpen/A.html#b6345cd122505eb1" class="i method">ArrayOffset</a>(), <span class="r27 r">buf</span>.<a href="/Sharpen/A.html#258bca75685e3b6e" class="i method">Limit</a>());
+				<span class="r26 r">fc</span>.<a href="/Sharpen/A.html#838c90737bcdf5e4" class="i method">Write</a>(<span class="r27 r">buf</span>);
+				<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#93f6ded5aa5b4cf9" class="i method">Flip</a>();
+				<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#8a3903a610562dd9" class="i method">Clear</a>();
+				<b>for</b> (<a href="/Sharpen/A.html#be68d191511479c0" class="t t">Iterator</a> <span id="r29 rd" class="r29 r">i</span> = <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>.<a href="/Sharpen/A.html#9e9a9722119e4290" class="i method">Iterator</a>(); <span class="r29 r">i</span>.<a href="/Sharpen/A.html#a82c831658e1e79d" class="i method">HasNext</a>(); )
+				{
+					<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r30 rd" class="r30 r">e</span> = (<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>)<span class="r29 r">i</span>.<a href="/Sharpen/A.html#062e17efadd6bb22" class="i method">Next</a>();
+					<span class="r30 r">e</span>.<a href="#b04c04a980cab077" class="i method">Write</a>(<span class="r27 r">buf</span>);
+					<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#93f6ded5aa5b4cf9" class="i method">Flip</a>();
+					<span class="r28 r">newMessageDigest</span>.<a href="/Sharpen/A.html#20cafcf60b0ce7a8" class="i method">Update</a>(((<b>byte</b>[])<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#54ed5cd8ac1c6e11" class="i method">Array</a>()), <span class="r27 r">buf</span>.<a href="/Sharpen/A.html#b6345cd122505eb1" class="i method">ArrayOffset</a>(), <span class="r27 r">buf</span>.<a href="/Sharpen/A.html#258bca75685e3b6e" class="i method">Limit</a>());
+					<span class="r26 r">fc</span>.<a href="/Sharpen/A.html#838c90737bcdf5e4" class="i method">Write</a>(<span class="r27 r">buf</span>);
+					<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#93f6ded5aa5b4cf9" class="i method">Flip</a>();
+					<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#8a3903a610562dd9" class="i method">Clear</a>();
+				}
+				<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#50903f3c93dfe082" class="i method">Put</a>(<span class="r28 r">newMessageDigest</span>.<a href="/Sharpen/A.html#61dc860415e0e84f" class="i method">Digest</a>());
+				<span class="r27 r">buf</span>.<a href="/Sharpen/A.html#93f6ded5aa5b4cf9" class="i method">Flip</a>();
+				<span class="r26 r">fc</span>.<a href="/Sharpen/A.html#838c90737bcdf5e4" class="i method">Write</a>(<span class="r27 r">buf</span>);
+				<span class="r26 r">fc</span>.<a href="/Sharpen/A.html#de8a091b7ba6e47e" class="i method">Close</a>();
+				<span class="r25 r">fileOutputStream</span>.<a href="/Sharpen/A.html#6788f268a20b51ce" class="i method">Close</a>();
+				<b>if</b> (<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>())
+				{
+					<b>if</b> (<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>.<a href="../NGit.Util/FS.cs.html#114576fdbff4599c" class="i method">RetryFailedLockFileCommit</a>())
+					{
+						<span class="c">// file deletion fails on windows if another</span>
+						<span class="c">// thread is reading the file concurrently</span>
+						<span class="c">// So let&#39;s try 10 times...</span>
+						<b>bool</b> <span id="r31 rd" class="r31 r">deleted</span> = <b>false</b>;
+						<b>for</b> (<b>int</b> <span id="r32 rd" class="r32 r">i_1</span> = 0; <span class="r32 r">i_1</span> &lt; 10; <span class="r32 r">i_1</span>++)
+						{
+							<b>if</b> (<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#5f8b0a5e1d2ab269" class="i method">Delete</a>())
+							{
+								<span class="r31 r">deleted</span> = <b>true</b>;
+								<b>break</b>;
+							}
+							<b>try</b>
+							{
+								<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#7fe5d5fe7cd5df12" class="i method">Sleep</a>(100);
+							}
+							<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+							{
+							}
+						}
+						<span class="c">// ignore</span>
+						<b>if</b> (!<span class="r31 r">deleted</span>)
+						{
+							<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#bcda86c920d843c5" class="i field">couldNotRenameDeleteOldIndex</a>);
+						}
+					}
+					<b>else</b>
+					{
+						<b>if</b> (!<a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#5f8b0a5e1d2ab269" class="i method">Delete</a>())
+						{
+							<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#bcda86c920d843c5" class="i field">couldNotRenameDeleteOldIndex</a>);
+						}
+					}
+				}
+				<b>if</b> (!<span class="r23 r">tmpIndex</span>.<a href="/Sharpen/A.html#dc6d9784dba1969d" class="i method">RenameTo</a>(<a href="#dde1705d377e60da" class="i field">cacheFile</a>))
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#4254b3a87ba69067" class="i field">couldNotRenameTemporaryIndexFileToIndex</a>);
+				}
+				<a href="#8b28b8c4ba032357" class="i field">changed</a> = <b>false</b>;
+				<a href="#240b7dbf3dc0f8a9" class="i field">statDirty</a> = <b>false</b>;
+				<a href="#c00cb068f33d628f" class="i field">lastCacheTime</a> = <a href="#dde1705d377e60da" class="i field">cacheFile</a>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>();
+				<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#996eb11bb194bed7" class="i method">FireEvent</a>(<b>new</b> <a href="../NGit.Events/IndexChangedEvent.cs.html#db711c5cee6ff394" class="t constructor">IndexChangedEvent</a>());
+			}
+			<b>finally</b>
+			{
+				<b>if</b> (!<span class="r24 r">Lock</span>.<a href="/Sharpen/A.html#5f8b0a5e1d2ab269" class="i method">Delete</a>())
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#8828693dc916aabb" class="i field">couldNotDeleteLockFileShouldNotHappen</a>);
+				}
+				<b>if</b> (<span class="r23 r">tmpIndex</span>.<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>() &amp;&amp; !<span class="r23 r">tmpIndex</span>.<a href="/Sharpen/A.html#5f8b0a5e1d2ab269" class="i method">Delete</a>())
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#f47b6335efd87122" class="i field">couldNotDeleteTemporaryIndexFileShouldNotHappen</a>
+						);
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="910854628d4b57d5" href="../R/910854628d4b57d5.html" target="n" data-glyph="76,1" class="i method">CheckWriteOk</a>()
+		{
+			<b>for</b> (<a href="/Sharpen/A.html#be68d191511479c0" class="t t">Iterator</a> <span id="r33 rd" class="r33 r">i</span> = <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>.<a href="/Sharpen/A.html#9e9a9722119e4290" class="i method">Iterator</a>(); <span class="r33 r">i</span>.<a href="/Sharpen/A.html#a82c831658e1e79d" class="i method">HasNext</a>(); )
+			{
+				<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r34 rd" class="r34 r">e</span> = (<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>)<span class="r33 r">i</span>.<a href="/Sharpen/A.html#062e17efadd6bb22" class="i method">Next</a>();
+				<b>if</b> (<span class="r34 r">e</span>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>() != 0)
+				{
+					<b>throw</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/NotSupportedException.cs.html#6b85594cfd4c08aa" class="t constructor">NotSupportedException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#f72ee8645061bf11" class="i field">cannotWorkWithOtherStagesThanZeroRightNow</a>
+						);
+				}
+			}
+		}
+
+		<b>private bool</b> <a id="ad6ac2dcae0aa118" href="../R/ad6ac2dcae0aa118.html" target="n" data-glyph="76,1" class="i method">File_canExecute</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r35 rd" class="r35 r">f</span>)
+		{
+			<b>return</b> <a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>.<a href="../NGit.Util/FS.cs.html#58f696bd35b9bdef" class="i method">CanExecute</a>(<span class="r35 r">f</span>);
+		}
+
+		<b>private bool</b> <a id="d9f68f82d69fad7a" href="../R/d9f68f82d69fad7a.html" target="n" data-glyph="76,1" class="i method">File_setExecute</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r36 rd" class="r36 r">f</span>, <b>bool</b> <span id="r37 rd" class="r37 r">value</span>)
+		{
+			<b>return</b> <a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>.<a href="../NGit.Util/FS.cs.html#5475bddded96d7c8" class="i method">SetExecute</a>(<span class="r36 r">f</span>, <span class="r37 r">value</span>);
+		}
+
+		<b>private bool</b> <a id="f33ae0394c5153d3" href="../R/f33ae0394c5153d3.html" target="n" data-glyph="76,1" class="i method">File_hasExecute</a>()
+		{
+			<b>return</b> <a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>.<a href="../NGit.Util/FS.cs.html#4632d1eae52809a6" class="i method">SupportsExecute</a>();
+		}
+
+		<b>internal static byte</b>[] <a id="ca7942cf9fd5c081" href="../R/ca7942cf9fd5c081.html" target="n" data-glyph="74,1" class="i method">MakeKey</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r38 rd" class="r38 r">wd</span>, <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r39 rd" class="r39 r">f</span>)
+		{
+			<b>if</b> (!<span class="r39 r">f</span>.<a href="/Sharpen/A.html#34a1b9d01f02d480" class="i method">GetPath</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r38 r">wd</span>.<a href="/Sharpen/A.html#34a1b9d01f02d480" class="i method">GetPath</a>()))
+			{
+				<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#5e200072564497c1" class="t constructor">Error</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ef9799c58667ff46" class="i field">pathIsNotInWorkingDir</a>);
+			}
+			<b>string</b> <span id="r40 rd" class="r40 r">relName</span> = <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="Repository.cs.html#89e05fb538c8fb1a" class="i method">StripWorkDir</a>(<span class="r38 r">wd</span>, <span class="r39 r">f</span>);
+			<b>return</b> <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r40 r">relName</span>);
+		}
+
+		<b>internal bool</b> <a id="c043c7750f79dc82" href="../R/c043c7750f79dc82.html" target="n" data-glyph="44,1" class="i field">filemode</a>;
+
+		<b>private bool</b> <a id="be2da08cb7379eff" href="../R/be2da08cb7379eff.html" target="n" data-glyph="76,1" class="i method">Config_filemode</a>()
+		{
+			<span class="c">// temporary til we can actually set parameters. We need to be able</span>
+			<span class="c">// to change this for testing.</span>
+			<b>if</b> (<a href="#c043c7750f79dc82" class="i field">filemode</a> != <b>null</b>)
+			{
+				<b>return</b> <a href="#c043c7750f79dc82" class="i field">filemode</a>;
+			}
+			<a href="Config.cs.html#11d8b6b96d6e047f" class="t t">Config</a> <span id="r41 rd" class="r41 r">config</span> = <a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>();
+			<a href="#c043c7750f79dc82" class="i field">filemode</a> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<span class="r41 r">config</span>.<a href="Config.cs.html#52d586ddf19528da" class="i method">GetBoolean</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;filemode&quot;</span>, 
+				<b>true</b>));
+			<b>return</b> <a href="#c043c7750f79dc82" class="i field">filemode</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">An index entry</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		[<span class="i n">System</span>.<a href="@0@mscorlib/A.html#66ed4e142f4e14e7" class="t constructor">ObsoleteAttribute</a>(<span class="s">@&quot;Use NGit.Dircache.DirCacheEntry .&quot;</span>)]
+		<b>public class</b> <a id="34e6407e7b8d587b" href="../R/34e6407e7b8d587b.html" target="n" data-glyph="0,1" class="t t">Entry</a>
+		{
+			<b>internal long</b> <a id="fdf795ec524d186d" href="../R/fdf795ec524d186d.html" target="n" data-glyph="44,2" class="i field">ctime</a>;
+
+			<b>internal long</b> <a id="c7ba6e7c437bb6e5" href="../R/c7ba6e7c437bb6e5.html" target="n" data-glyph="44,2" class="i field">mtime</a>;
+
+			<b>private int</b> <a id="db4353b3e71b578a" href="../R/db4353b3e71b578a.html" target="n" data-glyph="46,2" class="i field">dev</a>;
+
+			<b>private int</b> <a id="6f9545c4716fc0c0" href="../R/6f9545c4716fc0c0.html" target="n" data-glyph="46,2" class="i field">ino</a>;
+
+			<b>internal int</b> <a id="a25185c2b9fef8e3" href="../R/a25185c2b9fef8e3.html" target="n" data-glyph="44,2" class="i field">mode</a>;
+
+			<b>private int</b> <a id="671e60a211434b73" href="../R/671e60a211434b73.html" target="n" data-glyph="46,2" class="i field">uid</a>;
+
+			<b>private int</b> <a id="30172309faa18e59" href="../R/30172309faa18e59.html" target="n" data-glyph="46,2" class="i field">gid</a>;
+
+			<b>private int</b> <a id="f2b11af393ea14e6" href="../R/f2b11af393ea14e6.html" target="n" data-glyph="46,2" class="i field">size</a>;
+
+			<b>internal</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="ea919b220ba9cddd" href="../R/ea919b220ba9cddd.html" target="n" data-glyph="44,2" class="i field">sha1</a>;
+
+			<b>private short</b> <a id="6133b7ba7f29af47" href="../R/6133b7ba7f29af47.html" target="n" data-glyph="46,2" class="i field">flags</a>;
+
+			<b>internal byte</b>[] <a id="a4213982f1d3aef1" href="../R/a4213982f1d3aef1.html" target="n" data-glyph="44,2" class="i field">name</a>;
+
+			<b>internal int</b> <a id="c38e23f326e2a478" href="../R/c38e23f326e2a478.html" target="n" data-glyph="44,2" class="i field">stages</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>internal</b> <a id="85dfedc5fef4401e" href="../R/85dfedc5fef4401e.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a> <span id="r42 rd" class="r42 r">_enclosing</span>, <b>byte</b>[] <span id="r43 rd" class="r43 r">key</span>, <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r44 rd" class="r44 r">f</span>, <b>int</b> <span id="r45 rd" class="r45 r">stage</span>)
+			{
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a> = <span class="r42 r">_enclosing</span>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> = <span class="r44 r">f</span>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>() * 1000000L;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a>;
+				<span class="c">// we use same here</span>
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#db4353b3e71b578a" class="i field">dev</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6f9545c4716fc0c0" class="i field">ino</a> = -1;
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#be2da08cb7379eff" class="i method">Config_filemode</a>() &amp;&amp; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r44 r">f</span>))
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>();
+				}
+				<b>else</b>
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>();
+				}
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#671e60a211434b73" class="i field">uid</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#30172309faa18e59" class="i field">gid</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = (<b>int</b>)<span class="r44 r">f</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>();
+				<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r46 rd" class="r46 r">inserter</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+				<b>try</b>
+				{
+					<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r47 rd" class="r47 r">@in</span> = <b>new</b> <a href="/Sharpen/A.html#fbe94cc94976c1b1" class="t constructor">FileInputStream</a>(<span class="r44 r">f</span>);
+					<b>try</b>
+					{
+						<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a> = <span class="r46 r">inserter</span>.<a href="ObjectInserter.cs.html#fb2dcf0d4b0844fa" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>, <span class="r44 r">f</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>(), <span class="r47 r">@in</span>);
+					}
+					<b>finally</b>
+					{
+						<span class="r47 r">@in</span>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+					}
+					<span class="r46 r">inserter</span>.<a href="ObjectInserter.cs.html#4c38ca2633c7a828" class="i method">Flush</a>();
+				}
+				<b>finally</b>
+				{
+					<span class="r46 r">inserter</span>.<a href="ObjectInserter.cs.html#6c4af6fea6d6eb44" class="i method">Release</a>();
+				}
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a> = <span class="r43 r">key</span>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> = (<b>short</b>)((<span class="r45 r">stage</span> &lt;&lt; 12) | <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<span class="c">// TODO: fix flags</span>
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c38e23f326e2a478" class="i field">stages</a> = (1 &gt;&gt; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>());
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>internal</b> <a id="8d012cf2f5ae7986" href="../R/8d012cf2f5ae7986.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a> <span id="r48 rd" class="r48 r">_enclosing</span>, <b>byte</b>[] <span id="r49 rd" class="r49 r">key</span>, <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r50 rd" class="r50 r">f</span>, <b>int</b> <span id="r51 rd" class="r51 r">stage</span>, <b>byte</b>[] <span id="r52 rd" class="r52 r">newContent</span>
+				)
+			{
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a> = <span class="r48 r">_enclosing</span>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> = <span class="r50 r">f</span>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>() * 1000000L;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a>;
+				<span class="c">// we use same here</span>
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#db4353b3e71b578a" class="i field">dev</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6f9545c4716fc0c0" class="i field">ino</a> = -1;
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#be2da08cb7379eff" class="i method">Config_filemode</a>() &amp;&amp; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r50 r">f</span>))
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>();
+				}
+				<b>else</b>
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>();
+				}
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#671e60a211434b73" class="i field">uid</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#30172309faa18e59" class="i field">gid</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = <span class="r52 r">newContent</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+				<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r53 rd" class="r53 r">inserter</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+				<b>try</b>
+				{
+					<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r54 rd" class="r54 r">@in</span> = <b>new</b> <a href="/Sharpen/A.html#fbe94cc94976c1b1" class="t constructor">FileInputStream</a>(<span class="r50 r">f</span>);
+					<b>try</b>
+					{
+						<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a> = <span class="r53 r">inserter</span>.<a href="ObjectInserter.cs.html#0d0821541676db9c" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>, <span class="r52 r">newContent</span>);
+					}
+					<b>finally</b>
+					{
+						<span class="r54 r">@in</span>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+					}
+					<span class="r53 r">inserter</span>.<a href="ObjectInserter.cs.html#4c38ca2633c7a828" class="i method">Flush</a>();
+				}
+				<b>finally</b>
+				{
+					<span class="r53 r">inserter</span>.<a href="ObjectInserter.cs.html#6c4af6fea6d6eb44" class="i method">Release</a>();
+				}
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a> = <span class="r49 r">key</span>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> = (<b>short</b>)((<span class="r51 r">stage</span> &lt;&lt; 12) | <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<span class="c">// TODO: fix flags</span>
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c38e23f326e2a478" class="i field">stages</a> = (1 &gt;&gt; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>());
+			}
+
+			<b>internal</b> <a id="92e3160c45fde829" href="../R/92e3160c45fde829.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a> <span id="r55 rd" class="r55 r">_enclosing</span>, <a href="TreeEntry.cs.html#b3eaf87d00430539" class="t t">TreeEntry</a> <span id="r56 rd" class="r56 r">f</span>, <b>int</b> <span id="r57 rd" class="r57 r">stage</span>)
+			{
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a> = <span class="r55 r">_enclosing</span>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> = -1;
+				<span class="c">// hmm</span>
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#db4353b3e71b578a" class="i field">dev</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6f9545c4716fc0c0" class="i field">ino</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <span class="r56 r">f</span>.<a href="TreeEntry.cs.html#d095f02dbe9c7f97" class="i method">GetMode</a>().<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#671e60a211434b73" class="i field">uid</a> = -1;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#30172309faa18e59" class="i field">gid</a> = -1;
+				<b>try</b>
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = (<b>int</b>)<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#2c77a365c4bc0175" class="i method">Open</a>(<span class="r56 r">f</span>.<a href="TreeEntry.cs.html#b792200d827b8845" class="i method">GetId</a>(), <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>).<a href="ObjectLoader.cs.html#4a1ad61b8fa1c675" class="i method">GetSize</a>();
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r58 rd" class="r58 r">e</span>)
+				{
+					<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#2983246e07bd979c" class="i method">PrintStackTrace</a>(<span class="r58 r">e</span>);
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = -1;
+				}
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a> = <span class="r56 r">f</span>.<a href="TreeEntry.cs.html#b792200d827b8845" class="i method">GetId</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a> = <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r56 r">f</span>.<a href="TreeEntry.cs.html#672ca41fc8e2a422" class="i method">GetFullName</a>());
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> = (<b>short</b>)((<span class="r57 r">stage</span> &lt;&lt; 12) | <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<span class="c">// TODO: fix flags</span>
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c38e23f326e2a478" class="i field">stages</a> = (1 &gt;&gt; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>());
+			}
+
+			<b>internal</b> <a id="5a8bd6800578265f" href="../R/5a8bd6800578265f.html" target="n" data-glyph="74,2" class="i constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a> <span id="r59 rd" class="r59 r">_enclosing</span>, <a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r60 rd" class="r60 r">b</span>)
+			{
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a> = <span class="r59 r">_enclosing</span>;
+				<b>int</b> <span id="r61 rd" class="r61 r">startposition</span> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#38b0ce9f0a62c024" class="i method">Position</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>() * 1000000000L + (<span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>() % 1000000000L);
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>() * 1000000000L + (<span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>() % 1000000000L);
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#db4353b3e71b578a" class="i field">dev</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6f9545c4716fc0c0" class="i field">ino</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#671e60a211434b73" class="i field">uid</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#30172309faa18e59" class="i field">gid</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<b>byte</b>[] <span id="r62 rd" class="r62 r">sha1bytes</span> = <b>new</b> <b>byte</b>[<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#60ff5c86f7e4f264" class="i field">OBJECT_ID_LENGTH</a>];
+				<span class="r60 r">b</span>.<a href="/Sharpen/A.html#03035ac0d722c0ec" class="i method">Get</a>(<span class="r62 r">sha1bytes</span>);
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a> = <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#d331ef96ebe97120" class="i method">FromRaw</a>(<span class="r62 r">sha1bytes</span>);
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> = <span class="r60 r">b</span>.<a href="/Sharpen/A.html#e27ef906f2b36ff1" class="i method">GetShort</a>();
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c38e23f326e2a478" class="i field">stages</a> = (1 &lt;&lt; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>());
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a> = <b>new</b> <b>byte</b>[<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> &amp; <b>unchecked</b>((<b>int</b>)(0xFFF))];
+				<span class="r60 r">b</span>.<a href="/Sharpen/A.html#03035ac0d722c0ec" class="i method">Get</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>);
+				<span class="r60 r">b</span>.<a href="/Sharpen/A.html#26a71b496c81e5e9" class="i method">Position</a>(<span class="r61 r">startposition</span> + ((8 + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 20 + 2 + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>
+					 + 8) &amp; ~7));
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Update this index entry with stat and SHA-1 information if it looks</span>
+			<span class="c">///</span><span class="c"> like the file has been modified in the workdir.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Update this index entry with stat and SHA-1 information if it looks</span>
+			<span class="c">///</span><span class="c"> like the file has been modified in the workdir.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r63 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">file in work dir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if a change occurred</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public virtual bool</b> <a id="c48d3db9683d03e5" href="../R/c48d3db9683d03e5.html" target="n" data-glyph="72,2" class="i method">Update</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r63 rd" class="r63 r">f</span>)
+			{
+				<b>long</b> <span id="r64 rd" class="r64 r">lm</span> = <span class="r63 r">f</span>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>() * 1000000L;
+				<b>bool</b> <span id="r65 rd" class="r65 r">modified</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> != <span class="r64 r">lm</span>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = <span class="r64 r">lm</span>;
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> != <span class="r63 r">f</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>())
+				{
+					<span class="r65 r">modified</span> = <b>true</b>;
+				}
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#be2da08cb7379eff" class="i method">Config_filemode</a>())
+				{
+					<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r63 r">f</span>) != <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#32dffe5286e80da4" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>
+						))
+					{
+						<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> = <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>();
+						<span class="r65 r">modified</span> = <b>true</b>;
+					}
+				}
+				<b>if</b> (<span class="r65 r">modified</span>)
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = (<b>int</b>)<span class="r63 r">f</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>();
+					<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r66 rd" class="r66 r">oi</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+					<b>try</b>
+					{
+						<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r67 rd" class="r67 r">@in</span> = <b>new</b> <a href="/Sharpen/A.html#fbe94cc94976c1b1" class="t constructor">FileInputStream</a>(<span class="r63 r">f</span>);
+						<b>try</b>
+						{
+							<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r68 rd" class="r68 r">newsha1</span> = <span class="r66 r">oi</span>.<a href="ObjectInserter.cs.html#fb2dcf0d4b0844fa" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>, <span class="r63 r">f</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>(), <span class="r67 r">@in</span>);
+							<span class="r66 r">oi</span>.<a href="ObjectInserter.cs.html#4c38ca2633c7a828" class="i method">Flush</a>();
+							<b>if</b> (!<span class="r68 r">newsha1</span>.<a href="AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>))
+							{
+								<span class="r65 r">modified</span> = <b>true</b>;
+							}
+							<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a> = <span class="r68 r">newsha1</span>;
+						}
+						<b>finally</b>
+						{
+							<span class="r67 r">@in</span>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+						}
+					}
+					<b>finally</b>
+					{
+						<span class="r66 r">oi</span>.<a href="ObjectInserter.cs.html#6c4af6fea6d6eb44" class="i method">Release</a>();
+					}
+				}
+				<b>return</b> <span class="r65 r">modified</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Update this index entry with stat and SHA-1 information if it looks</span>
+			<span class="c">///</span><span class="c"> like the file has been modified in the workdir.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Update this index entry with stat and SHA-1 information if it looks</span>
+			<span class="c">///</span><span class="c"> like the file has been modified in the workdir.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r69 r">f</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">file in work dir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r70 r">newContent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new content of the file</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if a change occurred</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public virtual bool</b> <a id="2e240d992e467842" href="../R/2e240d992e467842.html" target="n" data-glyph="72,2" class="i method">Update</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r69 rd" class="r69 r">f</span>, <b>byte</b>[] <span id="r70 rd" class="r70 r">newContent</span>)
+			{
+				<b>bool</b> <span id="r71 rd" class="r71 r">modified</span> = <b>false</b>;
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> = <span class="r70 r">newContent</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+				<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r72 rd" class="r72 r">oi</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+				<b>try</b>
+				{
+					<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r73 rd" class="r73 r">newsha1</span> = <span class="r72 r">oi</span>.<a href="ObjectInserter.cs.html#0d0821541676db9c" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>, <span class="r70 r">newContent</span>);
+					<span class="r72 r">oi</span>.<a href="ObjectInserter.cs.html#4c38ca2633c7a828" class="i method">Flush</a>();
+					<b>if</b> (!<span class="r73 r">newsha1</span>.<a href="AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>))
+					{
+						<span class="r71 r">modified</span> = <b>true</b>;
+					}
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a> = <span class="r73 r">newsha1</span>;
+				}
+				<b>finally</b>
+				{
+					<span class="r72 r">oi</span>.<a href="ObjectInserter.cs.html#6c4af6fea6d6eb44" class="i method">Release</a>();
+				}
+				<b>return</b> <span class="r71 r">modified</span>;
+			}
+
+			<b>internal virtual void</b> <a id="b04c04a980cab077" href="../R/b04c04a980cab077.html" target="n" data-glyph="74,2" class="i method">Write</a>(<a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r74 rd" class="r74 r">buf</span>)
+			{
+				<b>int</b> <span id="r75 rd" class="r75 r">startposition</span> = <span class="r74 r">buf</span>.<a href="/Sharpen/A.html#38b0ce9f0a62c024" class="i method">Position</a>();
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>((<b>int</b>)(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> / 1000000000L));
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>((<b>int</b>)(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> % 1000000000L));
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>((<b>int</b>)(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> / 1000000000L));
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>((<b>int</b>)(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> % 1000000000L));
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#db4353b3e71b578a" class="i field">dev</a>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6f9545c4716fc0c0" class="i field">ino</a>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#671e60a211434b73" class="i field">uid</a>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#30172309faa18e59" class="i field">gid</a>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a>);
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>.<a href="AnyObjectId.cs.html#cb2b595e32390d66" class="i method">CopyRawTo</a>(<span class="r74 r">buf</span>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#4da777a5cc183361" class="i method">PutShort</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a>);
+				<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#50903f3c93dfe082" class="i method">Put</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>);
+				<b>int</b> <span id="r76 rd" class="r76 r">end</span> = <span class="r75 r">startposition</span> + ((8 + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 20 + 2 + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>
+					 + 8) &amp; ~7);
+				<b>int</b> <span id="r77 rd" class="r77 r">remain</span> = <span class="r76 r">end</span> - <span class="r74 r">buf</span>.<a href="/Sharpen/A.html#38b0ce9f0a62c024" class="i method">Position</a>();
+				<b>while</b> (<span class="r77 r">remain</span>-- &gt; 0)
+				{
+					<span class="r74 r">buf</span>.<a href="/Sharpen/A.html#d554e429761be913" class="i method">Put</a>(<b>unchecked</b>((<b>byte</b>)0));
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Check if an entry&#39;s content is different from the cache,</span>
+			<span class="c">///</span><span class="c"> File status information is used and status is same we</span>
+			<span class="c">///</span><span class="c"> consider the file identical to the state in the working</span>
+			<span class="c">///</span><span class="c"> directory.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Check if an entry&#39;s content is different from the cache,</span>
+			<span class="c">///</span><span class="c"> File status information is used and status is same we</span>
+			<span class="c">///</span><span class="c"> consider the file identical to the state in the working</span>
+			<span class="c">///</span><span class="c"> directory. Native git uses more stat fields than we</span>
+			<span class="c">///</span><span class="c"> have accessible in Java.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r78 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">working directory to compare content with</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if content is most likely different.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual bool</b> <a id="e633bcf33cc36158" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">IsModified</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r78 rd" class="r78 r">wd</span>)
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#9814e2b63cf9da51" class="i method">IsModified</a>(<span class="r78 r">wd</span>, <b>false</b>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Check if an entry&#39;s content is different from the cache,</span>
+			<span class="c">///</span><span class="c"> File status information is used and status is same we</span>
+			<span class="c">///</span><span class="c"> consider the file identical to the state in the working</span>
+			<span class="c">///</span><span class="c"> directory.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Check if an entry&#39;s content is different from the cache,</span>
+			<span class="c">///</span><span class="c"> File status information is used and status is same we</span>
+			<span class="c">///</span><span class="c"> consider the file identical to the state in the working</span>
+			<span class="c">///</span><span class="c"> directory. Native git uses more stat fields than we</span>
+			<span class="c">///</span><span class="c"> have accessible in Java.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r79 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">working directory to compare content with</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r80 r">forceContentCheck</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> True if the actual file content</span>
+			<span class="c">///</span><span class="c"> should be checked if modification time differs.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if content is most likely different.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual bool</b> <a id="9814e2b63cf9da51" href="../R/9814e2b63cf9da51.html" target="n" data-glyph="72,2" class="i method">IsModified</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r79 rd" class="r79 r">wd</span>, <b>bool</b> <span id="r80 rd" class="r80 r">forceContentCheck</span>)
+			{
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#113d13d55de257e3" class="i method">IsAssumedValid</a>())
+				{
+					<b>return false</b>;
+				}
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#d16d958fe1302df9" class="i method">IsUpdateNeeded</a>())
+				{
+					<b>return true</b>;
+				}
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r81 rd" class="r81 r">file</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#242aa927b5019158" class="i method">GetFile</a>(<span class="r79 r">wd</span>);
+				<b>long</b> <span id="r82 rd" class="r82 r">length</span> = <span class="r81 r">file</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>();
+				<b>if</b> (<span class="r82 r">length</span> == 0)
+				{
+					<b>if</b> (!<span class="r81 r">file</span>.<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>())
+					{
+						<b>return true</b>;
+					}
+				}
+				<b>if</b> (<span class="r82 r">length</span> != <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a>)
+				{
+					<b>return true</b>;
+				}
+				<span class="c">// JDK1.6 has file.canExecute</span>
+				<span class="c">// if (file.canExecute() != FileMode.EXECUTABLE_FILE.equals(mode))</span>
+				<span class="c">// return true;</span>
+				<b>int</b> <span id="r83 rd" class="r83 r">exebits</span> = <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>() ^ <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>(
+					);
+				<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#be2da08cb7379eff" class="i method">Config_filemode</a>() &amp;&amp; <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#32dffe5286e80da4" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>
+					))
+				{
+					<b>if</b> (!<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r81 r">file</span>) &amp;&amp; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#f33ae0394c5153d3" class="i method">File_hasExecute</a>())
+					{
+						<b>return true</b>;
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>.<a href="FileMode.cs.html#32dffe5286e80da4" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> &amp; ~<span class="r83 r">exebits</span>))
+					{
+						<b>if</b> (!<span class="r81 r">file</span>.<a href="/Sharpen/A.html#5032aa11e3992b76" class="i method">IsFile</a>())
+						{
+							<b>return true</b>;
+						}
+						<b>if</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#be2da08cb7379eff" class="i method">Config_filemode</a>() &amp;&amp; <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r81 r">file</span>) &amp;&amp;
+							 <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#35fc38b102bb5f74" class="i field">_enclosing</a>.<a href="#f33ae0394c5153d3" class="i method">File_hasExecute</a>())
+						{
+							<b>return true</b>;
+						}
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8706e41e92d48b66" class="i field">SYMLINK</a>.<a href="FileMode.cs.html#32dffe5286e80da4" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>))
+						{
+							<b>return true</b>;
+						}
+						<b>else</b>
+						{
+							<b>if</b> (<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#0381c1d3c3e060f3" class="i field">TREE</a>.<a href="FileMode.cs.html#32dffe5286e80da4" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>))
+							{
+								<b>if</b> (!<span class="r81 r">file</span>.<a href="/Sharpen/A.html#a2dbf0660084a9f8" class="i method">IsDirectory</a>())
+								{
+									<b>return true</b>;
+								}
+							}
+							<b>else</b>
+							{
+								<span class="i n">System</span>.<a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7957ab492848cd86" class="i property">Out</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#79c77fa9e50f2b4a" class="i field">doesNotHandleMode</a>
+									, <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>, <span class="r81 r">file</span>));
+								<b>return true</b>;
+							}
+						}
+					}
+				}
+				<span class="c">// Git under windows only stores seconds so we round the timestamp</span>
+				<span class="c">// Java gives us if it looks like the timestamp in index is seconds</span>
+				<span class="c">// only. Otherwise we compare the timestamp at millisecond prevision.</span>
+				<b>long</b> <span id="r84 rd" class="r84 r">javamtime</span> = <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> / 1000000L;
+				<b>long</b> <span id="r85 rd" class="r85 r">lastm</span> = <span class="r81 r">file</span>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>();
+				<b>if</b> (<span class="r84 r">javamtime</span> % 1000 == 0)
+				{
+					<span class="r85 r">lastm</span> = <span class="r85 r">lastm</span> - <span class="r85 r">lastm</span> % 1000;
+				}
+				<b>if</b> (<span class="r85 r">lastm</span> != <span class="r84 r">javamtime</span>)
+				{
+					<b>if</b> (!<span class="r80 r">forceContentCheck</span>)
+					{
+						<b>return true</b>;
+					}
+					<b>try</b>
+					{
+						<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r86 rd" class="r86 r">@is</span> = <b>new</b> <a href="/Sharpen/A.html#fbe94cc94976c1b1" class="t constructor">FileInputStream</a>(<span class="r81 r">file</span>);
+						<b>try</b>
+						{
+							<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r87 rd" class="r87 r">newId</span> = <b>new</b> <a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a>.<a href="ObjectInserter.cs.html#9b2e0391daee0688" class="t constructor">Formatter</a>().<a href="ObjectInserter.cs.html#5a83b3db6bbcc6f6" class="i method">IdFor</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>, <span class="r81 r">file</span>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>
+								(), <span class="r86 r">@is</span>);
+							<b>return</b> !<span class="r87 r">newId</span>.<a href="AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>);
+						}
+						<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r88 rd" class="r88 r">e</span>)
+						{
+							<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#2983246e07bd979c" class="i method">PrintStackTrace</a>(<span class="r88 r">e</span>);
+						}
+						<b>finally</b>
+						{
+							<b>try</b>
+							{
+								<span class="r86 r">@is</span>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+							}
+							<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r89 rd" class="r89 r">e</span>)
+							{
+								<span class="c">// can&#39;t happen, but if it does we ignore it</span>
+								<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#2983246e07bd979c" class="i method">PrintStackTrace</a>(<span class="r89 r">e</span>);
+							}
+						}
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a> <span id="r90 rd" class="r90 r">e</span>)
+					{
+						<span class="c">// should not happen because we already checked this</span>
+						<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#2983246e07bd979c" class="i method">PrintStackTrace</a>(<span class="r90 r">e</span>);
+						<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#bc46ed566bc202a7" class="t constructor">Error</a>(<span class="r90 r">e</span>);
+					}
+				}
+				<b>return false</b>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Returns the stages in which the entry&#39;s file is recorded in the index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Returns the stages in which the entry&#39;s file is recorded in the index.</span>
+			<span class="c">///</span><span class="c"> The stages are bit-encoded: bit N is set if the file is present</span>
+			<span class="c">///</span><span class="c"> in stage N. In particular, the N-th bit will be set if this entry</span>
+			<span class="c">///</span><span class="c"> itself is in stage N (see getStage()).</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">flags denoting stages</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8c60d26538e1769c" class="i method">GetStage</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetStage()</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+			<b>public virtual int</b> <a id="efd29da24b22a309" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">GetStages</a>()
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c38e23f326e2a478" class="i field">stages</a>;
+			}
+
+			<span class="c">// for testing</span>
+			<b>internal virtual void</b> <a id="9d5ab395ecc26f11" href="../R/../../0000000000.html" target="n" data-glyph="74,2" class="i method">ForceRecheck</a>()
+			{
+				<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = -1;
+			}
+
+			<b>private</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="242aa927b5019158" href="../R/242aa927b5019158.html" target="n" data-glyph="76,2" class="i method">GetFile</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r91 rd" class="r91 r">wd</span>)
+			{
+				<b>return</b> <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r91 r">wd</span>, <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#5b0ce49f8301029b" class="i method">GetName</a>());
+			}
+
+			<b>public override string</b> <a id="55250c841145431c" href="../R/55250c841145431c.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#5b0ce49f8301029b" class="i method">GetName</a>() + <span class="s">&quot;/SHA-1(&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>.<a href="AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a> + <span class="s">&quot;)/M:&quot;</span> + <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#e3bc3eed45547def" class="i method">CreateDate</a>
+					(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#fdf795ec524d186d" class="i field">ctime</a> / 1000000L) + <span class="s">&quot;/C:&quot;</span> + <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#e3bc3eed45547def" class="i method">CreateDate</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> / 1000000L
+					) + <span class="s">&quot;/d&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#db4353b3e71b578a" class="i field">dev</a> + <span class="s">&quot;/i&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6f9545c4716fc0c0" class="i field">ino</a> + <span class="s">&quot;/m&quot;</span> + <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#26578bcdf729af74" class="i method">ToString</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.
+					<a href="#a25185c2b9fef8e3" class="i field">mode</a>, 8) + <span class="s">&quot;/u&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#671e60a211434b73" class="i field">uid</a> + <span class="s">&quot;/g&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#30172309faa18e59" class="i field">gid</a> + <span class="s">&quot;/s&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a> + <span class="s">&quot;/f&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a>
+					 + <span class="s">&quot;/@&quot;</span> + <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>();
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">path name for this entry</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual string</b> <a id="5b0ce49f8301029b" href="../R/5b0ce49f8301029b.html" target="n" data-glyph="72,2" class="i method">GetName</a>()
+			{
+				<b>return</b> <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#8bffa26c659156c0" class="i method">Decode</a>(<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">path name for this entry as byte array, hopefully UTF-8 encoded</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual byte</b>[] <a id="f1d280b568726b86" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">GetNameUTF8</a>()
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a4213982f1d3aef1" class="i field">name</a>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the entry managed by this index</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="03eec6560fd94182" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">GetObjectId</a>()
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the stage this entry is in</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual int</b> <a id="8c60d26538e1769c" href="../R/8c60d26538e1769c.html" target="n" data-glyph="72,2" class="i method">GetStage</a>()
+			{
+				<b>return</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> &amp; <b>unchecked</b>((<b>int</b>)(0x3000))) &gt;&gt; 12;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">size of disk object</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual int</b> <a id="2fa5a51fbb8b61db" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">GetSize</a>()
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#f2b11af393ea14e6" class="i field">size</a>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if this entry shall be assumed valid</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual bool</b> <a id="113d13d55de257e3" href="../R/113d13d55de257e3.html" target="n" data-glyph="72,2" class="i method">IsAssumedValid</a>()
+			{
+				<b>return</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> &amp; <b>unchecked</b>((<b>int</b>)(0x8000))) != 0;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if this entry should be checked for changes</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual bool</b> <a id="d16d958fe1302df9" href="../R/d16d958fe1302df9.html" target="n" data-glyph="72,2" class="i method">IsUpdateNeeded</a>()
+			{
+				<b>return</b> (<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> &amp; <b>unchecked</b>((<b>int</b>)(0x4000))) != 0;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set whether to always assume this entry valid</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r92 r">assumeValid</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">true to ignore changes</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<b>public virtual void</b> <a id="0b140376ee7e840d" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">SetAssumeValid</a>(<b>bool</b> <span id="r92 rd" class="r92 r">assumeValid</span>)
+			{
+				<b>if</b> (<span class="r92 r">assumeValid</span>)
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> |= <b>unchecked</b>((<b>short</b>)(0x8000));
+				}
+				<b>else</b>
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> &amp;= ~<b>unchecked</b>((<b>short</b>)(0x8000));
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set whether this entry must be checked</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r93 r">updateNeeded</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<b>public virtual void</b> <a id="91e7867384a0a1b0" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">SetUpdateNeeded</a>(<b>bool</b> <span id="r93 rd" class="r93 r">updateNeeded</span>)
+			{
+				<b>if</b> (<span class="r93 r">updateNeeded</span>)
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> |= <b>unchecked</b>((<b>int</b>)(0x4000));
+				}
+				<b>else</b>
+				{
+					<a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#6133b7ba7f29af47" class="i field">flags</a> &amp;= ~<b>unchecked</b>((<b>int</b>)(0x4000));
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Return raw file mode bits.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Return raw file mode bits. See</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileMode</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">file mode bits</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public virtual int</b> <a id="eb6faac42e933ab1" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">GetModeBits</a>()
+			{
+				<b>return</b> <a href="#34e6407e7b8d587b" class="k">this</a>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>;
+			}
+
+			<b>private readonly</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a> <a id="35fc38b102bb5f74" href="../R/35fc38b102bb5f74.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+
+		<b>internal class</b> <a id="dbbfda1e4fed0e83" href="../R/dbbfda1e4fed0e83.html" target="n" data-glyph="2,1" class="t t">Header</a>
+		{
+			<b>private int</b> <a id="2facf092d6f63ccf" href="../R/2facf092d6f63ccf.html" target="n" data-glyph="46,2" class="i field">signature</a>;
+
+			<b>private int</b> <a id="455487512e333010" href="../R/455487512e333010.html" target="n" data-glyph="46,2" class="i field">version</a>;
+
+			<b>internal int</b> <a id="f84ad0fef76b194c" href="../R/f84ad0fef76b194c.html" target="n" data-glyph="44,2" class="i field">entries</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CorruptObjectException.cs.html#cc0fe9dcd5bb1542" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>internal</b> <a id="b00230b0f6f479dc" href="../R/b00230b0f6f479dc.html" target="n" data-glyph="74,2" class="i constructor">Header</a>(<a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r94 rd" class="r94 r">map</span>)
+			{
+				<a href="#c83cade0d296fa90" class="i method">Read</a>(<span class="r94 r">map</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CorruptObjectException.cs.html#cc0fe9dcd5bb1542" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>private void</b> <a id="c83cade0d296fa90" href="../R/c83cade0d296fa90.html" target="n" data-glyph="76,2" class="i method">Read</a>(<a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r95 rd" class="r95 r">buf</span>)
+			{
+				<a href="#2facf092d6f63ccf" class="i field">signature</a> = <span class="r95 r">buf</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#455487512e333010" class="i field">version</a> = <span class="r95 r">buf</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<a href="#f84ad0fef76b194c" class="i field">entries</a> = <span class="r95 r">buf</span>.<a href="/Sharpen/A.html#1007de52c282401d" class="i method">GetInt</a>();
+				<b>if</b> (<a href="#2facf092d6f63ccf" class="i field">signature</a> != <b>unchecked</b>((<b>int</b>)(0x44495243)))
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Errors/CorruptObjectException.cs.html#b0dd20a32b61bdb5" class="t constructor">CorruptObjectException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#fabc4e2059a2ba34" class="i field">indexSignatureIsInvalid</a>
+						, <a href="#2facf092d6f63ccf" class="i field">signature</a>));
+				}
+				<b>if</b> (<a href="#455487512e333010" class="i field">version</a> != 2)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Errors/CorruptObjectException.cs.html#b0dd20a32b61bdb5" class="t constructor">CorruptObjectException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#520c048ad6565e87" class="i field">unknownIndexVersionOrCorruptIndex</a>
+						, <a href="#455487512e333010" class="i field">version</a>));
+				}
+			}
+
+			<b>internal virtual void</b> <a id="d52ae2a28a3572c7" href="../R/d52ae2a28a3572c7.html" target="n" data-glyph="74,2" class="i method">Write</a>(<a href="/Sharpen/A.html#acd2106f2585deaa" class="t t">ByteBuffer</a> <span id="r96 rd" class="r96 r">buf</span>)
+			{
+				<span class="r96 r">buf</span>.<a href="/Sharpen/A.html#39ad77915fd6988b" class="i method">Order</a>(<a href="/Sharpen/A.html#22d4d96d0a5b76fc" class="t t">ByteOrder</a>.<a href="/Sharpen/A.html#530bfdb84718f0c8" class="i field">BIG_ENDIAN</a>);
+				<span class="r96 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#2facf092d6f63ccf" class="i field">signature</a>);
+				<span class="r96 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#455487512e333010" class="i field">version</a>);
+				<span class="r96 r">buf</span>.<a href="/Sharpen/A.html#7559a5532186e4ff" class="i method">PutInt</a>(<a href="#f84ad0fef76b194c" class="i field">entries</a>);
+			}
+
+			<b>internal</b> <a id="022ae41d3a79c708" href="../R/022ae41d3a79c708.html" target="n" data-glyph="74,2" class="i constructor">Header</a>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>byte</b>[],<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>&gt; <span id="r97 rd" class="r97 r">entryset</span>)
+			{
+				<a href="#2facf092d6f63ccf" class="i field">signature</a> = <b>unchecked</b>((<b>int</b>)(0x44495243));
+				<a href="#455487512e333010" class="i field">version</a> = 2;
+				<a href="#f84ad0fef76b194c" class="i field">entries</a> = <span class="r97 r">entryset</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Read a Tree recursively into the index</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r98 r">t</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The tree to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="ef54ba4f07ca70b0" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadTree</a>(<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a> <span id="r98 rd" class="r98 r">t</span>)
+		{
+			<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+			<a href="#e4ec608f1d034189" class="i method">ReadTree</a>(<b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>, <span class="r98 r">t</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="e4ec608f1d034189" href="../R/e4ec608f1d034189.html" target="n" data-glyph="74,1" class="i method">ReadTree</a>(<b>string</b> <span id="r99 rd" class="r99 r">prefix</span>, <a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a> <span id="r100 rd" class="r100 r">t</span>)
+		{
+			<a href="TreeEntry.cs.html#b3eaf87d00430539" class="t t">TreeEntry</a>[] <span id="r101 rd" class="r101 r">members</span> = <span class="r100 r">t</span>.<a href="Tree.cs.html#70f758e3c18cca7f" class="i method">Members</a>();
+			<b>for</b> (<b>int</b> <span id="r102 rd" class="r102 r">i</span> = 0; <span class="r102 r">i</span> &lt; <span class="r101 r">members</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r102 r">i</span>)
+			{
+				<a href="TreeEntry.cs.html#b3eaf87d00430539" class="t t">TreeEntry</a> <span id="r103 rd" class="r103 r">te</span> = <span class="r101 r">members</span>[<span class="r102 r">i</span>];
+				<b>string</b> <span id="r104 rd" class="r104 r">name</span>;
+				<b>if</b> (<span class="r99 r">prefix</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+				{
+					<span class="r104 r">name</span> = <span class="r99 r">prefix</span> + <span class="s">&quot;/&quot;</span> + <span class="r103 r">te</span>.<a href="TreeEntry.cs.html#d3f9437986cae543" class="i method">GetName</a>();
+				}
+				<b>else</b>
+				{
+					<span class="r104 r">name</span> = <span class="r103 r">te</span>.<a href="TreeEntry.cs.html#d3f9437986cae543" class="i method">GetName</a>();
+				}
+				<b>if</b> (<span class="r103 r">te</span> <b>is</b> <a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a>)
+				{
+					<a href="#e4ec608f1d034189" class="i method">ReadTree</a>(<span class="r104 r">name</span>, (<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a>)<span class="r103 r">te</span>);
+				}
+				<b>else</b>
+				{
+					<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r105 rd" class="r105 r">e</span> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#92e3160c45fde829" class="t constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="k">this</a>, <span class="r103 r">te</span>, 0);
+					<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#a7c201171ab1d7de" class="i method">Put</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r104 r">name</span>), <span class="r105 r">e</span>);
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add tree entry to index</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r106 r">te</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">tree entry</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">new or modified index entry</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <a id="402257be9e2387ae" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">AddEntry</a>(<a href="TreeEntry.cs.html#b3eaf87d00430539" class="t t">TreeEntry</a> <span id="r106 rd" class="r106 r">te</span>)
+		{
+			<b>byte</b>[] <span id="r107 rd" class="r107 r">key</span> = <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r106 r">te</span>.<a href="TreeEntry.cs.html#672ca41fc8e2a422" class="i method">GetFullName</a>());
+			<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r108 rd" class="r108 r">e</span> = <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#92e3160c45fde829" class="t constructor">Entry</a>(<a href="#aae5f0c8cec33c4b" class="k">this</a>, <span class="r106 r">te</span>, 0);
+			<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#a7c201171ab1d7de" class="i method">Put</a>(<span class="r107 r">key</span>, <span class="r108 r">e</span>);
+			<b>return</b> <span class="r108 r">e</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Check out content of the content represented by the index</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r109 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="9f318d866418aff8" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Checkout</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r109 rd" class="r109 r">wd</span>)
+		{
+			<b>foreach</b> (<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r110 rd" class="r110 r">e</span> <b>in</b> <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+			{
+				<b>if</b> (<span class="r110 r">e</span>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>() != 0)
+				{
+					<b>continue</b>;
+				}
+				<a href="#12b41d469f3b62cd" class="i method">CheckoutEntry</a>(<span class="r109 r">wd</span>, <span class="r110 r">e</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Check out content of the specified index entry</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r111 r">wd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r112 r">e</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">index entry</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="12b41d469f3b62cd" href="../R/12b41d469f3b62cd.html" target="n" data-glyph="72,1" class="i method">CheckoutEntry</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r111 rd" class="r111 r">wd</span>, <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r112 rd" class="r112 r">e</span>)
+		{
+			<a href="ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <span id="r113 rd" class="r113 r">ol</span> = <a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#2c77a365c4bc0175" class="i method">Open</a>(<span class="r112 r">e</span>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>);
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r114 rd" class="r114 r">file</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r111 r">wd</span>, <span class="r112 r">e</span>.<a href="#5b0ce49f8301029b" class="i method">GetName</a>());
+			<span class="r114 r">file</span>.<a href="/Sharpen/A.html#5f8b0a5e1d2ab269" class="i method">Delete</a>();
+			<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#e65e51a5856f5e04" class="i method">Mkdirs</a>(<span class="r114 r">file</span>.<a href="/Sharpen/A.html#d153b2ad89f3d146" class="i method">GetParentFile</a>(), <b>true</b>);
+			<a href="/Sharpen/A.html#593039b4e998beb4" class="t t">FileOutputStream</a> <span id="r115 rd" class="r115 r">dst</span> = <b>new</b> <a href="/Sharpen/A.html#60d0d5bbf527518d" class="t constructor">FileOutputStream</a>(<span class="r114 r">file</span>);
+			<b>try</b>
+			{
+				<span class="r113 r">ol</span>.<a href="ObjectLoader.cs.html#265be632cde087b1" class="i method">CopyTo</a>(<span class="r115 r">dst</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r115 r">dst</span>.<a href="/Sharpen/A.html#6788f268a20b51ce" class="i method">Close</a>();
+			}
+			<b>if</b> (<a href="#be2da08cb7379eff" class="i method">Config_filemode</a>() &amp;&amp; <a href="#f33ae0394c5153d3" class="i method">File_hasExecute</a>())
+			{
+				<b>if</b> (<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#32dffe5286e80da4" class="i method">Equals</a>(<span class="r112 r">e</span>.<a href="#a25185c2b9fef8e3" class="i field">mode</a>))
+				{
+					<b>if</b> (!<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r114 r">file</span>))
+					{
+						<a href="#d9f68f82d69fad7a" class="i method">File_setExecute</a>(<span class="r114 r">file</span>, <b>true</b>);
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="#ad6ac2dcae0aa118" class="i method">File_canExecute</a>(<span class="r114 r">file</span>))
+					{
+						<a href="#d9f68f82d69fad7a" class="i method">File_setExecute</a>(<span class="r114 r">file</span>, <b>false</b>);
+					}
+				}
+			}
+			<span class="r112 r">e</span>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a> = <span class="r114 r">file</span>.<a href="/Sharpen/A.html#8fb714bc28d36202" class="i method">LastModified</a>() * 1000000L;
+			<span class="r112 r">e</span>.<a href="#fdf795ec524d186d" class="i field">ctime</a> = <span class="r112 r">e</span>.<a href="#c7ba6e7c437bb6e5" class="i field">mtime</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct and write tree out of index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Construct and write tree out of index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the constructed tree</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="f443c42d6d001f48" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">WriteTree</a>()
+		{
+			<a href="#910854628d4b57d5" class="i method">CheckWriteOk</a>();
+			<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r116 rd" class="r116 r">inserter</span> = <a href="#328d920c54eeb7d4" class="i field">db</a>.<a href="Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+			<b>try</b>
+			{
+				<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a> <span id="r117 rd" class="r117 r">current</span> = <b>new</b> <a href="Tree.cs.html#99632caf4853326a" class="t constructor">Tree</a>(<a href="#328d920c54eeb7d4" class="i field">db</a>);
+				<a href="@0@System/A.html#c5371bef044c6ab6" class="t t">Stack</a>&lt;<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a>&gt; <span id="r118 rd" class="r118 r">trees</span> = <b>new</b> <a href="@0@System/A.html#692a18e31afb7ef9" class="t constructor">Stack</a>&lt;<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a>&gt;();
+				<span class="r118 r">trees</span>.<a href="@0@System/A.html#83b1a3864aaa7198" class="i method">Push</a>(<span class="r117 r">current</span>);
+				<b>string</b>[] <span id="r119 rd" class="r119 r">prevName</span> = <b>new</b> <b>string</b>[0];
+				<b>foreach</b> (<a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <span id="r120 rd" class="r120 r">e</span> <b>in</b> <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+				{
+					<b>if</b> (<span class="r120 r">e</span>.<a href="#8c60d26538e1769c" class="i method">GetStage</a>() != 0)
+					{
+						<b>continue</b>;
+					}
+					<b>string</b>[] <span id="r121 rd" class="r121 r">newName</span> = <a href="#b568ee999205a4aa" class="i method">SplitDirPath</a>(<span class="r120 r">e</span>.<a href="#5b0ce49f8301029b" class="i method">GetName</a>());
+					<b>int</b> <span id="r122 rd" class="r122 r">c</span> = <a href="#f60f158ec33a045c" class="i method">LongestCommonPath</a>(<span class="r119 r">prevName</span>, <span class="r121 r">newName</span>);
+					<b>while</b> (<span class="r122 r">c</span> &lt; <span class="r118 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1)
+					{
+						<span class="r117 r">current</span>.<a href="TreeEntry.cs.html#ec762d5e993c1566" class="i method">SetId</a>(<span class="r116 r">inserter</span>.<a href="ObjectInserter.cs.html#0d0821541676db9c" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c1694187955c95c1" class="i field">OBJ_TREE</a>, <span class="r117 r">current</span>.<a href="Tree.cs.html#84888d5d7ff7eefa" class="i method">Format</a>()));
+						<span class="r118 r">trees</span>.<a href="@0@System/A.html#fd86d7436e55c84b" class="i method">Pop</a>();
+						<span class="r117 r">current</span> = <span class="r118 r">trees</span>.<a href="/Sharpen/A.html#b7fea62082462e13" class="i method">IsEmpty</a>() ? <b>null</b> : (<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a>)<span class="r118 r">trees</span>.<a href="@0@System/A.html#20264e6773140faf" class="i method">Peek</a>();
+					}
+					<b>while</b> (<span class="r118 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> &lt; <span class="r121 r">newName</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+					{
+						<b>if</b> (!<span class="r117 r">current</span>.<a href="Tree.cs.html#d18ff909145b7568" class="i method">ExistsTree</a>(<span class="r121 r">newName</span>[<span class="r118 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1]))
+						{
+							<span class="r117 r">current</span> = <b>new</b> <a href="Tree.cs.html#077670653aed972b" class="t constructor">Tree</a>(<span class="r117 r">current</span>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r121 r">newName</span>[<span class="r118 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1]));
+							<span class="r117 r">current</span>.<a href="TreeEntry.cs.html#c6d5f2feb13fae02" class="i method">GetParent</a>().<a href="Tree.cs.html#fc197f641beb900c" class="i method">AddEntry</a>(<span class="r117 r">current</span>);
+							<span class="r118 r">trees</span>.<a href="@0@System/A.html#83b1a3864aaa7198" class="i method">Push</a>(<span class="r117 r">current</span>);
+						}
+						<b>else</b>
+						{
+							<span class="r117 r">current</span> = (<a href="Tree.cs.html#236952969d1e09c2" class="t t">Tree</a>)<span class="r117 r">current</span>.<a href="Tree.cs.html#9e7e46da12a90f50" class="i method">FindTreeMember</a>(<span class="r121 r">newName</span>[<span class="r118 r">trees</span>.<a href="@0@System/A.html#47350acaee6be7b6" class="i property">Count</a> - 1]);
+							<span class="r118 r">trees</span>.<a href="@0@System/A.html#83b1a3864aaa7198" class="i method">Push</a>(<span class="r117 r">current</span>);
+						}
+					}
+					<a href="FileTreeEntry.cs.html#a922f6f878e4142a" class="t t">FileTreeEntry</a> <span id="r123 rd" class="r123 r">ne</span> = <b>new</b> <a href="FileTreeEntry.cs.html#1ab9cfc00993a548" class="t constructor">FileTreeEntry</a>(<span class="r117 r">current</span>, <span class="r120 r">e</span>.<a href="#ea919b220ba9cddd" class="i field">sha1</a>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r121 r">newName</span>[<span class="r121 r">newName</span>
+						.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1]), (<span class="r120 r">e</span>.<a href="#a25185c2b9fef8e3" class="i field">mode</a> &amp; <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>()) == <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#8b8376a497fabfa7" class="i field">EXECUTABLE_FILE</a>
+						.<a href="FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>());
+					<span class="r117 r">current</span>.<a href="Tree.cs.html#fc197f641beb900c" class="i method">AddEntry</a>(<span class="r123 r">ne</span>);
+				}
+				<b>while</b> (!<span class="r118 r">trees</span>.<a href="/Sharpen/A.html#b7fea62082462e13" class="i method">IsEmpty</a>())
+				{
+					<span class="r117 r">current</span>.<a href="TreeEntry.cs.html#ec762d5e993c1566" class="i method">SetId</a>(<span class="r116 r">inserter</span>.<a href="ObjectInserter.cs.html#0d0821541676db9c" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c1694187955c95c1" class="i field">OBJ_TREE</a>, <span class="r117 r">current</span>.<a href="Tree.cs.html#84888d5d7ff7eefa" class="i method">Format</a>()));
+					<span class="r118 r">trees</span>.<a href="@0@System/A.html#fd86d7436e55c84b" class="i method">Pop</a>();
+					<b>if</b> (!<span class="r118 r">trees</span>.<a href="/Sharpen/A.html#b7fea62082462e13" class="i method">IsEmpty</a>())
+					{
+						<span class="r117 r">current</span> = <span class="r118 r">trees</span>.<a href="@0@System/A.html#20264e6773140faf" class="i method">Peek</a>();
+					}
+				}
+				<span class="r116 r">inserter</span>.<a href="ObjectInserter.cs.html#4c38ca2633c7a828" class="i method">Flush</a>();
+				<b>return</b> <span class="r117 r">current</span>.<a href="TreeEntry.cs.html#b792200d827b8845" class="i method">GetId</a>();
+			}
+			<b>finally</b>
+			{
+				<span class="r116 r">inserter</span>.<a href="ObjectInserter.cs.html#6c4af6fea6d6eb44" class="i method">Release</a>();
+			}
+		}
+
+		<b>internal virtual string</b>[] <a id="b568ee999205a4aa" href="../R/b568ee999205a4aa.html" target="n" data-glyph="74,1" class="i method">SplitDirPath</a>(<b>string</b> <span id="r124 rd" class="r124 r">name</span>)
+		{
+			<b>string</b>[] <span id="r125 rd" class="r125 r">tmp</span> = <b>new</b> <b>string</b>[<span class="r124 r">name</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> / 2 + 1];
+			<b>int</b> <span id="r126 rd" class="r126 r">p0</span> = -1;
+			<b>int</b> <span id="r127 rd" class="r127 r">p1</span>;
+			<b>int</b> <span id="r128 rd" class="r128 r">c</span> = 0;
+			<b>while</b> ((<span class="r127 r">p1</span> = <span class="r124 r">name</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;/&#39;</span>, <span class="r126 r">p0</span> + 1)) != -1)
+			{
+				<span class="r125 r">tmp</span>[<span class="r128 r">c</span>++] = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r124 r">name</span>, <span class="r126 r">p0</span> + 1, <span class="r127 r">p1</span>);
+				<span class="r126 r">p0</span> = <span class="r127 r">p1</span>;
+			}
+			<span class="r125 r">tmp</span>[<span class="r128 r">c</span>++] = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#b77d80ab77ebce19" class="i method">Substring</a>(<span class="r124 r">name</span>, <span class="r126 r">p0</span> + 1);
+			<b>string</b>[] <span id="r129 rd" class="r129 r">ret</span> = <b>new</b> <b>string</b>[<span class="r128 r">c</span>];
+			<b>for</b> (<b>int</b> <span id="r130 rd" class="r130 r">i</span> = 0; <span class="r130 r">i</span> &lt; <span class="r128 r">c</span>; ++<span class="r130 r">i</span>)
+			{
+				<span class="r129 r">ret</span>[<span class="r130 r">i</span>] = <span class="r125 r">tmp</span>[<span class="r130 r">i</span>];
+			}
+			<b>return</b> <span class="r129 r">ret</span>;
+		}
+
+		<b>internal virtual int</b> <a id="f60f158ec33a045c" href="../R/f60f158ec33a045c.html" target="n" data-glyph="74,1" class="i method">LongestCommonPath</a>(<b>string</b>[] <span id="r131 rd" class="r131 r">a</span>, <b>string</b>[] <span id="r132 rd" class="r132 r">b</span>)
+		{
+			<b>int</b> <span id="r133 rd" class="r133 r">i</span>;
+			<b>for</b> (<span class="r133 r">i</span> = 0; <span class="r133 r">i</span> &lt; <span class="r131 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &amp;&amp; <span class="r133 r">i</span> &lt; <span class="r132 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r133 r">i</span>)
+			{
+				<b>if</b> (!<span class="r131 r">a</span>[<span class="r133 r">i</span>].<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r132 r">b</span>[<span class="r133 r">i</span>]))
+				{
+					<b>return</b> <span class="r133 r">i</span>;
+				}
+			}
+			<b>return</b> <span class="r133 r">i</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Return the members of the index sorted by the unsigned byte</span>
+		<span class="c">///</span><span class="c"> values of the path names.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Return the members of the index sorted by the unsigned byte</span>
+		<span class="c">///</span><span class="c"> values of the path names.</span>
+		<span class="c">///</span><span class="c"> Small beware: Unaccounted for are unmerged entries. You may want</span>
+		<span class="c">///</span><span class="c"> to abort if members with stage != 0 are found if you are doing</span>
+		<span class="c">///</span><span class="c"> any updating operations. All stages will be found after one another</span>
+		<span class="c">///</span><span class="c"> here later. Currently only one stage per name is returned.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The index entries sorted</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>[] <a id="dc864cc9280a9b9e" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetMembers</a>()
+		{
+			<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#433af640e0c02148" class="i method">ToArray</a>(<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>, <b>new</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a>[<a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>
+				]);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Look up an entry with the specified path.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Look up an entry with the specified path.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r134 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">index entry for the path or null if not in index.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#4ab3c5db65a688d9" class="t t">UnsupportedEncodingException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Sharpen.UnsupportedEncodingException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#aae5f0c8cec33c4b" class="t t">GitIndex</a>.<a href="#34e6407e7b8d587b" class="t t">Entry</a> <a id="d11707955b8da6ac" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetEntry</a>(<b>string</b> <span id="r134 rd" class="r134 r">path</span>)
+		{
+			<b>return</b> <a href="#71e3b38914da32d2" class="i field">entries</a>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="Repository.cs.html#2dc344d93eb1ad3b" class="i method">GitInternalSlash</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r134 r">path</span>)));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The repository holding this index.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="f779c85557d0bc3e" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetRepository</a>()
+		{
+			<b>return</b> <a href="#328d920c54eeb7d4" class="i field">db</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

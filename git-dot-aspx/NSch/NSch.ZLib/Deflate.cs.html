@@ -1,0 +1,2017 @@
+﻿<!DOCTYPE html>
+<html><head><title>Deflate.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(2008);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NSch/NSch.ZLib/Deflate.cs" target="_top">NSch.ZLib\Deflate.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NSch" target="_top">lib\NGit\NSch\NSch.csproj</a> (NSch)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+Copyright (c) 2000,2001,2002,2003 ymnk, JCraft,Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+
+  2. Redistributions in binary form must reproduce the above copyright 
+     notice, this list of conditions and the following disclaimer in 
+     the documentation and/or other materials provided with the distribution.
+
+  3. The names of the authors may not be used to endorse or promote products
+     derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED ``AS IS&#39;&#39; AND ANY EXPRESSED OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL JCRAFT,
+INC. OR ANY CONTRIBUTORS TO THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+This program is based on zlib-1.1.3, so all credit should go authors
+Jean-loup Gailly(jloup@gzip.org) and Mark Adler(madler@alumni.caltech.edu)
+and contributors of zlib.
+*/</span>
+
+<b>using</b> <span class="i n">NSch</span>.<span class="i n">ZLib</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NSch</span>.<span class="i n">ZLib</span>
+{
+	<b>public sealed class</b> <a id="d1ad14fae9b8eb5f" href="../R/d1ad14fae9b8eb5f.html" target="n" data-glyph="0,0" class="t t">Deflate</a>
+	{
+		<b>private const int</b> <a id="d6577280474ef853" href="../R/d6577280474ef853.html" target="n" data-glyph="10,1" class="i field">MAX_MEM_LEVEL</a> = 9;
+
+		<b>private const int</b> <a id="7b2a5f9af8d66fbf" href="../R/7b2a5f9af8d66fbf.html" target="n" data-glyph="10,1" class="i field">Z_DEFAULT_COMPRESSION</a> = -1;
+
+		<b>private const int</b> <a id="297b536c630afd8a" href="../R/297b536c630afd8a.html" target="n" data-glyph="10,1" class="i field">MAX_WBITS</a> = 15;
+
+		<b>private const int</b> <a id="c79c07ba4f6c64cd" href="../R/c79c07ba4f6c64cd.html" target="n" data-glyph="10,1" class="i field">DEF_MEM_LEVEL</a> = 8;
+
+		<b>internal class</b> <a id="6f2a2afad46e523c" href="../R/6f2a2afad46e523c.html" target="n" data-glyph="2,1" class="t t">Config</a>
+		{
+			<b>internal int</b> <a id="51fac970e6007ec8" href="../R/51fac970e6007ec8.html" target="n" data-glyph="44,2" class="i field">good_length</a>;
+
+			<b>internal int</b> <a id="e56f9470931c8117" href="../R/e56f9470931c8117.html" target="n" data-glyph="44,2" class="i field">max_lazy</a>;
+
+			<b>internal int</b> <a id="541dfcd6a246648a" href="../R/541dfcd6a246648a.html" target="n" data-glyph="44,2" class="i field">nice_length</a>;
+
+			<b>internal int</b> <a id="28a864d0763d9c14" href="../R/28a864d0763d9c14.html" target="n" data-glyph="44,2" class="i field">max_chain</a>;
+
+			<b>internal int</b> <a id="e5083d296e572aff" href="../R/e5083d296e572aff.html" target="n" data-glyph="44,2" class="i field">func</a>;
+
+			<b>internal</b> <a id="435684d8903a89e9" href="../R/435684d8903a89e9.html" target="n" data-glyph="74,2" class="i constructor">Config</a>(<b>int</b> <span id="r0 rd" class="r0 r">good_length</span>, <b>int</b> <span id="r1 rd" class="r1 r">max_lazy</span>, <b>int</b> <span id="r2 rd" class="r2 r">nice_length</span>, <b>int</b> <span id="r3 rd" class="r3 r">max_chain</span>, <b>int</b>
+				 <span id="r4 rd" class="r4 r">func</span>)
+			{
+				<span class="c">// 32K LZ77 window</span>
+				<span class="c">// reduce lazy search above this match length</span>
+				<span class="c">// do not perform lazy search above this match length</span>
+				<span class="c">// quit search above this match length</span>
+				<a href="#6f2a2afad46e523c" class="k">this</a>.<a href="#51fac970e6007ec8" class="i field">good_length</a> = <span class="r0 r">good_length</span>;
+				<a href="#6f2a2afad46e523c" class="k">this</a>.<a href="#e56f9470931c8117" class="i field">max_lazy</a> = <span class="r1 r">max_lazy</span>;
+				<a href="#6f2a2afad46e523c" class="k">this</a>.<a href="#541dfcd6a246648a" class="i field">nice_length</a> = <span class="r2 r">nice_length</span>;
+				<a href="#6f2a2afad46e523c" class="k">this</a>.<a href="#28a864d0763d9c14" class="i field">max_chain</a> = <span class="r3 r">max_chain</span>;
+				<a href="#6f2a2afad46e523c" class="k">this</a>.<a href="#e5083d296e572aff" class="i field">func</a> = <span class="r4 r">func</span>;
+			}
+		}
+
+		<b>private const int</b> <a id="a7b23ea65b87144c" href="../R/a7b23ea65b87144c.html" target="n" data-glyph="10,1" class="i field">STORED</a> = 0;
+
+		<b>private const int</b> <a id="bb36f7222798f9ef" href="../R/bb36f7222798f9ef.html" target="n" data-glyph="10,1" class="i field">FAST</a> = 1;
+
+		<b>private const int</b> <a id="407605f6ddedbf63" href="../R/407605f6ddedbf63.html" target="n" data-glyph="10,1" class="i field">SLOW</a> = 2;
+
+		<b>private static readonly</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#6f2a2afad46e523c" class="t t">Config</a>[] <a id="c4492f4f0f415ffc" href="../R/c4492f4f0f415ffc.html" target="n" data-glyph="46,1" class="i field">config_table</a>;
+
+		<b>static</b> <a id="b409d530aed7a8ee" href="../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">Deflate</a>()
+		{
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a> = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#6f2a2afad46e523c" class="t t">Config</a>[10];
+			<span class="c">//                         good  lazy  nice  chain</span>
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[0] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(0, 0, 0, 0, <a href="#a7b23ea65b87144c" class="i field">STORED</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[1] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(4, 4, 8, 4, <a href="#bb36f7222798f9ef" class="i field">FAST</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[2] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(4, 5, 16, 8, <a href="#bb36f7222798f9ef" class="i field">FAST</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[3] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(4, 6, 32, 32, <a href="#bb36f7222798f9ef" class="i field">FAST</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[4] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(4, 4, 16, 16, <a href="#407605f6ddedbf63" class="i field">SLOW</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[5] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(8, 16, 32, 32, <a href="#407605f6ddedbf63" class="i field">SLOW</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[6] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(8, 16, 128, 128, <a href="#407605f6ddedbf63" class="i field">SLOW</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[7] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(8, 32, 128, 256, <a href="#407605f6ddedbf63" class="i field">SLOW</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[8] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(32, 128, 258, 1024, <a href="#407605f6ddedbf63" class="i field">SLOW</a>);
+			<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[9] = <b>new</b> <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#435684d8903a89e9" class="t constructor">Config</a>(32, 258, 258, 4096, <a href="#407605f6ddedbf63" class="i field">SLOW</a>);
+		}
+
+		<b>private static readonly string</b>[] <a id="b00484234ac532b1" href="../R/b00484234ac532b1.html" target="n" data-glyph="46,1" class="i field">z_errmsg</a> = <b>new</b> <b>string</b>[] { <span class="s">&quot;need dictionary&quot;</span>, <span class="s">&quot;stream end&quot;</span>
+			, <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>, <span class="s">&quot;file error&quot;</span>, <span class="s">&quot;stream error&quot;</span>, <span class="s">&quot;data error&quot;</span>, <span class="s">&quot;insufficient memory&quot;</span>
+			, <span class="s">&quot;buffer error&quot;</span>, <span class="s">&quot;incompatible version&quot;</span>, <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a> };
+
+		<b>private const int</b> <a id="789372256aaf6005" href="../R/789372256aaf6005.html" target="n" data-glyph="10,1" class="i field">NeedMore</a> = 0;
+
+		<b>private const int</b> <a id="0d8b0b3e017cb61c" href="../R/0d8b0b3e017cb61c.html" target="n" data-glyph="10,1" class="i field">BlockDone</a> = 1;
+
+		<b>private const int</b> <a id="e69f4bcb973ccaf3" href="../R/e69f4bcb973ccaf3.html" target="n" data-glyph="10,1" class="i field">FinishStarted</a> = 2;
+
+		<b>private const int</b> <a id="2461007a37a71b30" href="../R/2461007a37a71b30.html" target="n" data-glyph="10,1" class="i field">FinishDone</a> = 3;
+
+		<b>private const int</b> <a id="369e5155a00891fb" href="../R/369e5155a00891fb.html" target="n" data-glyph="10,1" class="i field">PRESET_DICT</a> = <b>unchecked</b>((<b>int</b>)(0x20));
+
+		<b>private const int</b> <a id="1b553340ef9783f1" href="../R/1b553340ef9783f1.html" target="n" data-glyph="10,1" class="i field">Z_FILTERED</a> = 1;
+
+		<b>private const int</b> <a id="d78f96a6a66ecec7" href="../R/d78f96a6a66ecec7.html" target="n" data-glyph="10,1" class="i field">Z_HUFFMAN_ONLY</a> = 2;
+
+		<b>private const int</b> <a id="f86b15de43ce93c5" href="../R/f86b15de43ce93c5.html" target="n" data-glyph="10,1" class="i field">Z_DEFAULT_STRATEGY</a> = 0;
+
+		<b>private const int</b> <a id="a528e5b14b12de0d" href="../R/a528e5b14b12de0d.html" target="n" data-glyph="10,1" class="i field">Z_NO_FLUSH</a> = 0;
+
+		<b>private const int</b> <a id="b544a6a5a46745d4" href="../R/b544a6a5a46745d4.html" target="n" data-glyph="10,1" class="i field">Z_PARTIAL_FLUSH</a> = 1;
+
+		<b>private const int</b> <a id="c3504d421113eb18" href="../R/../../0000000000.html" target="n" data-glyph="10,1" class="i field">Z_SYNC_FLUSH</a> = 2;
+
+		<b>private const int</b> <a id="aad53c2158852c03" href="../R/aad53c2158852c03.html" target="n" data-glyph="10,1" class="i field">Z_FULL_FLUSH</a> = 3;
+
+		<b>private const int</b> <a id="e3b17ddf752bc4c7" href="../R/e3b17ddf752bc4c7.html" target="n" data-glyph="10,1" class="i field">Z_FINISH</a> = 4;
+
+		<b>private const int</b> <a id="54e53219d90dc309" href="../R/54e53219d90dc309.html" target="n" data-glyph="10,1" class="i field">Z_OK</a> = 0;
+
+		<b>private const int</b> <a id="ddacbd5986920a44" href="../R/ddacbd5986920a44.html" target="n" data-glyph="10,1" class="i field">Z_STREAM_END</a> = 1;
+
+		<b>private const int</b> <a id="4c2e5baeda4ba7c2" href="../R/4c2e5baeda4ba7c2.html" target="n" data-glyph="10,1" class="i field">Z_NEED_DICT</a> = 2;
+
+		<b>private const int</b> <a id="b9ffbf555dadeb65" href="../R/../../0000000000.html" target="n" data-glyph="10,1" class="i field">Z_ERRNO</a> = -1;
+
+		<b>private const int</b> <a id="1a827bdbc4cb9243" href="../R/1a827bdbc4cb9243.html" target="n" data-glyph="10,1" class="i field">Z_STREAM_ERROR</a> = -2;
+
+		<b>private const int</b> <a id="929c53695d0a333a" href="../R/929c53695d0a333a.html" target="n" data-glyph="10,1" class="i field">Z_DATA_ERROR</a> = -3;
+
+		<b>private const int</b> <a id="4a7c0db91f315ae4" href="../R/../../0000000000.html" target="n" data-glyph="10,1" class="i field">Z_MEM_ERROR</a> = -4;
+
+		<b>private const int</b> <a id="8c1340ef023fdde4" href="../R/8c1340ef023fdde4.html" target="n" data-glyph="10,1" class="i field">Z_BUF_ERROR</a> = -5;
+
+		<b>private const int</b> <a id="698ccd0660af494c" href="../R/../../0000000000.html" target="n" data-glyph="10,1" class="i field">Z_VERSION_ERROR</a> = -6;
+
+		<b>private const int</b> <a id="e13eac383c3c51cc" href="../R/e13eac383c3c51cc.html" target="n" data-glyph="10,1" class="i field">INIT_STATE</a> = 42;
+
+		<b>private const int</b> <a id="91a90670e75ae502" href="../R/91a90670e75ae502.html" target="n" data-glyph="10,1" class="i field">BUSY_STATE</a> = 113;
+
+		<b>private const int</b> <a id="e230894fe9d929a8" href="../R/e230894fe9d929a8.html" target="n" data-glyph="10,1" class="i field">FINISH_STATE</a> = 666;
+
+		<b>private const int</b> <a id="950625a1c48d1f85" href="../R/950625a1c48d1f85.html" target="n" data-glyph="10,1" class="i field">Z_DEFLATED</a> = 8;
+
+		<b>private const int</b> <a id="5de9e4ff28a61fb7" href="../R/5de9e4ff28a61fb7.html" target="n" data-glyph="10,1" class="i field">STORED_BLOCK</a> = 0;
+
+		<b>private const int</b> <a id="d7e7bdc14a36821b" href="../R/d7e7bdc14a36821b.html" target="n" data-glyph="10,1" class="i field">STATIC_TREES</a> = 1;
+
+		<b>private const int</b> <a id="c2781656aa221787" href="../R/c2781656aa221787.html" target="n" data-glyph="10,1" class="i field">DYN_TREES</a> = 2;
+
+		<b>private const int</b> <a id="4728c25bba5fa438" href="../R/4728c25bba5fa438.html" target="n" data-glyph="10,1" class="i field">Z_BINARY</a> = 0;
+
+		<b>private const int</b> <a id="adcbba2b239b066d" href="../R/adcbba2b239b066d.html" target="n" data-glyph="10,1" class="i field">Z_ASCII</a> = 1;
+
+		<b>private const int</b> <a id="d28ced167e638822" href="../R/d28ced167e638822.html" target="n" data-glyph="10,1" class="i field">Z_UNKNOWN</a> = 2;
+
+		<b>private const int</b> <a id="941c97da60e73d38" href="../R/941c97da60e73d38.html" target="n" data-glyph="10,1" class="i field">Buf_size</a> = 8 * 2;
+
+		<b>private const int</b> <a id="e8ccbb9463f1bbdd" href="../R/e8ccbb9463f1bbdd.html" target="n" data-glyph="10,1" class="i field">REP_3_6</a> = 16;
+
+		<b>private const int</b> <a id="9c47b1aa215c0656" href="../R/9c47b1aa215c0656.html" target="n" data-glyph="10,1" class="i field">REPZ_3_10</a> = 17;
+
+		<b>private const int</b> <a id="7bd3b3aa01834019" href="../R/7bd3b3aa01834019.html" target="n" data-glyph="10,1" class="i field">REPZ_11_138</a> = 18;
+
+		<b>private const int</b> <a id="a7d3b03a808cc401" href="../R/a7d3b03a808cc401.html" target="n" data-glyph="10,1" class="i field">MIN_MATCH</a> = 3;
+
+		<b>private const int</b> <a id="6fba5bc2103c7f9c" href="../R/6fba5bc2103c7f9c.html" target="n" data-glyph="10,1" class="i field">MAX_MATCH</a> = 258;
+
+		<b>private const int</b> <a id="15c7da8ac392c9d2" href="../R/15c7da8ac392c9d2.html" target="n" data-glyph="10,1" class="i field">MIN_LOOKAHEAD</a> = (<a href="#6fba5bc2103c7f9c" class="i field">MAX_MATCH</a> + <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> + 1);
+
+		<b>private const int</b> <a id="da8a73142e3b6c8c" href="../R/da8a73142e3b6c8c.html" target="n" data-glyph="10,1" class="i field">MAX_BITS</a> = 15;
+
+		<b>private const int</b> <a id="56512b44a00391f9" href="../R/56512b44a00391f9.html" target="n" data-glyph="10,1" class="i field">D_CODES</a> = 30;
+
+		<b>private const int</b> <a id="019a406dcc3d89fa" href="../R/019a406dcc3d89fa.html" target="n" data-glyph="10,1" class="i field">BL_CODES</a> = 19;
+
+		<b>private const int</b> <a id="5f582f2693c3a429" href="../R/5f582f2693c3a429.html" target="n" data-glyph="10,1" class="i field">LENGTH_CODES</a> = 29;
+
+		<b>private const int</b> <a id="c85e9388c69f8539" href="../R/c85e9388c69f8539.html" target="n" data-glyph="10,1" class="i field">LITERALS</a> = 256;
+
+		<b>private const int</b> <a id="a16b2809874c168d" href="../R/a16b2809874c168d.html" target="n" data-glyph="10,1" class="i field">L_CODES</a> = (<a href="#c85e9388c69f8539" class="i field">LITERALS</a> + 1 + <a href="#5f582f2693c3a429" class="i field">LENGTH_CODES</a>);
+
+		<b>private const int</b> <a id="964cf1c9bfe3a585" href="../R/964cf1c9bfe3a585.html" target="n" data-glyph="10,1" class="i field">HEAP_SIZE</a> = (2 * <a href="#a16b2809874c168d" class="i field">L_CODES</a> + 1);
+
+		<b>private const int</b> <a id="cd1802d686d6c7b8" href="../R/cd1802d686d6c7b8.html" target="n" data-glyph="10,1" class="i field">END_BLOCK</a> = 256;
+
+		<b>internal</b> <a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <a id="f18b92855bfed871" href="../R/f18b92855bfed871.html" target="n" data-glyph="44,1" class="i field">strm</a>;
+
+		<b>internal int</b> <a id="7658ba16b9d2afdc" href="../R/7658ba16b9d2afdc.html" target="n" data-glyph="44,1" class="i field">status</a>;
+
+		<b>internal byte</b>[] <a id="e4f5db4d7a06631c" href="../R/e4f5db4d7a06631c.html" target="n" data-glyph="44,1" class="i field">pending_buf</a>;
+
+		<b>internal int</b> <a id="d0ef8fdd1c319187" href="../R/d0ef8fdd1c319187.html" target="n" data-glyph="44,1" class="i field">pending_buf_size</a>;
+
+		<b>internal int</b> <a id="cb7773013e470c1f" href="../R/cb7773013e470c1f.html" target="n" data-glyph="44,1" class="i field">pending_out</a>;
+
+		<b>internal int</b> <a id="0bb254aeaa3b16f8" href="../R/0bb254aeaa3b16f8.html" target="n" data-glyph="44,1" class="i field">pending</a>;
+
+		<b>internal int</b> <a id="ce54a4c5dc9102ea" href="../R/ce54a4c5dc9102ea.html" target="n" data-glyph="44,1" class="i field">noheader</a>;
+
+		<b>internal byte</b> <a id="c0145599e347eee5" href="../R/c0145599e347eee5.html" target="n" data-glyph="44,1" class="i field">data_type</a>;
+
+		<b>internal byte</b> <a id="4ed00c30e4ecad0b" href="../R/4ed00c30e4ecad0b.html" target="n" data-glyph="44,1" class="i field">method</a>;
+
+		<b>internal int</b> <a id="4effa61f0b42ac8d" href="../R/4effa61f0b42ac8d.html" target="n" data-glyph="44,1" class="i field">last_flush</a>;
+
+		<b>internal int</b> <a id="dc5dcec56b1e9733" href="../R/dc5dcec56b1e9733.html" target="n" data-glyph="44,1" class="i field">w_size</a>;
+
+		<b>internal int</b> <a id="7c565064193d611e" href="../R/7c565064193d611e.html" target="n" data-glyph="44,1" class="i field">w_bits</a>;
+
+		<b>internal int</b> <a id="10cb771691388162" href="../R/10cb771691388162.html" target="n" data-glyph="44,1" class="i field">w_mask</a>;
+
+		<b>internal byte</b>[] <a id="37fe3aa0c387ed45" href="../R/37fe3aa0c387ed45.html" target="n" data-glyph="44,1" class="i field">window</a>;
+
+		<b>internal int</b> <a id="b46ccaac31960f79" href="../R/b46ccaac31960f79.html" target="n" data-glyph="44,1" class="i field">window_size</a>;
+
+		<b>internal short</b>[] <a id="71082c8b37d0663a" href="../R/71082c8b37d0663a.html" target="n" data-glyph="44,1" class="i field">prev</a>;
+
+		<b>internal short</b>[] <a id="9a22fef74b92d970" href="../R/9a22fef74b92d970.html" target="n" data-glyph="44,1" class="i field">head</a>;
+
+		<b>internal int</b> <a id="d6a7ab2fff205afc" href="../R/d6a7ab2fff205afc.html" target="n" data-glyph="44,1" class="i field">ins_h</a>;
+
+		<b>internal int</b> <a id="67a615322048a249" href="../R/67a615322048a249.html" target="n" data-glyph="44,1" class="i field">hash_size</a>;
+
+		<b>internal int</b> <a id="1d1a2425799fdbee" href="../R/1d1a2425799fdbee.html" target="n" data-glyph="44,1" class="i field">hash_bits</a>;
+
+		<b>internal int</b> <a id="31e072d1da83c5de" href="../R/31e072d1da83c5de.html" target="n" data-glyph="44,1" class="i field">hash_mask</a>;
+
+		<b>internal int</b> <a id="88592e5739843d1e" href="../R/88592e5739843d1e.html" target="n" data-glyph="44,1" class="i field">hash_shift</a>;
+
+		<b>internal int</b> <a id="e2e7bfaeb67a3367" href="../R/e2e7bfaeb67a3367.html" target="n" data-glyph="44,1" class="i field">block_start</a>;
+
+		<b>internal int</b> <a id="ce294cd9b5457434" href="../R/ce294cd9b5457434.html" target="n" data-glyph="44,1" class="i field">match_length</a>;
+
+		<b>internal int</b> <a id="7c4f9e33810a3be3" href="../R/7c4f9e33810a3be3.html" target="n" data-glyph="44,1" class="i field">prev_match</a>;
+
+		<b>internal int</b> <a id="aa66f4096304500a" href="../R/aa66f4096304500a.html" target="n" data-glyph="44,1" class="i field">match_available</a>;
+
+		<b>internal int</b> <a id="110199819b4a651e" href="../R/110199819b4a651e.html" target="n" data-glyph="44,1" class="i field">strstart</a>;
+
+		<b>internal int</b> <a id="6e2021b3e2ded9f4" href="../R/6e2021b3e2ded9f4.html" target="n" data-glyph="44,1" class="i field">match_start</a>;
+
+		<b>internal int</b> <a id="65100620eb47708a" href="../R/65100620eb47708a.html" target="n" data-glyph="44,1" class="i field">lookahead</a>;
+
+		<b>internal int</b> <a id="90ab88f7f3b49a95" href="../R/90ab88f7f3b49a95.html" target="n" data-glyph="44,1" class="i field">prev_length</a>;
+
+		<b>internal int</b> <a id="575d8a9cd3e4286e" href="../R/575d8a9cd3e4286e.html" target="n" data-glyph="44,1" class="i field">max_chain_length</a>;
+
+		<b>internal int</b> <a id="be3b4173e16bb454" href="../R/be3b4173e16bb454.html" target="n" data-glyph="44,1" class="i field">max_lazy_match</a>;
+
+		<b>internal int</b> <a id="2242caaec0549bdd" href="../R/2242caaec0549bdd.html" target="n" data-glyph="44,1" class="i field">level</a>;
+
+		<b>internal int</b> <a id="dae9df1d0fcb2511" href="../R/dae9df1d0fcb2511.html" target="n" data-glyph="44,1" class="i field">strategy</a>;
+
+		<b>internal int</b> <a id="c3944b5bd6b2d11d" href="../R/c3944b5bd6b2d11d.html" target="n" data-glyph="44,1" class="i field">good_match</a>;
+
+		<b>internal int</b> <a id="229b995db570b2ba" href="../R/229b995db570b2ba.html" target="n" data-glyph="44,1" class="i field">nice_match</a>;
+
+		<b>internal short</b>[] <a id="b75921388e8d5816" href="../R/b75921388e8d5816.html" target="n" data-glyph="44,1" class="i field">dyn_ltree</a>;
+
+		<b>internal short</b>[] <a id="8cf52ed1aa0224a3" href="../R/8cf52ed1aa0224a3.html" target="n" data-glyph="44,1" class="i field">dyn_dtree</a>;
+
+		<b>internal short</b>[] <a id="59e1c625c458422b" href="../R/59e1c625c458422b.html" target="n" data-glyph="44,1" class="i field">bl_tree</a>;
+
+		<b>internal</b> <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a> <a id="af278fad7c3880eb" href="../R/af278fad7c3880eb.html" target="n" data-glyph="44,1" class="i field">l_desc</a> = <b>new</b> <a href="Tree.cs.html#6a085b429af69285" class="t constructor">Tree</a>();
+
+		<b>internal</b> <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a> <a id="5d50e46301716482" href="../R/5d50e46301716482.html" target="n" data-glyph="44,1" class="i field">d_desc</a> = <b>new</b> <a href="Tree.cs.html#6a085b429af69285" class="t constructor">Tree</a>();
+
+		<b>internal</b> <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a> <a id="fd9867c103e64624" href="../R/fd9867c103e64624.html" target="n" data-glyph="44,1" class="i field">bl_desc</a> = <b>new</b> <a href="Tree.cs.html#6a085b429af69285" class="t constructor">Tree</a>();
+
+		<b>internal short</b>[] <a id="e1eb62f5691863c8" href="../R/e1eb62f5691863c8.html" target="n" data-glyph="44,1" class="i field">bl_count</a> = <b>new</b> <b>short</b>[<a href="#da8a73142e3b6c8c" class="i field">MAX_BITS</a> + 1];
+
+		<b>internal int</b>[] <a id="0d38140c93ea33c2" href="../R/0d38140c93ea33c2.html" target="n" data-glyph="44,1" class="i field">heap</a> = <b>new</b> <b>int</b>[2 * <a href="#a16b2809874c168d" class="i field">L_CODES</a> + 1];
+
+		<b>internal int</b> <a id="88bdb350a3e0b2ba" href="../R/88bdb350a3e0b2ba.html" target="n" data-glyph="44,1" class="i field">heap_len</a>;
+
+		<b>internal int</b> <a id="4e3066a4f154e28b" href="../R/4e3066a4f154e28b.html" target="n" data-glyph="44,1" class="i field">heap_max</a>;
+
+		<b>internal byte</b>[] <a id="23cc4a91bc38f9cb" href="../R/23cc4a91bc38f9cb.html" target="n" data-glyph="44,1" class="i field">depth</a> = <b>new</b> <b>byte</b>[2 * <a href="#a16b2809874c168d" class="i field">L_CODES</a> + 1];
+
+		<b>internal int</b> <a id="e743a76c95b181ba" href="../R/e743a76c95b181ba.html" target="n" data-glyph="44,1" class="i field">l_buf</a>;
+
+		<b>internal int</b> <a id="8498967c06b62d5f" href="../R/8498967c06b62d5f.html" target="n" data-glyph="44,1" class="i field">lit_bufsize</a>;
+
+		<b>internal int</b> <a id="16019a7eb1afab0b" href="../R/16019a7eb1afab0b.html" target="n" data-glyph="44,1" class="i field">last_lit</a>;
+
+		<b>internal int</b> <a id="a63851a98d161a3c" href="../R/a63851a98d161a3c.html" target="n" data-glyph="44,1" class="i field">d_buf</a>;
+
+		<b>internal int</b> <a id="a879f0e81da37965" href="../R/a879f0e81da37965.html" target="n" data-glyph="44,1" class="i field">opt_len</a>;
+
+		<b>internal int</b> <a id="5b633ee50ff6b02b" href="../R/5b633ee50ff6b02b.html" target="n" data-glyph="44,1" class="i field">static_len</a>;
+
+		<b>internal int</b> <a id="4858f88a3e954deb" href="../R/4858f88a3e954deb.html" target="n" data-glyph="44,1" class="i field">matches</a>;
+
+		<b>internal int</b> <a id="587161ae001923bd" href="../R/587161ae001923bd.html" target="n" data-glyph="44,1" class="i field">last_eob_len</a>;
+
+		<b>internal short</b> <a id="3f39297fab059905" href="../R/3f39297fab059905.html" target="n" data-glyph="44,1" class="i field">bi_buf</a>;
+
+		<b>internal int</b> <a id="4103439be7752aac" href="../R/4103439be7752aac.html" target="n" data-glyph="44,1" class="i field">bi_valid</a>;
+
+		<b>public</b> <a id="b9094af700f7c37c" href="../R/b9094af700f7c37c.html" target="n" data-glyph="72,1" class="i constructor">Deflate</a>()
+		{
+			<span class="c">// Z_NEED_DICT       2</span>
+			<span class="c">// Z_STREAM_END      1</span>
+			<span class="c">// Z_OK              0</span>
+			<span class="c">// Z_ERRNO         (-1)</span>
+			<span class="c">// Z_STREAM_ERROR  (-2)</span>
+			<span class="c">// Z_DATA_ERROR    (-3)</span>
+			<span class="c">// Z_MEM_ERROR     (-4)</span>
+			<span class="c">// Z_BUF_ERROR     (-5)</span>
+			<span class="c">// Z_VERSION_ERROR (-6)</span>
+			<span class="c">// block not completed, need more input or more output</span>
+			<span class="c">// block flush performed</span>
+			<span class="c">// finish started, need only more output at next deflate</span>
+			<span class="c">// finish done, accept no more input or output</span>
+			<span class="c">// preset dictionary flag in zlib header</span>
+			<span class="c">// The deflate compression method</span>
+			<span class="c">// The three kinds of block type</span>
+			<span class="c">// repeat previous bit length 3-6 times (2 bits of repeat count)</span>
+			<span class="c">// repeat a zero length 3-10 times  (3 bits of repeat count)</span>
+			<span class="c">// repeat a zero length 11-138 times  (7 bits of repeat count)</span>
+			<span class="c">// pointer back to this zlib stream</span>
+			<span class="c">// as the name implies</span>
+			<span class="c">// output still pending</span>
+			<span class="c">// size of pending_buf</span>
+			<span class="c">// next pending byte to output to the stream</span>
+			<span class="c">// nb of bytes in the pending buffer</span>
+			<span class="c">// suppress zlib header and adler32</span>
+			<span class="c">// UNKNOWN, BINARY or ASCII</span>
+			<span class="c">// STORED (for zip only) or DEFLATED</span>
+			<span class="c">// value of flush param for previous deflate call</span>
+			<span class="c">// LZ77 window size (32K by default)</span>
+			<span class="c">// log2(w_size)  (8..16)</span>
+			<span class="c">// w_size - 1</span>
+			<span class="c">// Sliding window. Input bytes are read into the second half of the window,</span>
+			<span class="c">// and move to the first half later to keep a dictionary of at least wSize</span>
+			<span class="c">// bytes. With this organization, matches are limited to a distance of</span>
+			<span class="c">// wSize-MAX_MATCH bytes, but this ensures that IO is always</span>
+			<span class="c">// performed with a length multiple of the block size. Also, it limits</span>
+			<span class="c">// the window size to 64K, which is quite useful on MSDOS.</span>
+			<span class="c">// To do: use the user input buffer as sliding window.</span>
+			<span class="c">// Actual size of window: 2*wSize, except when the user input buffer</span>
+			<span class="c">// is directly used as sliding window.</span>
+			<span class="c">// Link to older string with same hash index. To limit the size of this</span>
+			<span class="c">// array to 64K, this link is maintained only for the last 32K strings.</span>
+			<span class="c">// An index in this array is thus a window index modulo 32K.</span>
+			<span class="c">// Heads of the hash chains or NIL.</span>
+			<span class="c">// hash index of string to be inserted</span>
+			<span class="c">// number of elements in hash table</span>
+			<span class="c">// log2(hash_size)</span>
+			<span class="c">// hash_size-1</span>
+			<span class="c">// Number of bits by which ins_h must be shifted at each input</span>
+			<span class="c">// step. It must be such that after MIN_MATCH steps, the oldest</span>
+			<span class="c">// byte no longer takes part in the hash key, that is:</span>
+			<span class="c">// hash_shift * MIN_MATCH &gt;= hash_bits</span>
+			<span class="c">// Window position at the beginning of the current output block. Gets</span>
+			<span class="c">// negative when the window is moved backwards.</span>
+			<span class="c">// length of best match</span>
+			<span class="c">// previous match</span>
+			<span class="c">// set if previous match exists</span>
+			<span class="c">// start of string to insert</span>
+			<span class="c">// start of matching string</span>
+			<span class="c">// number of valid bytes ahead in window</span>
+			<span class="c">// Length of the best match at previous step. Matches not greater than this</span>
+			<span class="c">// are discarded. This is used in the lazy match evaluation.</span>
+			<span class="c">// To speed up deflation, hash chains are never searched beyond this</span>
+			<span class="c">// length.  A higher limit improves compression ratio but degrades the speed.</span>
+			<span class="c">// Attempt to find a better match only when the current match is strictly</span>
+			<span class="c">// smaller than this value. This mechanism is used only for compression</span>
+			<span class="c">// levels &gt;= 4.</span>
+			<span class="c">// Insert new strings in the hash table only if the match length is not</span>
+			<span class="c">// greater than this length. This saves time but degrades compression.</span>
+			<span class="c">// max_insert_length is used only for compression levels &lt;= 3.</span>
+			<span class="c">// compression level (1..9)</span>
+			<span class="c">// favor or force Huffman coding</span>
+			<span class="c">// Use a faster search when the previous match is longer than this</span>
+			<span class="c">// Stop searching when current match exceeds this</span>
+			<span class="c">// literal and length tree</span>
+			<span class="c">// distance tree</span>
+			<span class="c">// Huffman tree for bit lengths</span>
+			<span class="c">// desc for literal tree</span>
+			<span class="c">// desc for distance tree</span>
+			<span class="c">// desc for bit length tree</span>
+			<span class="c">// number of codes at each bit length for an optimal tree</span>
+			<span class="c">// heap used to build the Huffman trees</span>
+			<span class="c">// number of elements in the heap</span>
+			<span class="c">// element of largest frequency</span>
+			<span class="c">// The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.</span>
+			<span class="c">// The same heap array is used to build all trees.</span>
+			<span class="c">// Depth of each subtree used as tie breaker for trees of equal frequency</span>
+			<span class="c">// index for literals or lengths */</span>
+			<span class="c">// Size of match buffer for literals/lengths.  There are 4 reasons for</span>
+			<span class="c">// limiting lit_bufsize to 64K:</span>
+			<span class="c">//   - frequencies can be kept in 16 bit counters</span>
+			<span class="c">//   - if compression is not successful for the first block, all input</span>
+			<span class="c">//     data is still in the window so we can still emit a stored block even</span>
+			<span class="c">//     when input comes from standard input.  (This can also be done for</span>
+			<span class="c">//     all blocks if lit_bufsize is not greater than 32K.)</span>
+			<span class="c">//   - if compression is not successful for a file smaller than 64K, we can</span>
+			<span class="c">//     even emit a stored file instead of a stored block (saving 5 bytes).</span>
+			<span class="c">//     This is applicable only for zip (not gzip or zlib).</span>
+			<span class="c">//   - creating new Huffman trees less frequently may not provide fast</span>
+			<span class="c">//     adaptation to changes in the input data statistics. (Take for</span>
+			<span class="c">//     example a binary file with poorly compressible code followed by</span>
+			<span class="c">//     a highly compressible string table.) Smaller buffer sizes give</span>
+			<span class="c">//     fast adaptation but have of course the overhead of transmitting</span>
+			<span class="c">//     trees more frequently.</span>
+			<span class="c">//   - I can&#39;t count above 4</span>
+			<span class="c">// running index in l_buf</span>
+			<span class="c">// Buffer for distances. To simplify the code, d_buf and l_buf have</span>
+			<span class="c">// the same number of elements. To use different lengths, an extra flag</span>
+			<span class="c">// array would be necessary.</span>
+			<span class="c">// index of pendig_buf</span>
+			<span class="c">// bit length of current block with optimal trees</span>
+			<span class="c">// bit length of current block with static trees</span>
+			<span class="c">// number of string matches in current block</span>
+			<span class="c">// bit length of EOB code for last block</span>
+			<span class="c">// Output buffer. bits are inserted starting at the bottom (least</span>
+			<span class="c">// significant bits).</span>
+			<span class="c">// Number of valid bits in bi_buf.  All bits above the last valid bit</span>
+			<span class="c">// are always zero.</span>
+			<a href="#b75921388e8d5816" class="i field">dyn_ltree</a> = <b>new</b> <b>short</b>[<a href="#964cf1c9bfe3a585" class="i field">HEAP_SIZE</a> * 2];
+			<a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a> = <b>new</b> <b>short</b>[(2 * <a href="#56512b44a00391f9" class="i field">D_CODES</a> + 1) * 2];
+			<span class="c">// distance tree</span>
+			<a href="#59e1c625c458422b" class="i field">bl_tree</a> = <b>new</b> <b>short</b>[(2 * <a href="#019a406dcc3d89fa" class="i field">BL_CODES</a> + 1) * 2];
+		}
+
+		<span class="c">// Huffman tree for bit lengths</span>
+		<b>internal void</b> <a id="d75444f64523e033" href="../R/d75444f64523e033.html" target="n" data-glyph="74,1" class="i method">Lm_init</a>()
+		{
+			<a href="#b46ccaac31960f79" class="i field">window_size</a> = 2 * <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+			<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#67a615322048a249" class="i field">hash_size</a> - 1] = 0;
+			<b>for</b> (<b>int</b> <span id="r5 rd" class="r5 r">i</span> = 0; <span class="r5 r">i</span> &lt; <a href="#67a615322048a249" class="i field">hash_size</a> - 1; <span class="r5 r">i</span>++)
+			{
+				<a href="#9a22fef74b92d970" class="i field">head</a>[<span class="r5 r">i</span>] = 0;
+			}
+			<span class="c">// Set the default configuration parameters:</span>
+			<a href="#be3b4173e16bb454" class="i field">max_lazy_match</a> = <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#e56f9470931c8117" class="i field">max_lazy</a>;
+			<a href="#c3944b5bd6b2d11d" class="i field">good_match</a> = <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#51fac970e6007ec8" class="i field">good_length</a>;
+			<a href="#229b995db570b2ba" class="i field">nice_match</a> = <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#541dfcd6a246648a" class="i field">nice_length</a>;
+			<a href="#575d8a9cd3e4286e" class="i field">max_chain_length</a> = <a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>.<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#28a864d0763d9c14" class="i field">max_chain</a>;
+			<a href="#110199819b4a651e" class="i field">strstart</a> = 0;
+			<a href="#e2e7bfaeb67a3367" class="i field">block_start</a> = 0;
+			<a href="#65100620eb47708a" class="i field">lookahead</a> = 0;
+			<a href="#ce294cd9b5457434" class="i field">match_length</a> = <a href="#90ab88f7f3b49a95" class="i field">prev_length</a> = <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1;
+			<a href="#aa66f4096304500a" class="i field">match_available</a> = 0;
+			<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = 0;
+		}
+
+		<span class="c">// Initialize the tree data structures for a new zlib stream.</span>
+		<b>internal void</b> <a id="a63080280cf23a7c" href="../R/a63080280cf23a7c.html" target="n" data-glyph="74,1" class="i method">Tr_init</a>()
+		{
+			<a href="#af278fad7c3880eb" class="i field">l_desc</a>.<a href="Tree.cs.html#2f66024b6566ce16" class="i field">dyn_tree</a> = <a href="#b75921388e8d5816" class="i field">dyn_ltree</a>;
+			<a href="#af278fad7c3880eb" class="i field">l_desc</a>.<a href="Tree.cs.html#35f277ae82fb1464" class="i field">stat_desc</a> = <a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#7057c11152aad310" class="i field">static_l_desc</a>;
+			<a href="#5d50e46301716482" class="i field">d_desc</a>.<a href="Tree.cs.html#2f66024b6566ce16" class="i field">dyn_tree</a> = <a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>;
+			<a href="#5d50e46301716482" class="i field">d_desc</a>.<a href="Tree.cs.html#35f277ae82fb1464" class="i field">stat_desc</a> = <a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#5e88effa50f2dc69" class="i field">static_d_desc</a>;
+			<a href="#fd9867c103e64624" class="i field">bl_desc</a>.<a href="Tree.cs.html#2f66024b6566ce16" class="i field">dyn_tree</a> = <a href="#59e1c625c458422b" class="i field">bl_tree</a>;
+			<a href="#fd9867c103e64624" class="i field">bl_desc</a>.<a href="Tree.cs.html#35f277ae82fb1464" class="i field">stat_desc</a> = <a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#aed51514b6ca9151" class="i field">static_bl_desc</a>;
+			<a href="#3f39297fab059905" class="i field">bi_buf</a> = 0;
+			<a href="#4103439be7752aac" class="i field">bi_valid</a> = 0;
+			<a href="#587161ae001923bd" class="i field">last_eob_len</a> = 8;
+			<span class="c">// enough lookahead for inflate</span>
+			<span class="c">// Initialize the first block of the first file:</span>
+			<a href="#037adb1d7d2205d0" class="i method">Init_block</a>();
+		}
+
+		<b>internal void</b> <a id="037adb1d7d2205d0" href="../R/037adb1d7d2205d0.html" target="n" data-glyph="74,1" class="i method">Init_block</a>()
+		{
+			<span class="c">// Initialize the trees.</span>
+			<b>for</b> (<b>int</b> <span id="r6 rd" class="r6 r">i</span> = 0; <span class="r6 r">i</span> &lt; <a href="#a16b2809874c168d" class="i field">L_CODES</a>; <span class="r6 r">i</span>++)
+			{
+				<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[<span class="r6 r">i</span> * 2] = 0;
+			}
+			<b>for</b> (<b>int</b> <span id="r7 rd" class="r7 r">i_1</span> = 0; <span class="r7 r">i_1</span> &lt; <a href="#56512b44a00391f9" class="i field">D_CODES</a>; <span class="r7 r">i_1</span>++)
+			{
+				<a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>[<span class="r7 r">i_1</span> * 2] = 0;
+			}
+			<b>for</b> (<b>int</b> <span id="r8 rd" class="r8 r">i_2</span> = 0; <span class="r8 r">i_2</span> &lt; <a href="#019a406dcc3d89fa" class="i field">BL_CODES</a>; <span class="r8 r">i_2</span>++)
+			{
+				<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<span class="r8 r">i_2</span> * 2] = 0;
+			}
+			<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[<a href="#cd1802d686d6c7b8" class="i field">END_BLOCK</a> * 2] = 1;
+			<a href="#a879f0e81da37965" class="i field">opt_len</a> = <a href="#5b633ee50ff6b02b" class="i field">static_len</a> = 0;
+			<a href="#16019a7eb1afab0b" class="i field">last_lit</a> = <a href="#4858f88a3e954deb" class="i field">matches</a> = 0;
+		}
+
+		<span class="c">// Restore the heap property by moving down the tree starting at node k,</span>
+		<span class="c">// exchanging a node with the smallest of its two sons if necessary, stopping</span>
+		<span class="c">// when the heap property is re-established (each father smaller than its</span>
+		<span class="c">// two sons).</span>
+		<b>internal void</b> <a id="250ac73366996b97" href="../R/250ac73366996b97.html" target="n" data-glyph="74,1" class="i method">Pqdownheap</a>(<b>short</b>[] <span id="r9 rd" class="r9 r">tree</span>, <b>int</b> <span id="r10 rd" class="r10 r">k</span>)
+		{
+			<span class="c">// the tree to restore</span>
+			<span class="c">// node to move down</span>
+			<b>int</b> <span id="r11 rd" class="r11 r">v</span> = <a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r10 r">k</span>];
+			<b>int</b> <span id="r12 rd" class="r12 r">j</span> = <span class="r10 r">k</span> &lt;&lt; 1;
+			<span class="c">// left son of k</span>
+			<b>while</b> (<span class="r12 r">j</span> &lt;= <a href="#88bdb350a3e0b2ba" class="i field">heap_len</a>)
+			{
+				<span class="c">// Set j to the smallest of the two sons:</span>
+				<b>if</b> (<span class="r12 r">j</span> &lt; <a href="#88bdb350a3e0b2ba" class="i field">heap_len</a> &amp;&amp; <a href="#0a58d2b5bfb3ee17" class="i method">Smaller</a>(<span class="r9 r">tree</span>, <a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r12 r">j</span> + 1], <a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r12 r">j</span>], <a href="#23cc4a91bc38f9cb" class="i field">depth</a>))
+				{
+					<span class="r12 r">j</span>++;
+				}
+				<span class="c">// Exit if v is smaller than both sons</span>
+				<b>if</b> (<a href="#0a58d2b5bfb3ee17" class="i method">Smaller</a>(<span class="r9 r">tree</span>, <span class="r11 r">v</span>, <a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r12 r">j</span>], <a href="#23cc4a91bc38f9cb" class="i field">depth</a>))
+				{
+					<b>break</b>;
+				}
+				<span class="c">// Exchange v with the smallest son</span>
+				<a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r10 r">k</span>] = <a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r12 r">j</span>];
+				<span class="r10 r">k</span> = <span class="r12 r">j</span>;
+				<span class="c">// And continue down the tree, setting j to the left son of k</span>
+				<span class="r12 r">j</span> &lt;&lt;= 1;
+			}
+			<a href="#0d38140c93ea33c2" class="i field">heap</a>[<span class="r10 r">k</span>] = <span class="r11 r">v</span>;
+		}
+
+		<b>internal static bool</b> <a id="0a58d2b5bfb3ee17" href="../R/0a58d2b5bfb3ee17.html" target="n" data-glyph="74,1" class="i method">Smaller</a>(<b>short</b>[] <span id="r13 rd" class="r13 r">tree</span>, <b>int</b> <span id="r14 rd" class="r14 r">n</span>, <b>int</b> <span id="r15 rd" class="r15 r">m</span>, <b>byte</b>[] <span id="r16 rd" class="r16 r">depth</span>)
+		{
+			<b>short</b> <span id="r17 rd" class="r17 r">tn2</span> = <span class="r13 r">tree</span>[<span class="r14 r">n</span> * 2];
+			<b>short</b> <span id="r18 rd" class="r18 r">tm2</span> = <span class="r13 r">tree</span>[<span class="r15 r">m</span> * 2];
+			<b>return</b> (<span class="r17 r">tn2</span> &lt; <span class="r18 r">tm2</span> || (<span class="r17 r">tn2</span> == <span class="r18 r">tm2</span> &amp;&amp; ((<b>sbyte</b>)<span class="r16 r">depth</span>[<span class="r14 r">n</span>]) &lt;= <span class="r16 r">depth</span>[<span class="r15 r">m</span>]));
+		}
+
+		<span class="c">// Scan a literal or distance tree to determine the frequencies of the codes</span>
+		<span class="c">// in the bit length tree.</span>
+		<b>internal void</b> <a id="b23ac84962c7e869" href="../R/b23ac84962c7e869.html" target="n" data-glyph="74,1" class="i method">Scan_tree</a>(<b>short</b>[] <span id="r19 rd" class="r19 r">tree</span>, <b>int</b> <span id="r20 rd" class="r20 r">max_code</span>)
+		{
+			<span class="c">// the tree to be scanned</span>
+			<span class="c">// and its largest code of non zero frequency</span>
+			<b>int</b> <span id="r21 rd" class="r21 r">n</span>;
+			<span class="c">// iterates over all tree elements</span>
+			<b>int</b> <span id="r22 rd" class="r22 r">prevlen</span> = -1;
+			<span class="c">// last emitted length</span>
+			<b>int</b> <span id="r23 rd" class="r23 r">curlen</span>;
+			<span class="c">// length of current code</span>
+			<b>int</b> <span id="r24 rd" class="r24 r">nextlen</span> = <span class="r19 r">tree</span>[0 * 2 + 1];
+			<span class="c">// length of next code</span>
+			<b>int</b> <span id="r25 rd" class="r25 r">count</span> = 0;
+			<span class="c">// repeat count of the current code</span>
+			<b>int</b> <span id="r26 rd" class="r26 r">max_count</span> = 7;
+			<span class="c">// max repeat count</span>
+			<b>int</b> <span id="r27 rd" class="r27 r">min_count</span> = 4;
+			<span class="c">// min repeat count</span>
+			<b>if</b> (<span class="r24 r">nextlen</span> == 0)
+			{
+				<span class="r26 r">max_count</span> = 138;
+				<span class="r27 r">min_count</span> = 3;
+			}
+			<span class="r19 r">tree</span>[(<span class="r20 r">max_code</span> + 1) * 2 + 1] = <b>unchecked</b>((<b>short</b>)0xffff);
+			<span class="c">// guard</span>
+			<b>for</b> (<span class="r21 r">n</span> = 0; <span class="r21 r">n</span> &lt;= <span class="r20 r">max_code</span>; <span class="r21 r">n</span>++)
+			{
+				<span class="r23 r">curlen</span> = <span class="r24 r">nextlen</span>;
+				<span class="r24 r">nextlen</span> = <span class="r19 r">tree</span>[(<span class="r21 r">n</span> + 1) * 2 + 1];
+				<b>if</b> (++<span class="r25 r">count</span> &lt; <span class="r26 r">max_count</span> &amp;&amp; <span class="r23 r">curlen</span> == <span class="r24 r">nextlen</span>)
+				{
+					<b>continue</b>;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r25 r">count</span> &lt; <span class="r27 r">min_count</span>)
+					{
+						<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<span class="r23 r">curlen</span> * 2] += (<b>short</b>) <span class="r25 r">count</span>;
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r23 r">curlen</span> != 0)
+						{
+							<b>if</b> (<span class="r23 r">curlen</span> != <span class="r22 r">prevlen</span>)
+							{
+								<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<span class="r23 r">curlen</span> * 2]++;
+							}
+							<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<a href="#e8ccbb9463f1bbdd" class="i field">REP_3_6</a> * 2]++;
+						}
+						<b>else</b>
+						{
+							<b>if</b> (<span class="r25 r">count</span> &lt;= 10)
+							{
+								<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<a href="#9c47b1aa215c0656" class="i field">REPZ_3_10</a> * 2]++;
+							}
+							<b>else</b>
+							{
+								<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<a href="#7bd3b3aa01834019" class="i field">REPZ_11_138</a> * 2]++;
+							}
+						}
+					}
+				}
+				<span class="r25 r">count</span> = 0;
+				<span class="r22 r">prevlen</span> = <span class="r23 r">curlen</span>;
+				<b>if</b> (<span class="r24 r">nextlen</span> == 0)
+				{
+					<span class="r26 r">max_count</span> = 138;
+					<span class="r27 r">min_count</span> = 3;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r23 r">curlen</span> == <span class="r24 r">nextlen</span>)
+					{
+						<span class="r26 r">max_count</span> = 6;
+						<span class="r27 r">min_count</span> = 3;
+					}
+					<b>else</b>
+					{
+						<span class="r26 r">max_count</span> = 7;
+						<span class="r27 r">min_count</span> = 4;
+					}
+				}
+			}
+		}
+
+		<span class="c">// Construct the Huffman tree for the bit lengths and return the index in</span>
+		<span class="c">// bl_order of the last bit length code to send.</span>
+		<b>internal int</b> <a id="9a64cb702a2dcbc8" href="../R/9a64cb702a2dcbc8.html" target="n" data-glyph="74,1" class="i method">Build_bl_tree</a>()
+		{
+			<b>int</b> <span id="r28 rd" class="r28 r">max_blindex</span>;
+			<span class="c">// index of last bit length code of non zero freq</span>
+			<span class="c">// Determine the bit length frequencies for literal and distance trees</span>
+			<a href="#b23ac84962c7e869" class="i method">Scan_tree</a>(<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>, <a href="#af278fad7c3880eb" class="i field">l_desc</a>.<a href="Tree.cs.html#ef6dda7568bcac9f" class="i field">max_code</a>);
+			<a href="#b23ac84962c7e869" class="i method">Scan_tree</a>(<a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>, <a href="#5d50e46301716482" class="i field">d_desc</a>.<a href="Tree.cs.html#ef6dda7568bcac9f" class="i field">max_code</a>);
+			<span class="c">// Build the bit length tree:</span>
+			<a href="#fd9867c103e64624" class="i field">bl_desc</a>.<a href="Tree.cs.html#03c7fcd40045229c" class="i method">Build_tree</a>(<a href="#d1ad14fae9b8eb5f" class="k">this</a>);
+			<span class="c">// opt_len now includes the length of the tree representations, except</span>
+			<span class="c">// the lengths of the bit lengths codes and the 5+5+4 bits for the counts.</span>
+			<span class="c">// Determine the number of bit length codes to send. The pkzip format</span>
+			<span class="c">// requires that at least 4 bit length codes be sent. (appnote.txt says</span>
+			<span class="c">// 3 but the actual value used is 4.)</span>
+			<b>for</b> (<span class="r28 r">max_blindex</span> = <a href="#019a406dcc3d89fa" class="i field">BL_CODES</a> - 1; <span class="r28 r">max_blindex</span> &gt;= 3; <span class="r28 r">max_blindex</span>--)
+			{
+				<b>if</b> (<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#aaabf18cb0ec560e" class="i field">bl_order</a>[<span class="r28 r">max_blindex</span>] * 2 + 1] != 0)
+				{
+					<b>break</b>;
+				}
+			}
+			<span class="c">// Update opt_len to include the bit length tree and counts</span>
+			<a href="#a879f0e81da37965" class="i field">opt_len</a> += 3 * (<span class="r28 r">max_blindex</span> + 1) + 5 + 5 + 4;
+			<b>return</b> <span class="r28 r">max_blindex</span>;
+		}
+
+		<span class="c">// Send the header for a block using dynamic Huffman trees: the counts, the</span>
+		<span class="c">// lengths of the bit length codes, the literal tree and the distance tree.</span>
+		<span class="c">// IN assertion: lcodes &gt;= 257, dcodes &gt;= 1, blcodes &gt;= 4.</span>
+		<b>internal void</b> <a id="f94e28f1988ace0f" href="../R/f94e28f1988ace0f.html" target="n" data-glyph="74,1" class="i method">Send_all_trees</a>(<b>int</b> <span id="r29 rd" class="r29 r">lcodes</span>, <b>int</b> <span id="r30 rd" class="r30 r">dcodes</span>, <b>int</b> <span id="r31 rd" class="r31 r">blcodes</span>)
+		{
+			<b>int</b> <span id="r32 rd" class="r32 r">rank</span>;
+			<span class="c">// index in bl_order</span>
+			<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r29 r">lcodes</span> - 257, 5);
+			<span class="c">// not +255 as stated in appnote.txt</span>
+			<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r30 r">dcodes</span> - 1, 5);
+			<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r31 r">blcodes</span> - 4, 4);
+			<span class="c">// not -3 as stated in appnote.txt</span>
+			<b>for</b> (<span class="r32 r">rank</span> = 0; <span class="r32 r">rank</span> &lt; <span class="r31 r">blcodes</span>; <span class="r32 r">rank</span>++)
+			{
+				<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<a href="#59e1c625c458422b" class="i field">bl_tree</a>[<a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#aaabf18cb0ec560e" class="i field">bl_order</a>[<span class="r32 r">rank</span>] * 2 + 1], 3);
+			}
+			<a href="#61b2230883a34a5e" class="i method">Send_tree</a>(<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>, <span class="r29 r">lcodes</span> - 1);
+			<span class="c">// literal tree</span>
+			<a href="#61b2230883a34a5e" class="i method">Send_tree</a>(<a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>, <span class="r30 r">dcodes</span> - 1);
+		}
+
+		<span class="c">// distance tree</span>
+		<span class="c">// Send a literal or distance tree in compressed form, using the codes in</span>
+		<span class="c">// bl_tree.</span>
+		<b>internal void</b> <a id="61b2230883a34a5e" href="../R/61b2230883a34a5e.html" target="n" data-glyph="74,1" class="i method">Send_tree</a>(<b>short</b>[] <span id="r33 rd" class="r33 r">tree</span>, <b>int</b> <span id="r34 rd" class="r34 r">max_code</span>)
+		{
+			<span class="c">// the tree to be sent</span>
+			<span class="c">// and its largest code of non zero frequency</span>
+			<b>int</b> <span id="r35 rd" class="r35 r">n</span>;
+			<span class="c">// iterates over all tree elements</span>
+			<b>int</b> <span id="r36 rd" class="r36 r">prevlen</span> = -1;
+			<span class="c">// last emitted length</span>
+			<b>int</b> <span id="r37 rd" class="r37 r">curlen</span>;
+			<span class="c">// length of current code</span>
+			<b>int</b> <span id="r38 rd" class="r38 r">nextlen</span> = <span class="r33 r">tree</span>[0 * 2 + 1];
+			<span class="c">// length of next code</span>
+			<b>int</b> <span id="r39 rd" class="r39 r">count</span> = 0;
+			<span class="c">// repeat count of the current code</span>
+			<b>int</b> <span id="r40 rd" class="r40 r">max_count</span> = 7;
+			<span class="c">// max repeat count</span>
+			<b>int</b> <span id="r41 rd" class="r41 r">min_count</span> = 4;
+			<span class="c">// min repeat count</span>
+			<b>if</b> (<span class="r38 r">nextlen</span> == 0)
+			{
+				<span class="r40 r">max_count</span> = 138;
+				<span class="r41 r">min_count</span> = 3;
+			}
+			<b>for</b> (<span class="r35 r">n</span> = 0; <span class="r35 r">n</span> &lt;= <span class="r34 r">max_code</span>; <span class="r35 r">n</span>++)
+			{
+				<span class="r37 r">curlen</span> = <span class="r38 r">nextlen</span>;
+				<span class="r38 r">nextlen</span> = <span class="r33 r">tree</span>[(<span class="r35 r">n</span> + 1) * 2 + 1];
+				<b>if</b> (++<span class="r39 r">count</span> &lt; <span class="r40 r">max_count</span> &amp;&amp; <span class="r37 r">curlen</span> == <span class="r38 r">nextlen</span>)
+				{
+					<b>continue</b>;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r39 r">count</span> &lt; <span class="r41 r">min_count</span>)
+					{
+						<b>do</b>
+						{
+							<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<span class="r37 r">curlen</span>, <a href="#59e1c625c458422b" class="i field">bl_tree</a>);
+						}
+						<b>while</b> (--<span class="r39 r">count</span> != 0);
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r37 r">curlen</span> != 0)
+						{
+							<b>if</b> (<span class="r37 r">curlen</span> != <span class="r36 r">prevlen</span>)
+							{
+								<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<span class="r37 r">curlen</span>, <a href="#59e1c625c458422b" class="i field">bl_tree</a>);
+								<span class="r39 r">count</span>--;
+							}
+							<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<a href="#e8ccbb9463f1bbdd" class="i field">REP_3_6</a>, <a href="#59e1c625c458422b" class="i field">bl_tree</a>);
+							<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r39 r">count</span> - 3, 2);
+						}
+						<b>else</b>
+						{
+							<b>if</b> (<span class="r39 r">count</span> &lt;= 10)
+							{
+								<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<a href="#9c47b1aa215c0656" class="i field">REPZ_3_10</a>, <a href="#59e1c625c458422b" class="i field">bl_tree</a>);
+								<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r39 r">count</span> - 3, 3);
+							}
+							<b>else</b>
+							{
+								<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<a href="#7bd3b3aa01834019" class="i field">REPZ_11_138</a>, <a href="#59e1c625c458422b" class="i field">bl_tree</a>);
+								<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r39 r">count</span> - 11, 7);
+							}
+						}
+					}
+				}
+				<span class="r39 r">count</span> = 0;
+				<span class="r36 r">prevlen</span> = <span class="r37 r">curlen</span>;
+				<b>if</b> (<span class="r38 r">nextlen</span> == 0)
+				{
+					<span class="r40 r">max_count</span> = 138;
+					<span class="r41 r">min_count</span> = 3;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r37 r">curlen</span> == <span class="r38 r">nextlen</span>)
+					{
+						<span class="r40 r">max_count</span> = 6;
+						<span class="r41 r">min_count</span> = 3;
+					}
+					<b>else</b>
+					{
+						<span class="r40 r">max_count</span> = 7;
+						<span class="r41 r">min_count</span> = 4;
+					}
+				}
+			}
+		}
+
+		<span class="c">// Output a byte on the stream.</span>
+		<span class="c">// IN assertion: there is enough room in pending_buf.</span>
+		<b>internal void</b> <a id="30f6918ede85949c" href="../R/30f6918ede85949c.html" target="n" data-glyph="74,1" class="i method">Put_byte</a>(<b>byte</b>[] <span id="r42 rd" class="r42 r">p</span>, <b>int</b> <span id="r43 rd" class="r43 r">start</span>, <b>int</b> <span id="r44 rd" class="r44 r">len</span>)
+		{
+			<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r42 r">p</span>, <span class="r43 r">start</span>, <a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>, <a href="#0bb254aeaa3b16f8" class="i field">pending</a>, <span class="r44 r">len</span>);
+			<a href="#0bb254aeaa3b16f8" class="i field">pending</a> += <span class="r44 r">len</span>;
+		}
+
+		<b>internal void</b> <a id="b539b601acc545a4" href="../R/b539b601acc545a4.html" target="n" data-glyph="74,1" class="i method">Put_byte</a>(<b>byte</b> <span id="r45 rd" class="r45 r">c</span>)
+		{
+			<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>[<a href="#0bb254aeaa3b16f8" class="i field">pending</a>++] = <span class="r45 r">c</span>;
+		}
+
+		<b>internal void</b> <a id="05fc4392704b37c2" href="../R/05fc4392704b37c2.html" target="n" data-glyph="74,1" class="i method">Put_short</a>(<b>int</b> <span id="r46 rd" class="r46 r">w</span>)
+		{
+			<a href="#b539b601acc545a4" class="i method">Put_byte</a>(<b>unchecked</b>((<b>byte</b>)(<span class="r46 r">w</span>)));
+			<a href="#b539b601acc545a4" class="i method">Put_byte</a>(<b>unchecked</b>((<b>byte</b>)((<b>int</b>)(((<b>uint</b>)<span class="r46 r">w</span>) &gt;&gt; 8))));
+		}
+
+		<b>internal void</b> <a id="91fd2de4b95f0697" href="../R/91fd2de4b95f0697.html" target="n" data-glyph="74,1" class="i method">PutShortMSB</a>(<b>int</b> <span id="r47 rd" class="r47 r">b</span>)
+		{
+			<a href="#b539b601acc545a4" class="i method">Put_byte</a>(<b>unchecked</b>((<b>byte</b>)(<span class="r47 r">b</span> &gt;&gt; 8)));
+			<a href="#b539b601acc545a4" class="i method">Put_byte</a>(<b>unchecked</b>((<b>byte</b>)(<span class="r47 r">b</span>)));
+		}
+
+		<b>internal void</b> <a id="ea62ae2f86c49d56" href="../R/ea62ae2f86c49d56.html" target="n" data-glyph="74,1" class="i method">Send_code</a>(<b>int</b> <span id="r48 rd" class="r48 r">c</span>, <b>short</b>[] <span id="r49 rd" class="r49 r">tree</span>)
+		{
+			<b>int</b> <span id="r50 rd" class="r50 r">c2</span> = <span class="r48 r">c</span> * 2;
+			<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>((<span class="r49 r">tree</span>[<span class="r50 r">c2</span>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff))), (<span class="r49 r">tree</span>[<span class="r50 r">c2</span> + 1] &amp; <b>unchecked</b>((<b>int</b>)(
+				0xffff))));
+		}
+
+		<b>internal void</b> <a id="e628d6fd7a2a1cae" href="../R/e628d6fd7a2a1cae.html" target="n" data-glyph="74,1" class="i method">Send_bits</a>(<b>int</b> <span id="r51 rd" class="r51 r">value</span>, <b>int</b> <span id="r52 rd" class="r52 r">length</span>)
+		{
+			<b>int</b> <span id="r53 rd" class="r53 r">len</span> = <span class="r52 r">length</span>;
+			<b>if</b> (<a href="#4103439be7752aac" class="i field">bi_valid</a> &gt; (<b>int</b>)<a href="#941c97da60e73d38" class="i field">Buf_size</a> - <span class="r53 r">len</span>)
+			{
+				<b>int</b> <span id="r54 rd" class="r54 r">val</span> = <span class="r51 r">value</span>;
+				<span class="c">//      bi_buf |= (val &lt;&lt; bi_valid);</span>
+				<a href="#3f39297fab059905" class="i field">bi_buf</a> |= (<b>short</b>)((<span class="r54 r">val</span> &lt;&lt; <a href="#4103439be7752aac" class="i field">bi_valid</a>) &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+				<a href="#05fc4392704b37c2" class="i method">Put_short</a>(<a href="#3f39297fab059905" class="i field">bi_buf</a>);
+				<a href="#3f39297fab059905" class="i field">bi_buf</a> = (<b>short</b>)((<b>int</b>)(((<b>uint</b>)<span class="r54 r">val</span>) &gt;&gt; (<a href="#941c97da60e73d38" class="i field">Buf_size</a> - <a href="#4103439be7752aac" class="i field">bi_valid</a>)));
+				<a href="#4103439be7752aac" class="i field">bi_valid</a> += <span class="r53 r">len</span> - <a href="#941c97da60e73d38" class="i field">Buf_size</a>;
+			}
+			<b>else</b>
+			{
+				<span class="c">//      bi_buf |= (value) &lt;&lt; bi_valid;</span>
+				<a href="#3f39297fab059905" class="i field">bi_buf</a> |= (<b>short</b>)(((<span class="r51 r">value</span>) &lt;&lt; <a href="#4103439be7752aac" class="i field">bi_valid</a>) &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+				<a href="#4103439be7752aac" class="i field">bi_valid</a> += <span class="r53 r">len</span>;
+			}
+		}
+
+		<span class="c">// Send one empty static block to give enough lookahead for inflate.</span>
+		<span class="c">// This takes 10 bits, of which 7 may remain in the bit buffer.</span>
+		<span class="c">// The current inflate code requires 9 bits of lookahead. If the</span>
+		<span class="c">// last two codes for the previous block (real code plus EOB) were coded</span>
+		<span class="c">// on 5 bits or less, inflate may have only 5+3 bits of lookahead to decode</span>
+		<span class="c">// the last real code. In this case we send two empty static blocks instead</span>
+		<span class="c">// of one. (There are no problems if the previous block is stored or fixed.)</span>
+		<span class="c">// To simplify the code, we assume the worst case of last real code encoded</span>
+		<span class="c">// on one bit only.</span>
+		<b>internal void</b> <a id="a039b9853e1d37ef" href="../R/a039b9853e1d37ef.html" target="n" data-glyph="74,1" class="i method">_tr_align</a>()
+		{
+			<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<a href="#d7e7bdc14a36821b" class="i field">STATIC_TREES</a> &lt;&lt; 1, 3);
+			<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<a href="#cd1802d686d6c7b8" class="i field">END_BLOCK</a>, <a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#4302de75b6ebd89c" class="i field">static_ltree</a>);
+			<a href="#29cb2cf3aed2a875" class="i method">Bi_flush</a>();
+			<span class="c">// Of the 10 bits for the empty block, we have already sent</span>
+			<span class="c">// (10 - bi_valid) bits. The lookahead for the last real code (before</span>
+			<span class="c">// the EOB of the previous block) was thus at least one plus the length</span>
+			<span class="c">// of the EOB plus what we have just sent of the empty static block.</span>
+			<b>if</b> (1 + <a href="#587161ae001923bd" class="i field">last_eob_len</a> + 10 - <a href="#4103439be7752aac" class="i field">bi_valid</a> &lt; 9)
+			{
+				<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<a href="#d7e7bdc14a36821b" class="i field">STATIC_TREES</a> &lt;&lt; 1, 3);
+				<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<a href="#cd1802d686d6c7b8" class="i field">END_BLOCK</a>, <a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#4302de75b6ebd89c" class="i field">static_ltree</a>);
+				<a href="#29cb2cf3aed2a875" class="i method">Bi_flush</a>();
+			}
+			<a href="#587161ae001923bd" class="i field">last_eob_len</a> = 7;
+		}
+
+		<span class="c">// Save the match info and tally the frequency counts. Return true if</span>
+		<span class="c">// the current block must be flushed.</span>
+		<b>internal bool</b> <a id="8c5abfc545a1c5fc" href="../R/8c5abfc545a1c5fc.html" target="n" data-glyph="74,1" class="i method">_tr_tally</a>(<b>int</b> <span id="r55 rd" class="r55 r">dist</span>, <b>int</b> <span id="r56 rd" class="r56 r">lc</span>)
+		{
+			<span class="c">// distance of matched string</span>
+			<span class="c">// match length-MIN_MATCH or unmatched char (if dist==0)</span>
+			<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>[<a href="#a63851a98d161a3c" class="i field">d_buf</a> + <a href="#16019a7eb1afab0b" class="i field">last_lit</a> * 2] = <b>unchecked</b>((<b>byte</b>)((<b>int</b>)(((<b>uint</b>)<span class="r55 r">dist</span>) &gt;&gt; 8)));
+			<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>[<a href="#a63851a98d161a3c" class="i field">d_buf</a> + <a href="#16019a7eb1afab0b" class="i field">last_lit</a> * 2 + 1] = <b>unchecked</b>((<b>byte</b>)<span class="r55 r">dist</span>);
+			<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>[<a href="#e743a76c95b181ba" class="i field">l_buf</a> + <a href="#16019a7eb1afab0b" class="i field">last_lit</a>] = <b>unchecked</b>((<b>byte</b>)<span class="r56 r">lc</span>);
+			<a href="#16019a7eb1afab0b" class="i field">last_lit</a>++;
+			<b>if</b> (<span class="r55 r">dist</span> == 0)
+			{
+				<span class="c">// lc is the unmatched char</span>
+				<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[<span class="r56 r">lc</span> * 2]++;
+			}
+			<b>else</b>
+			{
+				<a href="#4858f88a3e954deb" class="i field">matches</a>++;
+				<span class="c">// Here, lc is the match length - MIN_MATCH</span>
+				<span class="r55 r">dist</span>--;
+				<span class="c">// dist = match distance - 1</span>
+				<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[(<a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#3baf2025a1fd8525" class="i field">_length_code</a>[<span class="r56 r">lc</span>] + <a href="#c85e9388c69f8539" class="i field">LITERALS</a> + 1) * 2]++;
+				<a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>[<a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#5f6687a88eac782c" class="i method">D_code</a>(<span class="r55 r">dist</span>) * 2]++;
+			}
+			<b>if</b> ((<a href="#16019a7eb1afab0b" class="i field">last_lit</a> &amp; <b>unchecked</b>((<b>int</b>)(0x1fff))) == 0 &amp;&amp; <a href="#2242caaec0549bdd" class="i field">level</a> &gt; 2)
+			{
+				<span class="c">// Compute an upper bound for the compressed length</span>
+				<b>int</b> <span id="r57 rd" class="r57 r">out_length</span> = <a href="#16019a7eb1afab0b" class="i field">last_lit</a> * 8;
+				<b>int</b> <span id="r58 rd" class="r58 r">in_length</span> = <a href="#110199819b4a651e" class="i field">strstart</a> - <a href="#e2e7bfaeb67a3367" class="i field">block_start</a>;
+				<b>int</b> <span id="r59 rd" class="r59 r">dcode</span>;
+				<b>for</b> (<span class="r59 r">dcode</span> = 0; <span class="r59 r">dcode</span> &lt; <a href="#56512b44a00391f9" class="i field">D_CODES</a>; <span class="r59 r">dcode</span>++)
+				{
+					<span class="r57 r">out_length</span> += (<b>int</b>)<a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>[<span class="r59 r">dcode</span> * 2] * (5 + <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#9c9765afa27a8c58" class="i field">extra_dbits</a>[<span class="r59 r">dcode</span>]);
+				}
+				<span class="r57 r">out_length</span> = (<b>int</b>)(((<b>uint</b>)<span class="r57 r">out_length</span>) &gt;&gt; 3);
+				<b>if</b> ((<a href="#4858f88a3e954deb" class="i field">matches</a> &lt; (<a href="#16019a7eb1afab0b" class="i field">last_lit</a> / 2)) &amp;&amp; <span class="r57 r">out_length</span> &lt; <span class="r58 r">in_length</span> / 2)
+				{
+					<b>return true</b>;
+				}
+			}
+			<b>return</b> (<a href="#16019a7eb1afab0b" class="i field">last_lit</a> == <a href="#8498967c06b62d5f" class="i field">lit_bufsize</a> - 1);
+		}
+
+		<span class="c">// We avoid equality with lit_bufsize because of wraparound at 64K</span>
+		<span class="c">// on 16 bit machines and because stored blocks are restricted to</span>
+		<span class="c">// 64K-1 bytes.</span>
+		<span class="c">// Send the block data compressed using the given Huffman trees</span>
+		<b>internal void</b> <a id="2354b790a0b4c12e" href="../R/2354b790a0b4c12e.html" target="n" data-glyph="74,1" class="i method">Compress_block</a>(<b>short</b>[] <span id="r60 rd" class="r60 r">ltree</span>, <b>short</b>[] <span id="r61 rd" class="r61 r">dtree</span>)
+		{
+			<b>int</b> <span id="r62 rd" class="r62 r">dist</span>;
+			<span class="c">// distance of matched string</span>
+			<b>int</b> <span id="r63 rd" class="r63 r">lc</span>;
+			<span class="c">// match length or unmatched char (if dist == 0)</span>
+			<b>int</b> <span id="r64 rd" class="r64 r">lx</span> = 0;
+			<span class="c">// running index in l_buf</span>
+			<b>int</b> <span id="r65 rd" class="r65 r">code</span>;
+			<span class="c">// the code to send</span>
+			<b>int</b> <span id="r66 rd" class="r66 r">extra</span>;
+			<span class="c">// number of extra bits to send</span>
+			<b>if</b> (<a href="#16019a7eb1afab0b" class="i field">last_lit</a> != 0)
+			{
+				<b>do</b>
+				{
+					<span class="r62 r">dist</span> = ((<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>[<a href="#a63851a98d161a3c" class="i field">d_buf</a> + <span class="r64 r">lx</span> * 2] &lt;&lt; 8) &amp; <b>unchecked</b>((<b>int</b>)(0xff00))) | (<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>
+						[<a href="#a63851a98d161a3c" class="i field">d_buf</a> + <span class="r64 r">lx</span> * 2 + 1] &amp; <b>unchecked</b>((<b>int</b>)(0xff)));
+					<span class="r63 r">lc</span> = (<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a>[<a href="#e743a76c95b181ba" class="i field">l_buf</a> + <span class="r64 r">lx</span>]) &amp; <b>unchecked</b>((<b>int</b>)(0xff));
+					<span class="r64 r">lx</span>++;
+					<b>if</b> (<span class="r62 r">dist</span> == 0)
+					{
+						<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<span class="r63 r">lc</span>, <span class="r60 r">ltree</span>);
+					}
+					<b>else</b>
+					{
+						<span class="c">// send a literal byte</span>
+						<span class="c">// Here, lc is the match length - MIN_MATCH</span>
+						<span class="r65 r">code</span> = <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#3baf2025a1fd8525" class="i field">_length_code</a>[<span class="r63 r">lc</span>];
+						<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<span class="r65 r">code</span> + <a href="#c85e9388c69f8539" class="i field">LITERALS</a> + 1, <span class="r60 r">ltree</span>);
+						<span class="c">// send the length code</span>
+						<span class="r66 r">extra</span> = <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#49ddec6b88c133f4" class="i field">extra_lbits</a>[<span class="r65 r">code</span>];
+						<b>if</b> (<span class="r66 r">extra</span> != 0)
+						{
+							<span class="r63 r">lc</span> -= <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#66985be882d9fe26" class="i field">base_length</a>[<span class="r65 r">code</span>];
+							<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r63 r">lc</span>, <span class="r66 r">extra</span>);
+						}
+						<span class="c">// send the extra length bits</span>
+						<span class="r62 r">dist</span>--;
+						<span class="c">// dist is now the match distance - 1</span>
+						<span class="r65 r">code</span> = <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#5f6687a88eac782c" class="i method">D_code</a>(<span class="r62 r">dist</span>);
+						<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<span class="r65 r">code</span>, <span class="r61 r">dtree</span>);
+						<span class="c">// send the distance code</span>
+						<span class="r66 r">extra</span> = <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#9c9765afa27a8c58" class="i field">extra_dbits</a>[<span class="r65 r">code</span>];
+						<b>if</b> (<span class="r66 r">extra</span> != 0)
+						{
+							<span class="r62 r">dist</span> -= <a href="Tree.cs.html#6a085b429af69285" class="t t">Tree</a>.<a href="Tree.cs.html#3a9180c66b1ddc2f" class="i field">base_dist</a>[<span class="r65 r">code</span>];
+							<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>(<span class="r62 r">dist</span>, <span class="r66 r">extra</span>);
+						}
+					}
+				}
+				<b>while</b> (<span class="r64 r">lx</span> &lt; <a href="#16019a7eb1afab0b" class="i field">last_lit</a>);
+			}
+			<span class="c">// send the extra distance bits</span>
+			<span class="c">// literal or match pair ?</span>
+			<span class="c">// Check that the overlay between pending_buf and d_buf+l_buf is ok:</span>
+			<a href="#ea62ae2f86c49d56" class="i method">Send_code</a>(<a href="#cd1802d686d6c7b8" class="i field">END_BLOCK</a>, <span class="r60 r">ltree</span>);
+			<a href="#587161ae001923bd" class="i field">last_eob_len</a> = <span class="r60 r">ltree</span>[<a href="#cd1802d686d6c7b8" class="i field">END_BLOCK</a> * 2 + 1];
+		}
+
+		<span class="c">// Set the data type to ASCII or BINARY, using a crude approximation:</span>
+		<span class="c">// binary if more than 20% of the bytes are &lt;= 6 or &gt;= 128, ascii otherwise.</span>
+		<span class="c">// IN assertion: the fields freq of dyn_ltree are set and the total of all</span>
+		<span class="c">// frequencies does not exceed 64K (to fit in an int on 16 bit machines).</span>
+		<b>internal void</b> <a id="880ac21044245602" href="../R/880ac21044245602.html" target="n" data-glyph="74,1" class="i method">Set_data_type</a>()
+		{
+			<b>int</b> <span id="r67 rd" class="r67 r">n</span> = 0;
+			<b>int</b> <span id="r68 rd" class="r68 r">ascii_freq</span> = 0;
+			<b>int</b> <span id="r69 rd" class="r69 r">bin_freq</span> = 0;
+			<b>while</b> (<span class="r67 r">n</span> &lt; 7)
+			{
+				<span class="r69 r">bin_freq</span> += <a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[<span class="r67 r">n</span> * 2];
+				<span class="r67 r">n</span>++;
+			}
+			<b>while</b> (<span class="r67 r">n</span> &lt; 128)
+			{
+				<span class="r68 r">ascii_freq</span> += <a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[<span class="r67 r">n</span> * 2];
+				<span class="r67 r">n</span>++;
+			}
+			<b>while</b> (<span class="r67 r">n</span> &lt; <a href="#c85e9388c69f8539" class="i field">LITERALS</a>)
+			{
+				<span class="r69 r">bin_freq</span> += <a href="#b75921388e8d5816" class="i field">dyn_ltree</a>[<span class="r67 r">n</span> * 2];
+				<span class="r67 r">n</span>++;
+			}
+			<a href="#c0145599e347eee5" class="i field">data_type</a> = <b>unchecked</b>((<b>byte</b>)(<span class="r69 r">bin_freq</span> &gt; ((<b>int</b>)(((<b>uint</b>)<span class="r68 r">ascii_freq</span>) &gt;&gt; 2)) ? <a href="#4728c25bba5fa438" class="i field">Z_BINARY</a>
+				 : <a href="#adcbba2b239b066d" class="i field">Z_ASCII</a>));
+		}
+
+		<span class="c">// Flush the bit buffer, keeping at most 7 bits in it.</span>
+		<b>internal void</b> <a id="29cb2cf3aed2a875" href="../R/29cb2cf3aed2a875.html" target="n" data-glyph="74,1" class="i method">Bi_flush</a>()
+		{
+			<b>if</b> (<a href="#4103439be7752aac" class="i field">bi_valid</a> == 16)
+			{
+				<a href="#05fc4392704b37c2" class="i method">Put_short</a>(<a href="#3f39297fab059905" class="i field">bi_buf</a>);
+				<a href="#3f39297fab059905" class="i field">bi_buf</a> = 0;
+				<a href="#4103439be7752aac" class="i field">bi_valid</a> = 0;
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<a href="#4103439be7752aac" class="i field">bi_valid</a> &gt;= 8)
+				{
+					<a href="#b539b601acc545a4" class="i method">Put_byte</a>(<b>unchecked</b>((<b>byte</b>)<a href="#3f39297fab059905" class="i field">bi_buf</a>));
+					<a href="#3f39297fab059905" class="i field">bi_buf</a> = (<b>short</b>)(((<b>ushort</b>)<a href="#3f39297fab059905" class="i field">bi_buf</a>) &gt;&gt; 8);
+					<a href="#4103439be7752aac" class="i field">bi_valid</a> -= 8;
+				}
+			}
+		}
+
+		<span class="c">// Flush the bit buffer and align the output on a byte boundary</span>
+		<b>internal void</b> <a id="8d86ccc72834b58b" href="../R/8d86ccc72834b58b.html" target="n" data-glyph="74,1" class="i method">Bi_windup</a>()
+		{
+			<b>if</b> (<a href="#4103439be7752aac" class="i field">bi_valid</a> &gt; 8)
+			{
+				<a href="#05fc4392704b37c2" class="i method">Put_short</a>(<a href="#3f39297fab059905" class="i field">bi_buf</a>);
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<a href="#4103439be7752aac" class="i field">bi_valid</a> &gt; 0)
+				{
+					<a href="#b539b601acc545a4" class="i method">Put_byte</a>(<b>unchecked</b>((<b>byte</b>)<a href="#3f39297fab059905" class="i field">bi_buf</a>));
+				}
+			}
+			<a href="#3f39297fab059905" class="i field">bi_buf</a> = 0;
+			<a href="#4103439be7752aac" class="i field">bi_valid</a> = 0;
+		}
+
+		<span class="c">// Copy a stored block, storing first the length and its</span>
+		<span class="c">// one&#39;s complement if requested.</span>
+		<b>internal void</b> <a id="f4e5e510159b35ec" href="../R/f4e5e510159b35ec.html" target="n" data-glyph="74,1" class="i method">Copy_block</a>(<b>int</b> <span id="r70 rd" class="r70 r">buf</span>, <b>int</b> <span id="r71 rd" class="r71 r">len</span>, <b>bool</b> <span id="r72 rd" class="r72 r">header</span>)
+		{
+			<span class="c">// the input data</span>
+			<span class="c">// its length</span>
+			<span class="c">// true if block header must be written</span>
+			<b>int</b> <span id="r73 rd" class="r73 r">index</span> = 0;
+			<a href="#8d86ccc72834b58b" class="i method">Bi_windup</a>();
+			<span class="c">// align on byte boundary</span>
+			<a href="#587161ae001923bd" class="i field">last_eob_len</a> = 8;
+			<span class="c">// enough lookahead for inflate</span>
+			<b>if</b> (<span class="r72 r">header</span>)
+			{
+				<a href="#05fc4392704b37c2" class="i method">Put_short</a>((<b>short</b>)<span class="r71 r">len</span>);
+				<a href="#05fc4392704b37c2" class="i method">Put_short</a>((<b>short</b>)~<span class="r71 r">len</span>);
+			}
+			<span class="c">//  while(len--!=0) {</span>
+			<span class="c">//    put_byte(window[buf+index]);</span>
+			<span class="c">//    index++;</span>
+			<span class="c">//  }</span>
+			<a href="#30f6918ede85949c" class="i method">Put_byte</a>(<a href="#37fe3aa0c387ed45" class="i field">window</a>, <span class="r70 r">buf</span>, <span class="r71 r">len</span>);
+		}
+
+		<b>internal void</b> <a id="544b4aceff489bc4" href="../R/544b4aceff489bc4.html" target="n" data-glyph="74,1" class="i method">Flush_block_only</a>(<b>bool</b> <span id="r74 rd" class="r74 r">eof</span>)
+		{
+			<a href="#dfb9021bd9aa25c9" class="i method">_tr_flush_block</a>(<a href="#e2e7bfaeb67a3367" class="i field">block_start</a> &gt;= 0 ? <a href="#e2e7bfaeb67a3367" class="i field">block_start</a> : -1, <a href="#110199819b4a651e" class="i field">strstart</a> - <a href="#e2e7bfaeb67a3367" class="i field">block_start</a>, <span class="r74 r">eof</span>);
+			<a href="#e2e7bfaeb67a3367" class="i field">block_start</a> = <a href="#110199819b4a651e" class="i field">strstart</a>;
+			<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#6ebf5e64e9840f1f" class="i method">Flush_pending</a>();
+		}
+
+		<span class="c">// Copy without compression as much as possible from the input stream, return</span>
+		<span class="c">// the current block state.</span>
+		<span class="c">// This function does not insert new strings in the dictionary since</span>
+		<span class="c">// uncompressible data is probably not useful. This function is used</span>
+		<span class="c">// only for the level=0 compression option.</span>
+		<span class="c">// NOTE: this function should be optimized to avoid extra copying from</span>
+		<span class="c">// window to pending_buf.</span>
+		<b>internal int</b> <a id="22d66af247a5497d" href="../R/22d66af247a5497d.html" target="n" data-glyph="74,1" class="i method">Deflate_stored</a>(<b>int</b> <span id="r75 rd" class="r75 r">flush</span>)
+		{
+			<span class="c">// Stored blocks are limited to 0xffff bytes, pending_buf is limited</span>
+			<span class="c">// to pending_buf_size, and each stored block has a 5 byte header:</span>
+			<b>int</b> <span id="r76 rd" class="r76 r">max_block_size</span> = <b>unchecked</b>((<b>int</b>)(0xffff));
+			<b>int</b> <span id="r77 rd" class="r77 r">max_start</span>;
+			<b>if</b> (<span class="r76 r">max_block_size</span> &gt; <a href="#d0ef8fdd1c319187" class="i field">pending_buf_size</a> - 5)
+			{
+				<span class="r76 r">max_block_size</span> = <a href="#d0ef8fdd1c319187" class="i field">pending_buf_size</a> - 5;
+			}
+			<span class="c">// Copy as much as possible from input to output:</span>
+			<b>while</b> (<b>true</b>)
+			{
+				<span class="c">// Fill the window as much as possible:</span>
+				<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &lt;= 1)
+				{
+					<a href="#788d25d94cbd79c1" class="i method">Fill_window</a>();
+					<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> == 0 &amp;&amp; <span class="r75 r">flush</span> == <a href="#a528e5b14b12de0d" class="i field">Z_NO_FLUSH</a>)
+					{
+						<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+					}
+					<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> == 0)
+					{
+						<b>break</b>;
+					}
+				}
+				<span class="c">// flush the current block</span>
+				<a href="#110199819b4a651e" class="i field">strstart</a> += <a href="#65100620eb47708a" class="i field">lookahead</a>;
+				<a href="#65100620eb47708a" class="i field">lookahead</a> = 0;
+				<span class="c">// Emit a stored block if pending_buf will be full:</span>
+				<span class="r77 r">max_start</span> = <a href="#e2e7bfaeb67a3367" class="i field">block_start</a> + <span class="r76 r">max_block_size</span>;
+				<b>if</b> (<a href="#110199819b4a651e" class="i field">strstart</a> == 0 || <a href="#110199819b4a651e" class="i field">strstart</a> &gt;= <span class="r77 r">max_start</span>)
+				{
+					<span class="c">// strstart == 0 is possible when wraparound on 16-bit machine</span>
+					<a href="#65100620eb47708a" class="i field">lookahead</a> = (<b>int</b>)(<a href="#110199819b4a651e" class="i field">strstart</a> - <span class="r77 r">max_start</span>);
+					<a href="#110199819b4a651e" class="i field">strstart</a> = (<b>int</b>)<span class="r77 r">max_start</span>;
+					<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<b>false</b>);
+					<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+					{
+						<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+					}
+				}
+				<span class="c">// Flush if we may have to slide, otherwise block_start may become</span>
+				<span class="c">// negative and the data will be gone:</span>
+				<b>if</b> (<a href="#110199819b4a651e" class="i field">strstart</a> - <a href="#e2e7bfaeb67a3367" class="i field">block_start</a> &gt;= <a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+				{
+					<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<b>false</b>);
+					<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+					{
+						<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+					}
+				}
+			}
+			<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<span class="r75 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>);
+			<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+			{
+				<b>return</b> (<span class="r75 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>) ? <a href="#e69f4bcb973ccaf3" class="i field">FinishStarted</a> : <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+			}
+			<b>return</b> <span class="r75 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a> ? <a href="#2461007a37a71b30" class="i field">FinishDone</a> : <a href="#0d8b0b3e017cb61c" class="i field">BlockDone</a>;
+		}
+
+		<span class="c">// Send a stored block</span>
+		<b>internal void</b> <a id="3e570be0809c1e47" href="../R/3e570be0809c1e47.html" target="n" data-glyph="74,1" class="i method">_tr_stored_block</a>(<b>int</b> <span id="r78 rd" class="r78 r">buf</span>, <b>int</b> <span id="r79 rd" class="r79 r">stored_len</span>, <b>bool</b> <span id="r80 rd" class="r80 r">eof</span>)
+		{
+			<span class="c">// input block</span>
+			<span class="c">// length of input block</span>
+			<span class="c">// true if this is the last block for a file</span>
+			<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>((<a href="#5de9e4ff28a61fb7" class="i field">STORED_BLOCK</a> &lt;&lt; 1) + (<span class="r80 r">eof</span> ? 1 : 0), 3);
+			<span class="c">// send block type</span>
+			<a href="#f4e5e510159b35ec" class="i method">Copy_block</a>(<span class="r78 r">buf</span>, <span class="r79 r">stored_len</span>, <b>true</b>);
+		}
+
+		<span class="c">// with header</span>
+		<span class="c">// Determine the best encoding for the current block: dynamic trees, static</span>
+		<span class="c">// trees or store, and output the encoded block to the zip file.</span>
+		<b>internal void</b> <a id="dfb9021bd9aa25c9" href="../R/dfb9021bd9aa25c9.html" target="n" data-glyph="74,1" class="i method">_tr_flush_block</a>(<b>int</b> <span id="r81 rd" class="r81 r">buf</span>, <b>int</b> <span id="r82 rd" class="r82 r">stored_len</span>, <b>bool</b> <span id="r83 rd" class="r83 r">eof</span>)
+		{
+			<span class="c">// input block, or NULL if too old</span>
+			<span class="c">// length of input block</span>
+			<span class="c">// true if this is the last block for a file</span>
+			<b>int</b> <span id="r84 rd" class="r84 r">opt_lenb</span>;
+			<b>int</b> <span id="r85 rd" class="r85 r">static_lenb</span>;
+			<span class="c">// opt_len and static_len in bytes</span>
+			<b>int</b> <span id="r86 rd" class="r86 r">max_blindex</span> = 0;
+			<span class="c">// index of last bit length code of non zero freq</span>
+			<span class="c">// Build the Huffman trees unless a stored block is forced</span>
+			<b>if</b> (<a href="#2242caaec0549bdd" class="i field">level</a> &gt; 0)
+			{
+				<span class="c">// Check if the file is ascii or binary</span>
+				<b>if</b> (<a href="#c0145599e347eee5" class="i field">data_type</a> == <a href="#d28ced167e638822" class="i field">Z_UNKNOWN</a>)
+				{
+					<a href="#880ac21044245602" class="i method">Set_data_type</a>();
+				}
+				<span class="c">// Construct the literal and distance trees</span>
+				<a href="#af278fad7c3880eb" class="i field">l_desc</a>.<a href="Tree.cs.html#03c7fcd40045229c" class="i method">Build_tree</a>(<a href="#d1ad14fae9b8eb5f" class="k">this</a>);
+				<a href="#5d50e46301716482" class="i field">d_desc</a>.<a href="Tree.cs.html#03c7fcd40045229c" class="i method">Build_tree</a>(<a href="#d1ad14fae9b8eb5f" class="k">this</a>);
+				<span class="c">// At this point, opt_len and static_len are the total bit lengths of</span>
+				<span class="c">// the compressed block data, excluding the tree representations.</span>
+				<span class="c">// Build the bit length tree for the above two trees, and get the index</span>
+				<span class="c">// in bl_order of the last bit length code to send.</span>
+				<span class="r86 r">max_blindex</span> = <a href="#9a64cb702a2dcbc8" class="i method">Build_bl_tree</a>();
+				<span class="c">// Determine the best encoding. Compute first the block length in bytes</span>
+				<span class="r84 r">opt_lenb</span> = (<b>int</b>)(((<b>uint</b>)(<a href="#a879f0e81da37965" class="i field">opt_len</a> + 3 + 7)) &gt;&gt; 3);
+				<span class="r85 r">static_lenb</span> = (<b>int</b>)(((<b>uint</b>)(<a href="#5b633ee50ff6b02b" class="i field">static_len</a> + 3 + 7)) &gt;&gt; 3);
+				<b>if</b> (<span class="r85 r">static_lenb</span> &lt;= <span class="r84 r">opt_lenb</span>)
+				{
+					<span class="r84 r">opt_lenb</span> = <span class="r85 r">static_lenb</span>;
+				}
+			}
+			<b>else</b>
+			{
+				<span class="r84 r">opt_lenb</span> = <span class="r85 r">static_lenb</span> = <span class="r82 r">stored_len</span> + 5;
+			}
+			<span class="c">// force a stored block</span>
+			<b>if</b> (<span class="r82 r">stored_len</span> + 4 &lt;= <span class="r84 r">opt_lenb</span> &amp;&amp; <span class="r81 r">buf</span> != -1)
+			{
+				<span class="c">// 4: two words for the lengths</span>
+				<span class="c">// The test buf != NULL is only necessary if LIT_BUFSIZE &gt; WSIZE.</span>
+				<span class="c">// Otherwise we can&#39;t have processed more than WSIZE input bytes since</span>
+				<span class="c">// the last block flush, because compression would have been</span>
+				<span class="c">// successful. If LIT_BUFSIZE &lt;= WSIZE, it is never too late to</span>
+				<span class="c">// transform a block into a stored block.</span>
+				<a href="#3e570be0809c1e47" class="i method">_tr_stored_block</a>(<span class="r81 r">buf</span>, <span class="r82 r">stored_len</span>, <span class="r83 r">eof</span>);
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<span class="r85 r">static_lenb</span> == <span class="r84 r">opt_lenb</span>)
+				{
+					<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>((<a href="#d7e7bdc14a36821b" class="i field">STATIC_TREES</a> &lt;&lt; 1) + (<span class="r83 r">eof</span> ? 1 : 0), 3);
+					<a href="#2354b790a0b4c12e" class="i method">Compress_block</a>(<a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#4302de75b6ebd89c" class="i field">static_ltree</a>, <a href="StaticTree.cs.html#7f42df111ac72de4" class="t t">StaticTree</a>.<a href="StaticTree.cs.html#05c6c5264ef1425d" class="i field">static_dtree</a>);
+				}
+				<b>else</b>
+				{
+					<a href="#e628d6fd7a2a1cae" class="i method">Send_bits</a>((<a href="#c2781656aa221787" class="i field">DYN_TREES</a> &lt;&lt; 1) + (<span class="r83 r">eof</span> ? 1 : 0), 3);
+					<a href="#f94e28f1988ace0f" class="i method">Send_all_trees</a>(<a href="#af278fad7c3880eb" class="i field">l_desc</a>.<a href="Tree.cs.html#ef6dda7568bcac9f" class="i field">max_code</a> + 1, <a href="#5d50e46301716482" class="i field">d_desc</a>.<a href="Tree.cs.html#ef6dda7568bcac9f" class="i field">max_code</a> + 1, <span class="r86 r">max_blindex</span> + 1);
+					<a href="#2354b790a0b4c12e" class="i method">Compress_block</a>(<a href="#b75921388e8d5816" class="i field">dyn_ltree</a>, <a href="#8cf52ed1aa0224a3" class="i field">dyn_dtree</a>);
+				}
+			}
+			<span class="c">// The above check is made mod 2^32, for files larger than 512 MB</span>
+			<span class="c">// and uLong implemented on 32 bits.</span>
+			<a href="#037adb1d7d2205d0" class="i method">Init_block</a>();
+			<b>if</b> (<span class="r83 r">eof</span>)
+			{
+				<a href="#8d86ccc72834b58b" class="i method">Bi_windup</a>();
+			}
+		}
+
+		<span class="c">// Fill the window when the lookahead becomes insufficient.</span>
+		<span class="c">// Updates strstart and lookahead.</span>
+		<span class="c">//</span>
+		<span class="c">// IN assertion: lookahead &lt; MIN_LOOKAHEAD</span>
+		<span class="c">// OUT assertions: strstart &lt;= window_size-MIN_LOOKAHEAD</span>
+		<span class="c">//    At least one byte has been read, or avail_in == 0; reads are</span>
+		<span class="c">//    performed for at least two bytes (required for the zip translate_eol</span>
+		<span class="c">//    option -- not supported here).</span>
+		<b>internal void</b> <a id="788d25d94cbd79c1" href="../R/788d25d94cbd79c1.html" target="n" data-glyph="74,1" class="i method">Fill_window</a>()
+		{
+			<b>int</b> <span id="r87 rd" class="r87 r">n</span>;
+			<b>int</b> <span id="r88 rd" class="r88 r">m</span>;
+			<b>int</b> <span id="r89 rd" class="r89 r">p</span>;
+			<b>int</b> <span id="r90 rd" class="r90 r">more</span>;
+			<b>do</b>
+			{
+				<span class="c">// Amount of free space at the end of the window.</span>
+				<span class="r90 r">more</span> = (<a href="#b46ccaac31960f79" class="i field">window_size</a> - <a href="#65100620eb47708a" class="i field">lookahead</a> - <a href="#110199819b4a651e" class="i field">strstart</a>);
+				<span class="c">// Deal with !@#$% 64K limit:</span>
+				<b>if</b> (<span class="r90 r">more</span> == 0 &amp;&amp; <a href="#110199819b4a651e" class="i field">strstart</a> == 0 &amp;&amp; <a href="#65100620eb47708a" class="i field">lookahead</a> == 0)
+				{
+					<span class="r90 r">more</span> = <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r90 r">more</span> == -1)
+					{
+						<span class="c">// Very unlikely, but possible on 16 bit machine if strstart == 0</span>
+						<span class="c">// and lookahead == 1 (input done one byte at time)</span>
+						<span class="r90 r">more</span>--;
+					}
+					<b>else</b>
+					{
+						<span class="c">// If the window is almost full and there is insufficient lookahead,</span>
+						<span class="c">// move the upper half to the lower one to make room in the upper half.</span>
+						<b>if</b> (<a href="#110199819b4a651e" class="i field">strstart</a> &gt;= <a href="#dc5dcec56b1e9733" class="i field">w_size</a> + <a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+						{
+							<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#37fe3aa0c387ed45" class="i field">window</a>, <a href="#dc5dcec56b1e9733" class="i field">w_size</a>, <a href="#37fe3aa0c387ed45" class="i field">window</a>, 0, <a href="#dc5dcec56b1e9733" class="i field">w_size</a>);
+							<a href="#6e2021b3e2ded9f4" class="i field">match_start</a> -= <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+							<a href="#110199819b4a651e" class="i field">strstart</a> -= <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+							<span class="c">// we now have strstart &gt;= MAX_DIST</span>
+							<a href="#e2e7bfaeb67a3367" class="i field">block_start</a> -= <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+							<span class="c">// Slide the hash table (could be avoided with 32 bit values</span>
+							<span class="c">// at the expense of memory usage). We slide even when level == 0</span>
+							<span class="c">// to keep the hash table consistent if we switch back to level &gt; 0</span>
+							<span class="c">// later. (Using level 0 permanently is not an optimal usage of</span>
+							<span class="c">// zlib, so we don&#39;t care about this pathological case.)</span>
+							<span class="r87 r">n</span> = <a href="#67a615322048a249" class="i field">hash_size</a>;
+							<span class="r89 r">p</span> = <span class="r87 r">n</span>;
+							<b>do</b>
+							{
+								<span class="r88 r">m</span> = (<a href="#9a22fef74b92d970" class="i field">head</a>[--<span class="r89 r">p</span>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+								<a href="#9a22fef74b92d970" class="i field">head</a>[<span class="r89 r">p</span>] = (<span class="r88 r">m</span> &gt;= <a href="#dc5dcec56b1e9733" class="i field">w_size</a> ? (<b>short</b>)(<span class="r88 r">m</span> - <a href="#dc5dcec56b1e9733" class="i field">w_size</a>) : (<b>short</b>)0);
+							}
+							<b>while</b> (--<span class="r87 r">n</span> != 0);
+							<span class="r87 r">n</span> = <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+							<span class="r89 r">p</span> = <span class="r87 r">n</span>;
+							<b>do</b>
+							{
+								<span class="r88 r">m</span> = (<a href="#71082c8b37d0663a" class="i field">prev</a>[--<span class="r89 r">p</span>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+								<a href="#71082c8b37d0663a" class="i field">prev</a>[<span class="r89 r">p</span>] = (<span class="r88 r">m</span> &gt;= <a href="#dc5dcec56b1e9733" class="i field">w_size</a> ? (<b>short</b>)(<span class="r88 r">m</span> - <a href="#dc5dcec56b1e9733" class="i field">w_size</a>) : (<b>short</b>)0);
+							}
+							<b>while</b> (--<span class="r87 r">n</span> != 0);
+							<span class="c">// If n is not on any hash chain, prev[n] is garbage but</span>
+							<span class="c">// its value will never be used.</span>
+							<span class="r90 r">more</span> += <a href="#dc5dcec56b1e9733" class="i field">w_size</a>;
+						}
+					}
+				}
+				<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#4dde63befa366043" class="i field">avail_in</a> == 0)
+				{
+					<b>return</b>;
+				}
+				<span class="c">// If there was no sliding:</span>
+				<span class="c">//    strstart &lt;= WSIZE+MAX_DIST-1 &amp;&amp; lookahead &lt;= MIN_LOOKAHEAD - 1 &amp;&amp;</span>
+				<span class="c">//    more == window_size - lookahead - strstart</span>
+				<span class="c">// =&gt; more &gt;= window_size - (MIN_LOOKAHEAD-1 + WSIZE + MAX_DIST-1)</span>
+				<span class="c">// =&gt; more &gt;= window_size - 2*WSIZE + 2</span>
+				<span class="c">// In the BIG_MEM or MMAP case (not yet supported),</span>
+				<span class="c">//   window_size == input_size + MIN_LOOKAHEAD  &amp;&amp;</span>
+				<span class="c">//   strstart + s-&gt;lookahead &lt;= input_size =&gt; more &gt;= MIN_LOOKAHEAD.</span>
+				<span class="c">// Otherwise, window_size == 2*WSIZE so more &gt;= 2.</span>
+				<span class="c">// If there was sliding, more &gt;= WSIZE. So in all cases, more &gt;= 2.</span>
+				<span class="r87 r">n</span> = <a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#566726a5720f2930" class="i method">Read_buf</a>(<a href="#37fe3aa0c387ed45" class="i field">window</a>, <a href="#110199819b4a651e" class="i field">strstart</a> + <a href="#65100620eb47708a" class="i field">lookahead</a>, <span class="r90 r">more</span>);
+				<a href="#65100620eb47708a" class="i field">lookahead</a> += <span class="r87 r">n</span>;
+				<span class="c">// Initialize the hash value now that we have some input:</span>
+				<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &gt;= <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>)
+				{
+					<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xff));
+					<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a> + 1] &amp; <b>unchecked</b>((<b>int</b>)(0xff))
+						)) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+				}
+			}
+			<b>while</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &lt; <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a> &amp;&amp; <a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#4dde63befa366043" class="i field">avail_in</a> != 0);
+		}
+
+		<span class="c">// If the whole input has less than MIN_MATCH bytes, ins_h is garbage,</span>
+		<span class="c">// but this is not important since only literal bytes will be emitted.</span>
+		<span class="c">// Compress as much as possible from the input stream, return the current</span>
+		<span class="c">// block state.</span>
+		<span class="c">// This function does not perform lazy evaluation of matches and inserts</span>
+		<span class="c">// new strings in the dictionary only for unmatched strings or for short</span>
+		<span class="c">// matches. It is used only for the fast compression options.</span>
+		<b>internal int</b> <a id="d84c484fce248277" href="../R/d84c484fce248277.html" target="n" data-glyph="74,1" class="i method">Deflate_fast</a>(<b>int</b> <span id="r91 rd" class="r91 r">flush</span>)
+		{
+			<span class="c">//    short hash_head = 0; // head of the hash chain</span>
+			<b>int</b> <span id="r92 rd" class="r92 r">hash_head</span> = 0;
+			<span class="c">// head of the hash chain</span>
+			<b>bool</b> <span id="r93 rd" class="r93 r">bflush</span>;
+			<span class="c">// set if current block must be flushed</span>
+			<b>while</b> (<b>true</b>)
+			{
+				<span class="c">// Make sure that we always have enough lookahead, except</span>
+				<span class="c">// at the end of the input file. We need MAX_MATCH bytes</span>
+				<span class="c">// for the next match, plus MIN_MATCH bytes to insert the</span>
+				<span class="c">// string following the next match.</span>
+				<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &lt; <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+				{
+					<a href="#788d25d94cbd79c1" class="i method">Fill_window</a>();
+					<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &lt; <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a> &amp;&amp; <span class="r91 r">flush</span> == <a href="#a528e5b14b12de0d" class="i field">Z_NO_FLUSH</a>)
+					{
+						<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+					}
+					<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> == 0)
+					{
+						<b>break</b>;
+					}
+				}
+				<span class="c">// flush the current block</span>
+				<span class="c">// Insert the string window[strstart .. strstart+2] in the</span>
+				<span class="c">// dictionary, and set hash_head to the head of the hash chain:</span>
+				<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &gt;= <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>)
+				{
+					<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[(<a href="#110199819b4a651e" class="i field">strstart</a>) + (<a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1)] &amp; <b>unchecked</b>(
+						(<b>int</b>)(0xff)))) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+					<span class="c">//	prev[strstart&amp;w_mask]=hash_head=head[ins_h];</span>
+					<span class="r92 r">hash_head</span> = (<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+					<a href="#71082c8b37d0663a" class="i field">prev</a>[<a href="#110199819b4a651e" class="i field">strstart</a> &amp; <a href="#10cb771691388162" class="i field">w_mask</a>] = <a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>];
+					<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] = (<b>short</b>)<a href="#110199819b4a651e" class="i field">strstart</a>;
+				}
+				<span class="c">// Find the longest match, discarding those &lt;= prev_length.</span>
+				<span class="c">// At this point we have always match_length &lt; MIN_MATCH</span>
+				<b>if</b> (<span class="r92 r">hash_head</span> != 0L &amp;&amp; ((<a href="#110199819b4a651e" class="i field">strstart</a> - <span class="r92 r">hash_head</span>) &amp; <b>unchecked</b>((<b>int</b>)(0xffff))) &lt;= <a href="#dc5dcec56b1e9733" class="i field">w_size</a>
+					 - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+				{
+					<span class="c">// To simplify the code, we prevent matches with the string</span>
+					<span class="c">// of window index 0 (in particular we have to avoid a match</span>
+					<span class="c">// of the string with itself at the start of the input file).</span>
+					<b>if</b> (<a href="#dae9df1d0fcb2511" class="i field">strategy</a> != <a href="#d78f96a6a66ecec7" class="i field">Z_HUFFMAN_ONLY</a>)
+					{
+						<a href="#ce294cd9b5457434" class="i field">match_length</a> = <a href="#22618aa5c81e089e" class="i method">Longest_match</a>(<span class="r92 r">hash_head</span>);
+					}
+				}
+				<span class="c">// longest_match() sets match_start</span>
+				<b>if</b> (<a href="#ce294cd9b5457434" class="i field">match_length</a> &gt;= <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>)
+				{
+					<span class="c">//        check_match(strstart, match_start, match_length);</span>
+					<span class="r93 r">bflush</span> = <a href="#8c5abfc545a1c5fc" class="i method">_tr_tally</a>(<a href="#110199819b4a651e" class="i field">strstart</a> - <a href="#6e2021b3e2ded9f4" class="i field">match_start</a>, <a href="#ce294cd9b5457434" class="i field">match_length</a> - <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>);
+					<a href="#65100620eb47708a" class="i field">lookahead</a> -= <a href="#ce294cd9b5457434" class="i field">match_length</a>;
+					<span class="c">// Insert new strings in the hash table only if the match length</span>
+					<span class="c">// is not too large. This saves time but degrades compression.</span>
+					<b>if</b> (<a href="#ce294cd9b5457434" class="i field">match_length</a> &lt;= <a href="#be3b4173e16bb454" class="i field">max_lazy_match</a> &amp;&amp; <a href="#65100620eb47708a" class="i field">lookahead</a> &gt;= <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>)
+					{
+						<a href="#ce294cd9b5457434" class="i field">match_length</a>--;
+						<b>do</b>
+						{
+							<span class="c">// string at strstart already in hash table</span>
+							<a href="#110199819b4a651e" class="i field">strstart</a>++;
+							<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = ((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[(<a href="#110199819b4a651e" class="i field">strstart</a>) + (<a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1)] &amp; <b>unchecked</b>(
+								(<b>int</b>)(0xff)))) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+							<span class="c">//	    prev[strstart&amp;w_mask]=hash_head=head[ins_h];</span>
+							<span class="r92 r">hash_head</span> = (<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+							<a href="#71082c8b37d0663a" class="i field">prev</a>[<a href="#110199819b4a651e" class="i field">strstart</a> &amp; <a href="#10cb771691388162" class="i field">w_mask</a>] = <a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>];
+							<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] = (<b>short</b>)<a href="#110199819b4a651e" class="i field">strstart</a>;
+						}
+						<b>while</b> (--<a href="#ce294cd9b5457434" class="i field">match_length</a> != 0);
+						<span class="c">// strstart never exceeds WSIZE-MAX_MATCH, so there are</span>
+						<span class="c">// always MIN_MATCH bytes ahead.</span>
+						<a href="#110199819b4a651e" class="i field">strstart</a>++;
+					}
+					<b>else</b>
+					{
+						<a href="#110199819b4a651e" class="i field">strstart</a> += <a href="#ce294cd9b5457434" class="i field">match_length</a>;
+						<a href="#ce294cd9b5457434" class="i field">match_length</a> = 0;
+						<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xff));
+						<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a> + 1] &amp; <b>unchecked</b>((<b>int</b>)(0xff))
+							)) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+					}
+				}
+				<b>else</b>
+				{
+					<span class="c">// If lookahead &lt; MIN_MATCH, ins_h is garbage, but it does not</span>
+					<span class="c">// matter since it will be recomputed at next deflate call.</span>
+					<span class="c">// No match, output a literal byte</span>
+					<span class="r93 r">bflush</span> = <a href="#8c5abfc545a1c5fc" class="i method">_tr_tally</a>(0, <a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xff)));
+					<a href="#65100620eb47708a" class="i field">lookahead</a>--;
+					<a href="#110199819b4a651e" class="i field">strstart</a>++;
+				}
+				<b>if</b> (<span class="r93 r">bflush</span>)
+				{
+					<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<b>false</b>);
+					<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+					{
+						<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+					}
+				}
+			}
+			<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<span class="r91 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>);
+			<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+			{
+				<b>if</b> (<span class="r91 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>)
+				{
+					<b>return</b> <a href="#e69f4bcb973ccaf3" class="i field">FinishStarted</a>;
+				}
+				<b>else</b>
+				{
+					<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+				}
+			}
+			<b>return</b> <span class="r91 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a> ? <a href="#2461007a37a71b30" class="i field">FinishDone</a> : <a href="#0d8b0b3e017cb61c" class="i field">BlockDone</a>;
+		}
+
+		<span class="c">// Same as above, but achieves better compression. We use a lazy</span>
+		<span class="c">// evaluation for matches: a match is finally adopted only if there is</span>
+		<span class="c">// no better match at the next window position.</span>
+		<b>internal int</b> <a id="4e8d2a210955e3f4" href="../R/4e8d2a210955e3f4.html" target="n" data-glyph="74,1" class="i method">Deflate_slow</a>(<b>int</b> <span id="r94 rd" class="r94 r">flush</span>)
+		{
+			<span class="c">//    short hash_head = 0;    // head of hash chain</span>
+			<b>int</b> <span id="r95 rd" class="r95 r">hash_head</span> = 0;
+			<span class="c">// head of hash chain</span>
+			<b>bool</b> <span id="r96 rd" class="r96 r">bflush</span>;
+			<span class="c">// set if current block must be flushed</span>
+			<span class="c">// Process the input block.</span>
+			<b>while</b> (<b>true</b>)
+			{
+				<span class="c">// Make sure that we always have enough lookahead, except</span>
+				<span class="c">// at the end of the input file. We need MAX_MATCH bytes</span>
+				<span class="c">// for the next match, plus MIN_MATCH bytes to insert the</span>
+				<span class="c">// string following the next match.</span>
+				<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &lt; <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+				{
+					<a href="#788d25d94cbd79c1" class="i method">Fill_window</a>();
+					<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &lt; <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a> &amp;&amp; <span class="r94 r">flush</span> == <a href="#a528e5b14b12de0d" class="i field">Z_NO_FLUSH</a>)
+					{
+						<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+					}
+					<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> == 0)
+					{
+						<b>break</b>;
+					}
+				}
+				<span class="c">// flush the current block</span>
+				<span class="c">// Insert the string window[strstart .. strstart+2] in the</span>
+				<span class="c">// dictionary, and set hash_head to the head of the hash chain:</span>
+				<b>if</b> (<a href="#65100620eb47708a" class="i field">lookahead</a> &gt;= <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>)
+				{
+					<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[(<a href="#110199819b4a651e" class="i field">strstart</a>) + (<a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1)] &amp; <b>unchecked</b>(
+						(<b>int</b>)(0xff)))) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+					<span class="c">//	prev[strstart&amp;w_mask]=hash_head=head[ins_h];</span>
+					<span class="r95 r">hash_head</span> = (<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+					<a href="#71082c8b37d0663a" class="i field">prev</a>[<a href="#110199819b4a651e" class="i field">strstart</a> &amp; <a href="#10cb771691388162" class="i field">w_mask</a>] = <a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>];
+					<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] = (<b>short</b>)<a href="#110199819b4a651e" class="i field">strstart</a>;
+				}
+				<span class="c">// Find the longest match, discarding those &lt;= prev_length.</span>
+				<a href="#90ab88f7f3b49a95" class="i field">prev_length</a> = <a href="#ce294cd9b5457434" class="i field">match_length</a>;
+				<a href="#7c4f9e33810a3be3" class="i field">prev_match</a> = <a href="#6e2021b3e2ded9f4" class="i field">match_start</a>;
+				<a href="#ce294cd9b5457434" class="i field">match_length</a> = <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1;
+				<b>if</b> (<span class="r95 r">hash_head</span> != 0 &amp;&amp; <a href="#90ab88f7f3b49a95" class="i field">prev_length</a> &lt; <a href="#be3b4173e16bb454" class="i field">max_lazy_match</a> &amp;&amp; ((<a href="#110199819b4a651e" class="i field">strstart</a> - <span class="r95 r">hash_head</span>) &amp; <b>unchecked</b>(
+					(<b>int</b>)(0xffff))) &lt;= <a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+				{
+					<span class="c">// To simplify the code, we prevent matches with the string</span>
+					<span class="c">// of window index 0 (in particular we have to avoid a match</span>
+					<span class="c">// of the string with itself at the start of the input file).</span>
+					<b>if</b> (<a href="#dae9df1d0fcb2511" class="i field">strategy</a> != <a href="#d78f96a6a66ecec7" class="i field">Z_HUFFMAN_ONLY</a>)
+					{
+						<a href="#ce294cd9b5457434" class="i field">match_length</a> = <a href="#22618aa5c81e089e" class="i method">Longest_match</a>(<span class="r95 r">hash_head</span>);
+					}
+					<span class="c">// longest_match() sets match_start</span>
+					<b>if</b> (<a href="#ce294cd9b5457434" class="i field">match_length</a> &lt;= 5 &amp;&amp; (<a href="#dae9df1d0fcb2511" class="i field">strategy</a> == <a href="#1b553340ef9783f1" class="i field">Z_FILTERED</a> || (<a href="#ce294cd9b5457434" class="i field">match_length</a> == <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> &amp;&amp;
+						 <a href="#110199819b4a651e" class="i field">strstart</a> - <a href="#6e2021b3e2ded9f4" class="i field">match_start</a> &gt; 4096)))
+					{
+						<span class="c">// If prev_match is also MIN_MATCH, match_start is garbage</span>
+						<span class="c">// but we will ignore the current match anyway.</span>
+						<a href="#ce294cd9b5457434" class="i field">match_length</a> = <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1;
+					}
+				}
+				<span class="c">// If there was a match at the previous step and the current</span>
+				<span class="c">// match is not better, output the previous match:</span>
+				<b>if</b> (<a href="#90ab88f7f3b49a95" class="i field">prev_length</a> &gt;= <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> &amp;&amp; <a href="#ce294cd9b5457434" class="i field">match_length</a> &lt;= <a href="#90ab88f7f3b49a95" class="i field">prev_length</a>)
+				{
+					<b>int</b> <span id="r97 rd" class="r97 r">max_insert</span> = <a href="#110199819b4a651e" class="i field">strstart</a> + <a href="#65100620eb47708a" class="i field">lookahead</a> - <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>;
+					<span class="c">// Do not insert strings in hash table beyond this.</span>
+					<span class="c">//          check_match(strstart-1, prev_match, prev_length);</span>
+					<span class="r96 r">bflush</span> = <a href="#8c5abfc545a1c5fc" class="i method">_tr_tally</a>(<a href="#110199819b4a651e" class="i field">strstart</a> - 1 - <a href="#7c4f9e33810a3be3" class="i field">prev_match</a>, <a href="#90ab88f7f3b49a95" class="i field">prev_length</a> - <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>);
+					<span class="c">// Insert in hash table all strings up to the end of the match.</span>
+					<span class="c">// strstart-1 and strstart are already inserted. If there is not</span>
+					<span class="c">// enough lookahead, the last two strings are not inserted in</span>
+					<span class="c">// the hash table.</span>
+					<a href="#65100620eb47708a" class="i field">lookahead</a> -= <a href="#90ab88f7f3b49a95" class="i field">prev_length</a> - 1;
+					<a href="#90ab88f7f3b49a95" class="i field">prev_length</a> -= 2;
+					<b>do</b>
+					{
+						<b>if</b> (++<a href="#110199819b4a651e" class="i field">strstart</a> &lt;= <span class="r97 r">max_insert</span>)
+						{
+							<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[(<a href="#110199819b4a651e" class="i field">strstart</a>) + (<a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1)] &amp; <b>unchecked</b>(
+								(<b>int</b>)(0xff)))) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+							<span class="c">//prev[strstart&amp;w_mask]=hash_head=head[ins_h];</span>
+							<span class="r95 r">hash_head</span> = (<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)));
+							<a href="#71082c8b37d0663a" class="i field">prev</a>[<a href="#110199819b4a651e" class="i field">strstart</a> &amp; <a href="#10cb771691388162" class="i field">w_mask</a>] = <a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>];
+							<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] = (<b>short</b>)<a href="#110199819b4a651e" class="i field">strstart</a>;
+						}
+					}
+					<b>while</b> (--<a href="#90ab88f7f3b49a95" class="i field">prev_length</a> != 0);
+					<a href="#aa66f4096304500a" class="i field">match_available</a> = 0;
+					<a href="#ce294cd9b5457434" class="i field">match_length</a> = <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1;
+					<a href="#110199819b4a651e" class="i field">strstart</a>++;
+					<b>if</b> (<span class="r96 r">bflush</span>)
+					{
+						<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<b>false</b>);
+						<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+						{
+							<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+						}
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="#aa66f4096304500a" class="i field">match_available</a> != 0)
+					{
+						<span class="c">// If there was no match at the previous position, output a</span>
+						<span class="c">// single literal. If there was a match but the current match</span>
+						<span class="c">// is longer, truncate the previous match to a single literal.</span>
+						<span class="r96 r">bflush</span> = <a href="#8c5abfc545a1c5fc" class="i method">_tr_tally</a>(0, <a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a> - 1] &amp; <b>unchecked</b>((<b>int</b>)(0xff)));
+						<b>if</b> (<span class="r96 r">bflush</span>)
+						{
+							<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<b>false</b>);
+						}
+						<a href="#110199819b4a651e" class="i field">strstart</a>++;
+						<a href="#65100620eb47708a" class="i field">lookahead</a>--;
+						<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+						{
+							<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+						}
+					}
+					<b>else</b>
+					{
+						<span class="c">// There is no previous match to compare with, wait for</span>
+						<span class="c">// the next step to decide.</span>
+						<a href="#aa66f4096304500a" class="i field">match_available</a> = 1;
+						<a href="#110199819b4a651e" class="i field">strstart</a>++;
+						<a href="#65100620eb47708a" class="i field">lookahead</a>--;
+					}
+				}
+			}
+			<b>if</b> (<a href="#aa66f4096304500a" class="i field">match_available</a> != 0)
+			{
+				<span class="r96 r">bflush</span> = <a href="#8c5abfc545a1c5fc" class="i method">_tr_tally</a>(0, <a href="#37fe3aa0c387ed45" class="i field">window</a>[<a href="#110199819b4a651e" class="i field">strstart</a> - 1] &amp; <b>unchecked</b>((<b>int</b>)(0xff)));
+				<a href="#aa66f4096304500a" class="i field">match_available</a> = 0;
+			}
+			<a href="#544b4aceff489bc4" class="i method">Flush_block_only</a>(<span class="r94 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>);
+			<b>if</b> (<a href="#f18b92855bfed871" class="i field">strm</a>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+			{
+				<b>if</b> (<span class="r94 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>)
+				{
+					<b>return</b> <a href="#e69f4bcb973ccaf3" class="i field">FinishStarted</a>;
+				}
+				<b>else</b>
+				{
+					<b>return</b> <a href="#789372256aaf6005" class="i field">NeedMore</a>;
+				}
+			}
+			<b>return</b> <span class="r94 r">flush</span> == <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a> ? <a href="#2461007a37a71b30" class="i field">FinishDone</a> : <a href="#0d8b0b3e017cb61c" class="i field">BlockDone</a>;
+		}
+
+		<b>internal int</b> <a id="22618aa5c81e089e" href="../R/22618aa5c81e089e.html" target="n" data-glyph="74,1" class="i method">Longest_match</a>(<b>int</b> <span id="r98 rd" class="r98 r">cur_match</span>)
+		{
+			<b>int</b> <span id="r99 rd" class="r99 r">chain_length</span> = <a href="#575d8a9cd3e4286e" class="i field">max_chain_length</a>;
+			<span class="c">// max hash chain length</span>
+			<b>int</b> <span id="r100 rd" class="r100 r">scan</span> = <a href="#110199819b4a651e" class="i field">strstart</a>;
+			<span class="c">// current string</span>
+			<b>int</b> <span id="r101 rd" class="r101 r">match</span>;
+			<span class="c">// matched string</span>
+			<b>int</b> <span id="r102 rd" class="r102 r">len</span>;
+			<span class="c">// length of current match</span>
+			<b>int</b> <span id="r103 rd" class="r103 r">best_len</span> = <a href="#90ab88f7f3b49a95" class="i field">prev_length</a>;
+			<span class="c">// best match length so far</span>
+			<b>int</b> <span id="r104 rd" class="r104 r">limit</span> = <a href="#110199819b4a651e" class="i field">strstart</a> &gt; (<a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>) ? <a href="#110199819b4a651e" class="i field">strstart</a> - (<a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>
+				) : 0;
+			<b>int</b> <span id="r105 rd" class="r105 r">nice_match</span> = <a href="#d1ad14fae9b8eb5f" class="k">this</a>.<a href="#229b995db570b2ba" class="i field">nice_match</a>;
+			<span class="c">// Stop when cur_match becomes &lt;= limit. To simplify the code,</span>
+			<span class="c">// we prevent matches with the string of window index 0.</span>
+			<b>int</b> <span id="r106 rd" class="r106 r">wmask</span> = <a href="#10cb771691388162" class="i field">w_mask</a>;
+			<b>int</b> <span id="r107 rd" class="r107 r">strend</span> = <a href="#110199819b4a651e" class="i field">strstart</a> + <a href="#6fba5bc2103c7f9c" class="i field">MAX_MATCH</a>;
+			<b>byte</b> <span id="r108 rd" class="r108 r">scan_end1</span> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r100 r">scan</span> + <span class="r103 r">best_len</span> - 1];
+			<b>byte</b> <span id="r109 rd" class="r109 r">scan_end</span> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r100 r">scan</span> + <span class="r103 r">best_len</span>];
+			<span class="c">// The code is optimized for HASH_BITS &gt;= 8 and MAX_MATCH-2 multiple of 16.</span>
+			<span class="c">// It is easy to get rid of this optimization if necessary.</span>
+			<span class="c">// Do not waste too much time if we already have a good match:</span>
+			<b>if</b> (<a href="#90ab88f7f3b49a95" class="i field">prev_length</a> &gt;= <a href="#c3944b5bd6b2d11d" class="i field">good_match</a>)
+			{
+				<span class="r99 r">chain_length</span> &gt;&gt;= 2;
+			}
+			<span class="c">// Do not look for matches beyond the end of the input. This is necessary</span>
+			<span class="c">// to make deflate deterministic.</span>
+			<b>if</b> (<span class="r105 r">nice_match</span> &gt; <a href="#65100620eb47708a" class="i field">lookahead</a>)
+			{
+				<span class="r105 r">nice_match</span> = <a href="#65100620eb47708a" class="i field">lookahead</a>;
+			}
+			<b>do</b>
+			{
+				<span class="r101 r">match</span> = <span class="r98 r">cur_match</span>;
+				<span class="c">// Skip to next match if the match length cannot increase</span>
+				<span class="c">// or if the match length is less than 2:</span>
+				<b>if</b> (<a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r101 r">match</span> + <span class="r103 r">best_len</span>] != <span class="r109 r">scan_end</span> || <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r101 r">match</span> + <span class="r103 r">best_len</span> - 1] != <span class="r108 r">scan_end1</span>
+					 || <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r101 r">match</span>] != <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r100 r">scan</span>] || <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] != <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r100 r">scan</span> + 1])
+				{
+					<b>continue</b>;
+				}
+				<span class="c">// The check at best_len-1 can be removed because it will be made</span>
+				<span class="c">// again later. (This heuristic is not always a win.)</span>
+				<span class="c">// It is not necessary to compare scan[2] and match[2] since they</span>
+				<span class="c">// are always equal when the other bytes match, given that</span>
+				<span class="c">// the hash keys are equal and that HASH_BITS &gt;= 8.</span>
+				<span class="r100 r">scan</span> += 2;
+				<span class="r101 r">match</span>++;
+				<b>do</b>
+				{
+				}
+				<b>while</b> (<a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; 
+					<a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <a href="#37fe3aa0c387ed45" class="i field">window</a>
+					[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>
+					] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r100 r">scan</span>] == <a href="#37fe3aa0c387ed45" class="i field">window</a>[++<span class="r101 r">match</span>] &amp;&amp; <span class="r100 r">scan</span> &lt; <span class="r107 r">strend</span>);
+				<span class="c">// We check for insufficient lookahead only every 8th comparison;</span>
+				<span class="c">// the 256th check will be made at strstart+258.</span>
+				<span class="r102 r">len</span> = <a href="#6fba5bc2103c7f9c" class="i field">MAX_MATCH</a> - (<b>int</b>)(<span class="r107 r">strend</span> - <span class="r100 r">scan</span>);
+				<span class="r100 r">scan</span> = <span class="r107 r">strend</span> - <a href="#6fba5bc2103c7f9c" class="i field">MAX_MATCH</a>;
+				<b>if</b> (<span class="r102 r">len</span> &gt; <span class="r103 r">best_len</span>)
+				{
+					<a href="#6e2021b3e2ded9f4" class="i field">match_start</a> = <span class="r98 r">cur_match</span>;
+					<span class="r103 r">best_len</span> = <span class="r102 r">len</span>;
+					<b>if</b> (<span class="r102 r">len</span> &gt;= <span class="r105 r">nice_match</span>)
+					{
+						<b>break</b>;
+					}
+					<span class="r108 r">scan_end1</span> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r100 r">scan</span> + <span class="r103 r">best_len</span> - 1];
+					<span class="r109 r">scan_end</span> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[<span class="r100 r">scan</span> + <span class="r103 r">best_len</span>];
+				}
+			}
+			<b>while</b> ((<span class="r98 r">cur_match</span> = (<a href="#71082c8b37d0663a" class="i field">prev</a>[<span class="r98 r">cur_match</span> &amp; <span class="r106 r">wmask</span>] &amp; <b>unchecked</b>((<b>int</b>)(0xffff)))) &gt; <span class="r104 r">limit</span>
+				 &amp;&amp; --<span class="r99 r">chain_length</span> != 0);
+			<b>if</b> (<span class="r103 r">best_len</span> &lt;= <a href="#65100620eb47708a" class="i field">lookahead</a>)
+			{
+				<b>return</b> <span class="r103 r">best_len</span>;
+			}
+			<b>return</b> <a href="#65100620eb47708a" class="i field">lookahead</a>;
+		}
+
+		<b>internal int</b> <a id="05c1ef2c13de2435" href="../R/05c1ef2c13de2435.html" target="n" data-glyph="74,1" class="i method">DeflateInit</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r110 rd" class="r110 r">strm</span>, <b>int</b> <span id="r111 rd" class="r111 r">level</span>, <b>int</b> <span id="r112 rd" class="r112 r">bits</span>)
+		{
+			<b>return</b> <a href="#7892dff12bf60818" class="i method">DeflateInit2</a>(<span class="r110 r">strm</span>, <span class="r111 r">level</span>, <a href="#950625a1c48d1f85" class="i field">Z_DEFLATED</a>, <span class="r112 r">bits</span>, <a href="#c79c07ba4f6c64cd" class="i field">DEF_MEM_LEVEL</a>, <a href="#f86b15de43ce93c5" class="i field">Z_DEFAULT_STRATEGY</a>
+				);
+		}
+
+		<b>internal int</b> <a id="608104b6f82f401e" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">DeflateInit</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r113 rd" class="r113 r">strm</span>, <b>int</b> <span id="r114 rd" class="r114 r">level</span>)
+		{
+			<b>return</b> <a href="#05c1ef2c13de2435" class="i method">DeflateInit</a>(<span class="r113 r">strm</span>, <span class="r114 r">level</span>, <a href="#297b536c630afd8a" class="i field">MAX_WBITS</a>);
+		}
+
+		<b>internal int</b> <a id="7892dff12bf60818" href="../R/7892dff12bf60818.html" target="n" data-glyph="74,1" class="i method">DeflateInit2</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r115 rd" class="r115 r">strm</span>, <b>int</b> <span id="r116 rd" class="r116 r">level</span>, <b>int</b> <span id="r117 rd" class="r117 r">method</span>, <b>int</b> <span id="r118 rd" class="r118 r">windowBits</span>, <b>int</b>
+			 <span id="r119 rd" class="r119 r">memLevel</span>, <b>int</b> <span id="r120 rd" class="r120 r">strategy</span>)
+		{
+			<b>int</b> <span id="r121 rd" class="r121 r">noheader</span> = 0;
+			<span class="c">//    byte[] my_version=ZLIB_VERSION;</span>
+			<span class="c">//</span>
+			<span class="c">//  if (version == null || version[0] != my_version[0]</span>
+			<span class="c">//  || stream_size != sizeof(z_stream)) {</span>
+			<span class="c">//  return Z_VERSION_ERROR;</span>
+			<span class="c">//  }</span>
+			<span class="r115 r">strm</span>.<a href="ZStream.cs.html#1375722af7f7b471" class="i field">msg</a> = <b>null</b>;
+			<b>if</b> (<span class="r116 r">level</span> == <a href="#7b2a5f9af8d66fbf" class="i field">Z_DEFAULT_COMPRESSION</a>)
+			{
+				<span class="r116 r">level</span> = 6;
+			}
+			<b>if</b> (<span class="r118 r">windowBits</span> &lt; 0)
+			{
+				<span class="c">// undocumented feature: suppress zlib header</span>
+				<span class="r121 r">noheader</span> = 1;
+				<span class="r118 r">windowBits</span> = -<span class="r118 r">windowBits</span>;
+			}
+			<b>if</b> (<span class="r119 r">memLevel</span> &lt; 1 || <span class="r119 r">memLevel</span> &gt; <a href="#d6577280474ef853" class="i field">MAX_MEM_LEVEL</a> || <span class="r117 r">method</span> != <a href="#950625a1c48d1f85" class="i field">Z_DEFLATED</a> || <span class="r118 r">windowBits</span>
+				 &lt; 9 || <span class="r118 r">windowBits</span> &gt; 15 || <span class="r116 r">level</span> &lt; 0 || <span class="r116 r">level</span> &gt; 9 || <span class="r120 r">strategy</span> &lt; 0 || <span class="r120 r">strategy</span> &gt; 
+				<a href="#d78f96a6a66ecec7" class="i field">Z_HUFFMAN_ONLY</a>)
+			{
+				<b>return</b> <a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>;
+			}
+			<span class="r115 r">strm</span>.<a href="ZStream.cs.html#f6cfef45ef62c113" class="i field">dstate</a> = (<a href="#d1ad14fae9b8eb5f" class="t t">Deflate</a>)<a href="#d1ad14fae9b8eb5f" class="k">this</a>;
+			<a href="#d1ad14fae9b8eb5f" class="k">this</a>.<a href="#ce54a4c5dc9102ea" class="i field">noheader</a> = <span class="r121 r">noheader</span>;
+			<a href="#7c565064193d611e" class="i field">w_bits</a> = <span class="r118 r">windowBits</span>;
+			<a href="#dc5dcec56b1e9733" class="i field">w_size</a> = 1 &lt;&lt; <a href="#7c565064193d611e" class="i field">w_bits</a>;
+			<a href="#10cb771691388162" class="i field">w_mask</a> = <a href="#dc5dcec56b1e9733" class="i field">w_size</a> - 1;
+			<a href="#1d1a2425799fdbee" class="i field">hash_bits</a> = <span class="r119 r">memLevel</span> + 7;
+			<a href="#67a615322048a249" class="i field">hash_size</a> = 1 &lt;&lt; <a href="#1d1a2425799fdbee" class="i field">hash_bits</a>;
+			<a href="#31e072d1da83c5de" class="i field">hash_mask</a> = <a href="#67a615322048a249" class="i field">hash_size</a> - 1;
+			<a href="#88592e5739843d1e" class="i field">hash_shift</a> = ((<a href="#1d1a2425799fdbee" class="i field">hash_bits</a> + <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1) / <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>);
+			<a href="#37fe3aa0c387ed45" class="i field">window</a> = <b>new</b> <b>byte</b>[<a href="#dc5dcec56b1e9733" class="i field">w_size</a> * 2];
+			<a href="#71082c8b37d0663a" class="i field">prev</a> = <b>new</b> <b>short</b>[<a href="#dc5dcec56b1e9733" class="i field">w_size</a>];
+			<a href="#9a22fef74b92d970" class="i field">head</a> = <b>new</b> <b>short</b>[<a href="#67a615322048a249" class="i field">hash_size</a>];
+			<a href="#8498967c06b62d5f" class="i field">lit_bufsize</a> = 1 &lt;&lt; (<span class="r119 r">memLevel</span> + 6);
+			<span class="c">// 16K elements by default</span>
+			<span class="c">// We overlay pending_buf and d_buf+l_buf. This works since the average</span>
+			<span class="c">// output size for (length,distance) codes is &lt;= 24 bits.</span>
+			<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a> = <b>new</b> <b>byte</b>[<a href="#8498967c06b62d5f" class="i field">lit_bufsize</a> * 4];
+			<a href="#d0ef8fdd1c319187" class="i field">pending_buf_size</a> = <a href="#8498967c06b62d5f" class="i field">lit_bufsize</a> * 4;
+			<a href="#a63851a98d161a3c" class="i field">d_buf</a> = <a href="#8498967c06b62d5f" class="i field">lit_bufsize</a> / 2;
+			<a href="#e743a76c95b181ba" class="i field">l_buf</a> = (1 + 2) * <a href="#8498967c06b62d5f" class="i field">lit_bufsize</a>;
+			<a href="#d1ad14fae9b8eb5f" class="k">this</a>.<a href="#2242caaec0549bdd" class="i field">level</a> = <span class="r116 r">level</span>;
+			<span class="c">//System.out.println(&quot;level=&quot;+level);</span>
+			<a href="#d1ad14fae9b8eb5f" class="k">this</a>.<a href="#dae9df1d0fcb2511" class="i field">strategy</a> = <span class="r120 r">strategy</span>;
+			<a href="#d1ad14fae9b8eb5f" class="k">this</a>.<a href="#4ed00c30e4ecad0b" class="i field">method</a> = <b>unchecked</b>((<b>byte</b>)<span class="r117 r">method</span>);
+			<b>return</b> <a href="#669dfd446e71b1d3" class="i method">DeflateReset</a>(<span class="r115 r">strm</span>);
+		}
+
+		<b>internal int</b> <a id="669dfd446e71b1d3" href="../R/669dfd446e71b1d3.html" target="n" data-glyph="74,1" class="i method">DeflateReset</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r122 rd" class="r122 r">strm</span>)
+		{
+			<span class="r122 r">strm</span>.<a href="ZStream.cs.html#948985959b111adc" class="i field">total_in</a> = <span class="r122 r">strm</span>.<a href="ZStream.cs.html#ceb766101ea71367" class="i field">total_out</a> = 0;
+			<span class="r122 r">strm</span>.<a href="ZStream.cs.html#1375722af7f7b471" class="i field">msg</a> = <b>null</b>;
+			<span class="c">//</span>
+			<span class="r122 r">strm</span>.<a href="ZStream.cs.html#8ec9ce1fde01de9c" class="i field">data_type</a> = <a href="#d28ced167e638822" class="i field">Z_UNKNOWN</a>;
+			<a href="#0bb254aeaa3b16f8" class="i field">pending</a> = 0;
+			<a href="#cb7773013e470c1f" class="i field">pending_out</a> = 0;
+			<b>if</b> (<a href="#ce54a4c5dc9102ea" class="i field">noheader</a> &lt; 0)
+			{
+				<a href="#ce54a4c5dc9102ea" class="i field">noheader</a> = 0;
+			}
+			<span class="c">// was set to -1 by deflate(..., Z_FINISH);</span>
+			<a href="#7658ba16b9d2afdc" class="i field">status</a> = (<a href="#ce54a4c5dc9102ea" class="i field">noheader</a> != 0) ? <a href="#91a90670e75ae502" class="i field">BUSY_STATE</a> : <a href="#e13eac383c3c51cc" class="i field">INIT_STATE</a>;
+			<span class="r122 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a> = <span class="r122 r">strm</span>.<a href="ZStream.cs.html#5f0289fb90ae540d" class="i field">_adler</a>.<a href="Adler32.cs.html#7fa9b9ad6d717656" class="i method">Adler</a>(0, <b>null</b>, 0, 0);
+			<a href="#4effa61f0b42ac8d" class="i field">last_flush</a> = <a href="#a528e5b14b12de0d" class="i field">Z_NO_FLUSH</a>;
+			<a href="#a63080280cf23a7c" class="i method">Tr_init</a>();
+			<a href="#d75444f64523e033" class="i method">Lm_init</a>();
+			<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+		}
+
+		<b>internal int</b> <a id="bcb454e2c0166870" href="../R/bcb454e2c0166870.html" target="n" data-glyph="74,1" class="i method">DeflateEnd</a>()
+		{
+			<b>if</b> (<a href="#7658ba16b9d2afdc" class="i field">status</a> != <a href="#e13eac383c3c51cc" class="i field">INIT_STATE</a> &amp;&amp; <a href="#7658ba16b9d2afdc" class="i field">status</a> != <a href="#91a90670e75ae502" class="i field">BUSY_STATE</a> &amp;&amp; <a href="#7658ba16b9d2afdc" class="i field">status</a> != <a href="#e230894fe9d929a8" class="i field">FINISH_STATE</a>)
+			{
+				<b>return</b> <a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>;
+			}
+			<span class="c">// Deallocate in reverse order of allocations:</span>
+			<a href="#e4f5db4d7a06631c" class="i field">pending_buf</a> = <b>null</b>;
+			<a href="#9a22fef74b92d970" class="i field">head</a> = <b>null</b>;
+			<a href="#71082c8b37d0663a" class="i field">prev</a> = <b>null</b>;
+			<a href="#37fe3aa0c387ed45" class="i field">window</a> = <b>null</b>;
+			<span class="c">// free</span>
+			<span class="c">// dstate=null;</span>
+			<b>return</b> <a href="#7658ba16b9d2afdc" class="i field">status</a> == <a href="#91a90670e75ae502" class="i field">BUSY_STATE</a> ? <a href="#929c53695d0a333a" class="i field">Z_DATA_ERROR</a> : <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+		}
+
+		<b>internal int</b> <a id="469a1ec52383b7eb" href="../R/469a1ec52383b7eb.html" target="n" data-glyph="74,1" class="i method">DeflateParams</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r123 rd" class="r123 r">strm</span>, <b>int</b> <span id="r124 rd" class="r124 r">_level</span>, <b>int</b> <span id="r125 rd" class="r125 r">_strategy</span>)
+		{
+			<b>int</b> <span id="r126 rd" class="r126 r">err</span> = <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+			<b>if</b> (<span class="r124 r">_level</span> == <a href="#7b2a5f9af8d66fbf" class="i field">Z_DEFAULT_COMPRESSION</a>)
+			{
+				<span class="r124 r">_level</span> = 6;
+			}
+			<b>if</b> (<span class="r124 r">_level</span> &lt; 0 || <span class="r124 r">_level</span> &gt; 9 || <span class="r125 r">_strategy</span> &lt; 0 || <span class="r125 r">_strategy</span> &gt; <a href="#d78f96a6a66ecec7" class="i field">Z_HUFFMAN_ONLY</a>)
+			{
+				<b>return</b> <a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>;
+			}
+			<b>if</b> (<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#e5083d296e572aff" class="i field">func</a> != <a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<span class="r124 r">_level</span>].<a href="#e5083d296e572aff" class="i field">func</a> &amp;&amp; <span class="r123 r">strm</span>.<a href="ZStream.cs.html#948985959b111adc" class="i field">total_in</a> != 0)
+			{
+				<span class="c">// Flush the last buffer:</span>
+				<span class="r126 r">err</span> = <span class="r123 r">strm</span>.<a href="ZStream.cs.html#acc89ba6750b0ade" class="i method">Deflate</a>(<a href="#b544a6a5a46745d4" class="i field">Z_PARTIAL_FLUSH</a>);
+			}
+			<b>if</b> (<a href="#2242caaec0549bdd" class="i field">level</a> != <span class="r124 r">_level</span>)
+			{
+				<a href="#2242caaec0549bdd" class="i field">level</a> = <span class="r124 r">_level</span>;
+				<a href="#be3b4173e16bb454" class="i field">max_lazy_match</a> = <a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#e56f9470931c8117" class="i field">max_lazy</a>;
+				<a href="#c3944b5bd6b2d11d" class="i field">good_match</a> = <a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#51fac970e6007ec8" class="i field">good_length</a>;
+				<a href="#229b995db570b2ba" class="i field">nice_match</a> = <a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#541dfcd6a246648a" class="i field">nice_length</a>;
+				<a href="#575d8a9cd3e4286e" class="i field">max_chain_length</a> = <a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#28a864d0763d9c14" class="i field">max_chain</a>;
+			}
+			<a href="#dae9df1d0fcb2511" class="i field">strategy</a> = <span class="r125 r">_strategy</span>;
+			<b>return</b> <span class="r126 r">err</span>;
+		}
+
+		<b>internal int</b> <a id="aaa0f4cd81afeb0c" href="../R/aaa0f4cd81afeb0c.html" target="n" data-glyph="74,1" class="i method">DeflateSetDictionary</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r127 rd" class="r127 r">strm</span>, <b>byte</b>[] <span id="r128 rd" class="r128 r">dictionary</span>, <b>int</b> <span id="r129 rd" class="r129 r">dictLength</span>
+			)
+		{
+			<b>int</b> <span id="r130 rd" class="r130 r">length</span> = <span class="r129 r">dictLength</span>;
+			<b>int</b> <span id="r131 rd" class="r131 r">index</span> = 0;
+			<b>if</b> (<span class="r128 r">dictionary</span> == <b>null</b> || <a href="#7658ba16b9d2afdc" class="i field">status</a> != <a href="#e13eac383c3c51cc" class="i field">INIT_STATE</a>)
+			{
+				<b>return</b> <a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>;
+			}
+			<span class="r127 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a> = <span class="r127 r">strm</span>.<a href="ZStream.cs.html#5f0289fb90ae540d" class="i field">_adler</a>.<a href="Adler32.cs.html#7fa9b9ad6d717656" class="i method">Adler</a>(<span class="r127 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a>, <span class="r128 r">dictionary</span>, 0, <span class="r129 r">dictLength</span>);
+			<b>if</b> (<span class="r130 r">length</span> &lt; <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>)
+			{
+				<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+			}
+			<b>if</b> (<span class="r130 r">length</span> &gt; <a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>)
+			{
+				<span class="r130 r">length</span> = <a href="#dc5dcec56b1e9733" class="i field">w_size</a> - <a href="#15c7da8ac392c9d2" class="i field">MIN_LOOKAHEAD</a>;
+				<span class="r131 r">index</span> = <span class="r129 r">dictLength</span> - <span class="r130 r">length</span>;
+			}
+			<span class="c">// use the tail of the dictionary</span>
+			<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r128 r">dictionary</span>, <span class="r131 r">index</span>, <a href="#37fe3aa0c387ed45" class="i field">window</a>, 0, <span class="r130 r">length</span>);
+			<a href="#110199819b4a651e" class="i field">strstart</a> = <span class="r130 r">length</span>;
+			<a href="#e2e7bfaeb67a3367" class="i field">block_start</a> = <span class="r130 r">length</span>;
+			<span class="c">// Insert all strings in the hash table (except for the last two bytes).</span>
+			<span class="c">// s-&gt;lookahead stays null, so s-&gt;ins_h will be recomputed at the next</span>
+			<span class="c">// call of fill_window.</span>
+			<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = <a href="#37fe3aa0c387ed45" class="i field">window</a>[0] &amp; <b>unchecked</b>((<b>int</b>)(0xff));
+			<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[1] &amp; <b>unchecked</b>((<b>int</b>)(0xff)))) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+			<b>for</b> (<b>int</b> <span id="r132 rd" class="r132 r">n</span> = 0; <span class="r132 r">n</span> &lt;= <span class="r130 r">length</span> - <a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a>; <span class="r132 r">n</span>++)
+			{
+				<a href="#d6a7ab2fff205afc" class="i field">ins_h</a> = (((<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>) &lt;&lt; <a href="#88592e5739843d1e" class="i field">hash_shift</a>) ^ (<a href="#37fe3aa0c387ed45" class="i field">window</a>[(<span class="r132 r">n</span>) + (<a href="#a7d3b03a808cc401" class="i field">MIN_MATCH</a> - 1)] &amp; <b>unchecked</b>((<b>int</b>
+					)(0xff)))) &amp; <a href="#31e072d1da83c5de" class="i field">hash_mask</a>;
+				<a href="#71082c8b37d0663a" class="i field">prev</a>[<span class="r132 r">n</span> &amp; <a href="#10cb771691388162" class="i field">w_mask</a>] = <a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>];
+				<a href="#9a22fef74b92d970" class="i field">head</a>[<a href="#d6a7ab2fff205afc" class="i field">ins_h</a>] = (<b>short</b>)<span class="r132 r">n</span>;
+			}
+			<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+		}
+
+		<b>internal int</b> <a id="8b4860a8d59d3130" href="../R/8b4860a8d59d3130.html" target="n" data-glyph="74,1" class="i method">DoDeflate</a>(<a href="ZStream.cs.html#d2b19bd05b9e75af" class="t t">ZStream</a> <span id="r133 rd" class="r133 r">strm</span>, <b>int</b> <span id="r134 rd" class="r134 r">flush</span>)
+		{
+			<b>int</b> <span id="r135 rd" class="r135 r">old_flush</span>;
+			<b>if</b> (<span class="r134 r">flush</span> &gt; <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a> || <span class="r134 r">flush</span> &lt; 0)
+			{
+				<b>return</b> <a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>;
+			}
+			<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#18656008138492ba" class="i field">next_out</a> == <b>null</b> || (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#4369f207df005701" class="i field">next_in</a> == <b>null</b> &amp;&amp; <span class="r133 r">strm</span>.<a href="ZStream.cs.html#4dde63befa366043" class="i field">avail_in</a> != 0) || (<a href="#7658ba16b9d2afdc" class="i field">status</a>
+				 == <a href="#e230894fe9d929a8" class="i field">FINISH_STATE</a> &amp;&amp; <span class="r134 r">flush</span> != <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>))
+			{
+				<span class="r133 r">strm</span>.<a href="ZStream.cs.html#1375722af7f7b471" class="i field">msg</a> = <a href="#b00484234ac532b1" class="i field">z_errmsg</a>[<a href="#4c2e5baeda4ba7c2" class="i field">Z_NEED_DICT</a> - (<a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>)];
+				<b>return</b> <a href="#1a827bdbc4cb9243" class="i field">Z_STREAM_ERROR</a>;
+			}
+			<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+			{
+				<span class="r133 r">strm</span>.<a href="ZStream.cs.html#1375722af7f7b471" class="i field">msg</a> = <a href="#b00484234ac532b1" class="i field">z_errmsg</a>[<a href="#4c2e5baeda4ba7c2" class="i field">Z_NEED_DICT</a> - (<a href="#8c1340ef023fdde4" class="i field">Z_BUF_ERROR</a>)];
+				<b>return</b> <a href="#8c1340ef023fdde4" class="i field">Z_BUF_ERROR</a>;
+			}
+			<a href="#d1ad14fae9b8eb5f" class="k">this</a>.<a href="#f18b92855bfed871" class="i field">strm</a> = <span class="r133 r">strm</span>;
+			<span class="c">// just in case</span>
+			<span class="r135 r">old_flush</span> = <a href="#4effa61f0b42ac8d" class="i field">last_flush</a>;
+			<a href="#4effa61f0b42ac8d" class="i field">last_flush</a> = <span class="r134 r">flush</span>;
+			<span class="c">// Write the zlib header</span>
+			<b>if</b> (<a href="#7658ba16b9d2afdc" class="i field">status</a> == <a href="#e13eac383c3c51cc" class="i field">INIT_STATE</a>)
+			{
+				<b>int</b> <span id="r136 rd" class="r136 r">header</span> = (<a href="#950625a1c48d1f85" class="i field">Z_DEFLATED</a> + ((<a href="#7c565064193d611e" class="i field">w_bits</a> - 8) &lt;&lt; 4)) &lt;&lt; 8;
+				<b>int</b> <span id="r137 rd" class="r137 r">level_flags</span> = ((<a href="#2242caaec0549bdd" class="i field">level</a> - 1) &amp; <b>unchecked</b>((<b>int</b>)(0xff))) &gt;&gt; 1;
+				<b>if</b> (<span class="r137 r">level_flags</span> &gt; 3)
+				{
+					<span class="r137 r">level_flags</span> = 3;
+				}
+				<span class="r136 r">header</span> |= (<span class="r137 r">level_flags</span> &lt;&lt; 6);
+				<b>if</b> (<a href="#110199819b4a651e" class="i field">strstart</a> != 0)
+				{
+					<span class="r136 r">header</span> |= <a href="#369e5155a00891fb" class="i field">PRESET_DICT</a>;
+				}
+				<span class="r136 r">header</span> += 31 - (<span class="r136 r">header</span> % 31);
+				<a href="#7658ba16b9d2afdc" class="i field">status</a> = <a href="#91a90670e75ae502" class="i field">BUSY_STATE</a>;
+				<a href="#91fd2de4b95f0697" class="i method">PutShortMSB</a>(<span class="r136 r">header</span>);
+				<span class="c">// Save the adler32 of the preset dictionary:</span>
+				<b>if</b> (<a href="#110199819b4a651e" class="i field">strstart</a> != 0)
+				{
+					<a href="#91fd2de4b95f0697" class="i method">PutShortMSB</a>((<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r133 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a>) &gt;&gt; 16)));
+					<a href="#91fd2de4b95f0697" class="i method">PutShortMSB</a>((<b>int</b>)(<span class="r133 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a> &amp; <b>unchecked</b>((<b>int</b>)(0xffff))));
+				}
+				<span class="r133 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a> = <span class="r133 r">strm</span>.<a href="ZStream.cs.html#5f0289fb90ae540d" class="i field">_adler</a>.<a href="Adler32.cs.html#7fa9b9ad6d717656" class="i method">Adler</a>(0, <b>null</b>, 0, 0);
+			}
+			<span class="c">// Flush as much pending output as possible</span>
+			<b>if</b> (<a href="#0bb254aeaa3b16f8" class="i field">pending</a> != 0)
+			{
+				<span class="r133 r">strm</span>.<a href="ZStream.cs.html#6ebf5e64e9840f1f" class="i method">Flush_pending</a>();
+				<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+				{
+					<span class="c">//System.out.println(&quot;  avail_out==0&quot;);</span>
+					<span class="c">// Since avail_out is 0, deflate will be called again with</span>
+					<span class="c">// more output space, but possibly with both pending and</span>
+					<span class="c">// avail_in equal to zero. There won&#39;t be anything to do,</span>
+					<span class="c">// but this is not an error situation so make sure we</span>
+					<span class="c">// return OK instead of BUF_ERROR at next call of deflate:</span>
+					<a href="#4effa61f0b42ac8d" class="i field">last_flush</a> = -1;
+					<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+				}
+			}
+			<b>else</b>
+			{
+				<span class="c">// Make sure there is something to do and avoid duplicate consecutive</span>
+				<span class="c">// flushes. For repeated and useless calls with Z_FINISH, we keep</span>
+				<span class="c">// returning Z_STREAM_END instead of Z_BUFF_ERROR.</span>
+				<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#4dde63befa366043" class="i field">avail_in</a> == 0 &amp;&amp; <span class="r134 r">flush</span> &lt;= <span class="r135 r">old_flush</span> &amp;&amp; <span class="r134 r">flush</span> != <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>)
+				{
+					<span class="r133 r">strm</span>.<a href="ZStream.cs.html#1375722af7f7b471" class="i field">msg</a> = <a href="#b00484234ac532b1" class="i field">z_errmsg</a>[<a href="#4c2e5baeda4ba7c2" class="i field">Z_NEED_DICT</a> - (<a href="#8c1340ef023fdde4" class="i field">Z_BUF_ERROR</a>)];
+					<b>return</b> <a href="#8c1340ef023fdde4" class="i field">Z_BUF_ERROR</a>;
+				}
+			}
+			<span class="c">// User must not provide more input after the first FINISH:</span>
+			<b>if</b> (<a href="#7658ba16b9d2afdc" class="i field">status</a> == <a href="#e230894fe9d929a8" class="i field">FINISH_STATE</a> &amp;&amp; <span class="r133 r">strm</span>.<a href="ZStream.cs.html#4dde63befa366043" class="i field">avail_in</a> != 0)
+			{
+				<span class="r133 r">strm</span>.<a href="ZStream.cs.html#1375722af7f7b471" class="i field">msg</a> = <a href="#b00484234ac532b1" class="i field">z_errmsg</a>[<a href="#4c2e5baeda4ba7c2" class="i field">Z_NEED_DICT</a> - (<a href="#8c1340ef023fdde4" class="i field">Z_BUF_ERROR</a>)];
+				<b>return</b> <a href="#8c1340ef023fdde4" class="i field">Z_BUF_ERROR</a>;
+			}
+			<span class="c">// Start a new block or continue the current one.</span>
+			<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#4dde63befa366043" class="i field">avail_in</a> != 0 || <a href="#65100620eb47708a" class="i field">lookahead</a> != 0 || (<span class="r134 r">flush</span> != <a href="#a528e5b14b12de0d" class="i field">Z_NO_FLUSH</a> &amp;&amp; <a href="#7658ba16b9d2afdc" class="i field">status</a> != <a href="#e230894fe9d929a8" class="i field">FINISH_STATE</a>
+				))
+			{
+				<b>int</b> <span id="r138 rd" class="r138 r">bstate</span> = -1;
+				<b>switch</b> (<a href="#c4492f4f0f415ffc" class="i field">config_table</a>[<a href="#2242caaec0549bdd" class="i field">level</a>].<a href="#e5083d296e572aff" class="i field">func</a>)
+				{
+					<b>case</b> <a href="#a7b23ea65b87144c" class="i field">STORED</a>:
+					{
+						<span class="r138 r">bstate</span> = <a href="#22d66af247a5497d" class="i method">Deflate_stored</a>(<span class="r134 r">flush</span>);
+						<b>break</b>;
+					}
+
+					<b>case</b> <a href="#bb36f7222798f9ef" class="i field">FAST</a>:
+					{
+						<span class="r138 r">bstate</span> = <a href="#d84c484fce248277" class="i method">Deflate_fast</a>(<span class="r134 r">flush</span>);
+						<b>break</b>;
+					}
+
+					<b>case</b> <a href="#407605f6ddedbf63" class="i field">SLOW</a>:
+					{
+						<span class="r138 r">bstate</span> = <a href="#4e8d2a210955e3f4" class="i method">Deflate_slow</a>(<span class="r134 r">flush</span>);
+						<b>break</b>;
+					}
+
+					<b>default</b>:
+					{
+						<b>break</b>;
+					}
+				}
+				<b>if</b> (<span class="r138 r">bstate</span> == <a href="#e69f4bcb973ccaf3" class="i field">FinishStarted</a> || <span class="r138 r">bstate</span> == <a href="#2461007a37a71b30" class="i field">FinishDone</a>)
+				{
+					<a href="#7658ba16b9d2afdc" class="i field">status</a> = <a href="#e230894fe9d929a8" class="i field">FINISH_STATE</a>;
+				}
+				<b>if</b> (<span class="r138 r">bstate</span> == <a href="#789372256aaf6005" class="i field">NeedMore</a> || <span class="r138 r">bstate</span> == <a href="#e69f4bcb973ccaf3" class="i field">FinishStarted</a>)
+				{
+					<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+					{
+						<a href="#4effa61f0b42ac8d" class="i field">last_flush</a> = -1;
+					}
+					<span class="c">// avoid BUF_ERROR next call, see above</span>
+					<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+				}
+				<span class="c">// If flush != Z_NO_FLUSH &amp;&amp; avail_out == 0, the next call</span>
+				<span class="c">// of deflate should use the same flush parameter to make sure</span>
+				<span class="c">// that the flush is complete. So we don&#39;t have to output an</span>
+				<span class="c">// empty block here, this will be done at next call. This also</span>
+				<span class="c">// ensures that for a very small output buffer, we emit at most</span>
+				<span class="c">// one empty block.</span>
+				<b>if</b> (<span class="r138 r">bstate</span> == <a href="#0d8b0b3e017cb61c" class="i field">BlockDone</a>)
+				{
+					<b>if</b> (<span class="r134 r">flush</span> == <a href="#b544a6a5a46745d4" class="i field">Z_PARTIAL_FLUSH</a>)
+					{
+						<a href="#a039b9853e1d37ef" class="i method">_tr_align</a>();
+					}
+					<b>else</b>
+					{
+						<span class="c">// FULL_FLUSH or SYNC_FLUSH</span>
+						<a href="#3e570be0809c1e47" class="i method">_tr_stored_block</a>(0, 0, <b>false</b>);
+						<span class="c">// For a full flush, this empty block will be recognized</span>
+						<span class="c">// as a special marker by inflate_sync().</span>
+						<b>if</b> (<span class="r134 r">flush</span> == <a href="#aad53c2158852c03" class="i field">Z_FULL_FLUSH</a>)
+						{
+							<span class="c">//state.head[s.hash_size-1]=0;</span>
+							<b>for</b> (<b>int</b> <span id="r139 rd" class="r139 r">i</span> = 0; <span class="r139 r">i</span> &lt; <a href="#67a615322048a249" class="i field">hash_size</a>; <span class="r139 r">i</span>++)
+							{
+								<span class="c">// forget history</span>
+								<a href="#9a22fef74b92d970" class="i field">head</a>[<span class="r139 r">i</span>] = 0;
+							}
+						}
+					}
+					<span class="r133 r">strm</span>.<a href="ZStream.cs.html#6ebf5e64e9840f1f" class="i method">Flush_pending</a>();
+					<b>if</b> (<span class="r133 r">strm</span>.<a href="ZStream.cs.html#3b62b55713a813fa" class="i field">avail_out</a> == 0)
+					{
+						<a href="#4effa61f0b42ac8d" class="i field">last_flush</a> = -1;
+						<span class="c">// avoid BUF_ERROR at next call, see above</span>
+						<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+					}
+				}
+			}
+			<b>if</b> (<span class="r134 r">flush</span> != <a href="#e3b17ddf752bc4c7" class="i field">Z_FINISH</a>)
+			{
+				<b>return</b> <a href="#54e53219d90dc309" class="i field">Z_OK</a>;
+			}
+			<b>if</b> (<a href="#ce54a4c5dc9102ea" class="i field">noheader</a> != 0)
+			{
+				<b>return</b> <a href="#ddacbd5986920a44" class="i field">Z_STREAM_END</a>;
+			}
+			<span class="c">// Write the zlib trailer (adler32)</span>
+			<a href="#91fd2de4b95f0697" class="i method">PutShortMSB</a>((<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r133 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a>) &gt;&gt; 16)));
+			<a href="#91fd2de4b95f0697" class="i method">PutShortMSB</a>((<b>int</b>)(<span class="r133 r">strm</span>.<a href="ZStream.cs.html#54c8d72ec39aac51" class="i field">adler</a> &amp; <b>unchecked</b>((<b>int</b>)(0xffff))));
+			<span class="r133 r">strm</span>.<a href="ZStream.cs.html#6ebf5e64e9840f1f" class="i method">Flush_pending</a>();
+			<span class="c">// If avail_out is zero, the application will call deflate again</span>
+			<span class="c">// to flush the rest.</span>
+			<a href="#ce54a4c5dc9102ea" class="i field">noheader</a> = -1;
+			<span class="c">// write the trailer only once!</span>
+			<b>return</b> <a href="#0bb254aeaa3b16f8" class="i field">pending</a> != 0 ? <a href="#54e53219d90dc309" class="i field">Z_OK</a> : <a href="#ddacbd5986920a44" class="i field">Z_STREAM_END</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,202 @@
+﻿<!DOCTYPE html>
+<html><head><title>StrategySimpleTwoWayInCore.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(193);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Merge/StrategySimpleTwoWayInCore.cs" target="_top">Merge\StrategySimpleTwoWayInCore.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Google Inc.
+ * Copyright (C) 2009, Dan Rigby &lt;dan@danrigby.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">DirectoryCache</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">TreeWalk</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Merge</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Merges two commits together in-memory, ignoring any working directory.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> The strategy chooses a path from one of the two input trees if the path is</span>
+	<span class="c">///</span><span class="c"> unchanged in the other relative to their common merge base tree. This is a</span>
+	<span class="c">///</span><span class="c"> trivial 3-way merge (at the file path level only).</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> Modifications of the same file path (content and/or file mode) by both input</span>
+	<span class="c">///</span><span class="c"> trees will cause a merge conflict, as this strategy does not attempt to merge</span>
+	<span class="c">///</span><span class="c"> file contents.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="e93e30529664ad36" href="../R/e93e30529664ad36.html" target="n" data-glyph="0,0" class="t t"><span id="622eb6b5d1a0fc1b">StrategySimpleTwoWayInCore</span></a> : <a href="ThreeWayMergeStrategy.cs.html#c6f7bf76fd4ba4ec" class="t t">ThreeWayMergeStrategy</a>
+    {
+        <b>public override string</b> <a id="7f7dcb9c1bdd92c3" href="../R/7f7dcb9c1bdd92c3.html" target="n" data-glyph="102,1" class="i property">Name</a>
+        {
+            <b>get</b> {<b>return</b> <span class="s">&quot;simple-two-way-in-core&quot;</span>;}
+        }
+
+        <b>public override</b> <a href="Merger.cs.html#319ea32bf53aea3b" class="t t">Merger</a> <a id="3b1d7d12fc790819" href="../R/3b1d7d12fc790819.html" target="n" data-glyph="72,1" class="i method">NewMerger</a>(<a href="../Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r0 rd" class="r0 r">db</span>)
+        {
+            <b>return</b> <b>new</b> <a href="#3716bfaf63e998b8" class="t constructor">InCoreMerger</a>(<span class="r0 r">db</span>);
+        }
+
+    	<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+    	<b>private class</b> <a id="c01c02c4d47d56df" href="../R/c01c02c4d47d56df.html" target="n" data-glyph="4,1" class="t t">InCoreMerger</a> : <a href="ThreeWayMerger.cs.html#3dad617f5cdc5025" class="t t">ThreeWayMerger</a>
+    	{
+    		<b>private const int</b> <a id="910b560c9d459733" href="../R/910b560c9d459733.html" target="n" data-glyph="10,2" class="i field">Base</a> = 0;
+    		<b>private const int</b> <a id="2c2c2e686b2c68a7" href="../R/2c2c2e686b2c68a7.html" target="n" data-glyph="10,2" class="i field">Ours</a> = 1;
+    		<b>private const int</b> <a id="b71cce55132e0737" href="../R/b71cce55132e0737.html" target="n" data-glyph="10,2" class="i field">Theirs</a> = 2;
+
+    		<b>private readonly</b> <a href="../TreeWalk/NameConflictTreeWalk.cs.html#11454cd217396f33" class="t t">NameConflictTreeWalk</a> <a id="47a727ef0d310920" href="../R/47a727ef0d310920.html" target="n" data-glyph="46,2" class="i field">_tw</a>;
+    		<b>private readonly</b> <a href="../DirectoryCache/DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a> <a id="15a0482272421ab7" href="../R/15a0482272421ab7.html" target="n" data-glyph="46,2" class="i field">_cache</a>;
+    		<b>private</b> <a href="../DirectoryCache/DirCacheBuilder.cs.html#262e9b3e8be58d73" class="t t">DirCacheBuilder</a> <a id="e27906e23deafb41" href="../R/e27906e23deafb41.html" target="n" data-glyph="46,2" class="i field">_builder</a>;
+    		<b>private</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="218433d69fd492bf" href="../R/218433d69fd492bf.html" target="n" data-glyph="46,2" class="i field">_resultTree</a>;
+
+    		<b>public</b> <a id="3716bfaf63e998b8" href="../R/3716bfaf63e998b8.html" target="n" data-glyph="72,2" class="i constructor">InCoreMerger</a>(<a href="../Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r1 rd" class="r1 r">local</span>)
+    			: <a href="ThreeWayMerger.cs.html#bc230cde0d5f7374" class="k">base</a>(<span class="r1 r">local</span>)
+    		{
+    			<a href="#47a727ef0d310920" class="i field">_tw</a> = <b>new</b> <a href="../TreeWalk/NameConflictTreeWalk.cs.html#c53d7a449bb1ef6a" class="t constructor">NameConflictTreeWalk</a>(<a href="Merger.cs.html#b92be43d1dfa602e" class="i property">Repository</a>);
+    			<a href="#15a0482272421ab7" class="i field">_cache</a> = <a href="../DirectoryCache/DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a>.<a href="../DirectoryCache/DirCache.cs.html#383cb2774624713c" class="i method">newInCore</a>();
+    		}
+
+    		<b>protected override bool</b> <a id="fc2d1884881cea31" href="../R/fc2d1884881cea31.html" target="n" data-glyph="75,2" class="i method">MergeImpl</a>()
+    		{
+    			<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#b74356de20445e44" class="i method">reset</a>();
+    			<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#8adeec7a4ef0a0ee" class="i method">addTree</a>(<a href="ThreeWayMerger.cs.html#0a872ca860d63f70" class="i method">MergeBase</a>());
+    			<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#a7e0a3bb7fa8f178" class="i method">addTree</a>(<a href="Merger.cs.html#576069fe1e78d63a" class="i property">SourceTrees</a>[0]);
+    			<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#a7e0a3bb7fa8f178" class="i method">addTree</a>(<a href="Merger.cs.html#576069fe1e78d63a" class="i property">SourceTrees</a>[1]);
+
+    			<b>bool</b> <span id="r2 rd" class="r2 r">hasConflict</span> = <b>false</b>;
+
+    			<a href="#e27906e23deafb41" class="i field">_builder</a> = <a href="#15a0482272421ab7" class="i field">_cache</a>.<a href="../DirectoryCache/DirCache.cs.html#a7b4273ebeeb1bff" class="i method">builder</a>();
+    			<b>while</b> (<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#2e7c4dbc3070e2c6" class="i method">next</a>())
+    			{
+    				<b>int</b> <span id="r3 rd" class="r3 r">modeO</span> = <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#6469f9901431fde0" class="i method">getRawMode</a>(<a href="#2c2c2e686b2c68a7" class="i field">Ours</a>);
+    				<b>int</b> <span id="r4 rd" class="r4 r">modeT</span> = <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#6469f9901431fde0" class="i method">getRawMode</a>(<a href="#b71cce55132e0737" class="i field">Theirs</a>);
+    				<b>if</b> (<span class="r3 r">modeO</span> == <span class="r4 r">modeT</span> &amp;&amp; <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#8c51cbfd447ad89e" class="i method">idEqual</a>(<a href="#2c2c2e686b2c68a7" class="i field">Ours</a>, <a href="#b71cce55132e0737" class="i field">Theirs</a>))
+    				{
+    					<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#2c2c2e686b2c68a7" class="i field">Ours</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#ad37d0b747e259e3" class="i field">STAGE_0</a>);
+    					<b>continue</b>;
+    				}
+
+    				<b>int</b> <span id="r5 rd" class="r5 r">modeB</span> = <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#6469f9901431fde0" class="i method">getRawMode</a>(<a href="#910b560c9d459733" class="i field">Base</a>);
+    				<b>if</b> (<span class="r5 r">modeB</span> == <span class="r3 r">modeO</span> &amp;&amp; <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#8c51cbfd447ad89e" class="i method">idEqual</a>(<a href="#910b560c9d459733" class="i field">Base</a>, <a href="#2c2c2e686b2c68a7" class="i field">Ours</a>))
+    					<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#b71cce55132e0737" class="i field">Theirs</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#ad37d0b747e259e3" class="i field">STAGE_0</a>);
+    				<b>else if</b> (<span class="r5 r">modeB</span> == <span class="r4 r">modeT</span> &amp;&amp; <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#8c51cbfd447ad89e" class="i method">idEqual</a>(<a href="#910b560c9d459733" class="i field">Base</a>, <a href="#b71cce55132e0737" class="i field">Theirs</a>))
+    					<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#2c2c2e686b2c68a7" class="i field">Ours</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#ad37d0b747e259e3" class="i field">STAGE_0</a>);
+    				<b>else if</b> (<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#947682482599c30c" class="i method">isSubtree</a>())
+    				{
+    					<b>if</b> (<a href="#4993848b92cd620f" class="i method">NonTree</a>(<span class="r5 r">modeB</span>))
+    					{
+    						<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#910b560c9d459733" class="i field">Base</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#7f8c5d2cf694fdfb" class="i field">STAGE_1</a>);
+    						<span class="r2 r">hasConflict</span> = <b>true</b>;
+    					}
+    					<b>if</b> (<a href="#4993848b92cd620f" class="i method">NonTree</a>(<span class="r3 r">modeO</span>))
+    					{
+    						<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#2c2c2e686b2c68a7" class="i field">Ours</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#4a74a36083d26162" class="i field">STAGE_2</a>);
+    						<span class="r2 r">hasConflict</span> = <b>true</b>;
+    					}
+    					<b>if</b> (<a href="#4993848b92cd620f" class="i method">NonTree</a>(<span class="r4 r">modeT</span>))
+    					{
+    						<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#b71cce55132e0737" class="i field">Theirs</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#38d81669ebb184d3" class="i field">STAGE_3</a>);
+    						<span class="r2 r">hasConflict</span> = <b>true</b>;
+    					}
+    					<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#16632978fd097e6a" class="i method">enterSubtree</a>();
+    				}
+    				<b>else</b>
+    				{
+    					<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#910b560c9d459733" class="i field">Base</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#7f8c5d2cf694fdfb" class="i field">STAGE_1</a>);
+    					<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#2c2c2e686b2c68a7" class="i field">Ours</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#4a74a36083d26162" class="i field">STAGE_2</a>);
+    					<a href="#52221025d805ff3a" class="i method">Add</a>(<a href="#b71cce55132e0737" class="i field">Theirs</a>, <a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="../DirectoryCache/DirCacheEntry.cs.html#38d81669ebb184d3" class="i field">STAGE_3</a>);
+    					<span class="r2 r">hasConflict</span> = <b>true</b>;
+    				}
+    			}
+    			<a href="#e27906e23deafb41" class="i field">_builder</a>.<a href="../DirectoryCache/DirCacheBuilder.cs.html#9ce6c8bee7c08585" class="i method">finish</a>();
+    			<a href="#e27906e23deafb41" class="i field">_builder</a> = <b>null</b>;
+
+    			<b>if</b> (<span class="r2 r">hasConflict</span>)
+    				<b>return false</b>;
+    			<b>try</b>
+    			{
+    				<a href="#218433d69fd492bf" class="i field">_resultTree</a> = <a href="#15a0482272421ab7" class="i field">_cache</a>.<a href="../DirectoryCache/DirCache.cs.html#081a76970c89f2c8" class="i method">writeTree</a>(<a href="Merger.cs.html#5963b95566445f8d" class="i method">GetObjectWriter</a>());
+    				<b>return true</b>;
+    			}
+    			<b>catch</b> (<a href="../Exceptions/UnmergedPathException.cs.html#622b296030c894bc" class="t t">UnmergedPathException</a>)
+    			{
+    				<a href="#218433d69fd492bf" class="i field">_resultTree</a> = <b>null</b>;
+    				<b>return false</b>;
+    			}
+    		}
+
+    		<b>private static bool</b> <a id="4993848b92cd620f" href="../R/4993848b92cd620f.html" target="n" data-glyph="76,2" class="i method">NonTree</a>(<b>int</b> <span id="r6 rd" class="r6 r">mode</span>)
+    		{
+    			<b>return</b> <span class="r6 r">mode</span> != 0 &amp;&amp; !<a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>.<a href="../FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<span class="r6 r">mode</span>);
+    		}
+
+    		<b>private void</b> <a id="52221025d805ff3a" href="../R/52221025d805ff3a.html" target="n" data-glyph="76,2" class="i method">Add</a>(<b>int</b> <span id="r7 rd" class="r7 r">tree</span>, <b>int</b> <span id="r8 rd" class="r8 r">stage</span>)
+    		{
+    			<a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="t t">AbstractTreeIterator</a> <span id="r9 rd" class="r9 r">i</span> = <a href="#a17fa1c30e78d877" class="i method">GetTree</a>(<span class="r7 r">tree</span>);
+    			<b>if</b> (<span class="r9 r">i</span> == <b>null</b>) <b>return</b>;
+
+    			<b>if</b> (<a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>.<a href="../FileMode.cs.html#fb8c09e5daf6aa10" class="i method">Equals</a>(<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#6469f9901431fde0" class="i method">getRawMode</a>(<span class="r7 r">tree</span>)))
+    			{
+    				<a href="#e27906e23deafb41" class="i field">_builder</a>.<a href="../DirectoryCache/DirCacheBuilder.cs.html#32a931856c201240" class="i method">addTree</a>(<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#738d2e93b7ce29b1" class="i method">getRawPath</a>(), <span class="r8 r">stage</span>, <a href="Merger.cs.html#b92be43d1dfa602e" class="i property">Repository</a>, <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#92662a6daacfc825" class="i method">getObjectId</a>(<span class="r7 r">tree</span>));
+    			}
+    			<b>else</b>
+    			{
+    				<a href="../DirectoryCache/DirCacheEntry.cs.html#67251d8fe8f4870f" class="k">var</a> <span id="r10 rd" class="r10 r">e</span> = <b>new</b> <a href="../DirectoryCache/DirCacheEntry.cs.html#6a60b6bbc9cba2e8" class="t constructor">DirCacheEntry</a>(<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#738d2e93b7ce29b1" class="i method">getRawPath</a>(), <span class="r8 r">stage</span>);
+    				<span class="r10 r">e</span>.<a href="../DirectoryCache/DirCacheEntry.cs.html#405a02505fb71fe1" class="i method">setObjectIdFromRaw</a>(<span class="r9 r">i</span>.<a href="../TreeWalk/AbstractTreeIterator.cs.html#e4880aa80dc2acd6" class="i method">idBuffer</a>(), <span class="r9 r">i</span>.<a href="../TreeWalk/AbstractTreeIterator.cs.html#7fa2c68b4bf4e772" class="i method">idOffset</a>());
+    				<span class="r10 r">e</span>.<a href="../DirectoryCache/DirCacheEntry.cs.html#9e3648738c910330" class="i method">setFileMode</a>(<a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#875887b97e8c273b" class="i method">getFileMode</a>(<span class="r7 r">tree</span>));
+    				<a href="#e27906e23deafb41" class="i field">_builder</a>.<a href="../DirectoryCache/DirCacheBuilder.cs.html#f8a3415e164a77c4" class="i method">add</a>(<span class="r10 r">e</span>);
+    			}
+    		}
+
+    		<b>private</b> <a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="t t">AbstractTreeIterator</a> <a id="a17fa1c30e78d877" href="../R/a17fa1c30e78d877.html" target="n" data-glyph="76,2" class="i method">GetTree</a>(<b>int</b> <span id="r11 rd" class="r11 r">tree</span>)
+    		{
+    			<b>return</b> <a href="#47a727ef0d310920" class="i field">_tw</a>.<a href="../TreeWalk/TreeWalk.cs.html#58953e7f6aced338" class="i method">getTree</a>&lt;<a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="t t">AbstractTreeIterator</a>&gt;(<span class="r11 r">tree</span>, <b>typeof</b>(<a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="t t">AbstractTreeIterator</a>));
+    		}
+
+    		<b>public override</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="a7201886d233ccd0" href="../R/a7201886d233ccd0.html" target="n" data-glyph="72,2" class="i method">GetResultTreeId</a>()
+    		{
+    			<b>return</b> <a href="#218433d69fd492bf" class="i field">_resultTree</a>;
+    		}
+    	}
+
+    	<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+    }
+}</pre></td></tr></table></div></body></html>

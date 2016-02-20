@@ -1,0 +1,659 @@
+﻿<!DOCTYPE html>
+<html><head><title>DirCacheTree.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(650);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/DirectoryCache/DirCacheTree.cs" target="_top">DirectoryCache\DirCacheTree.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Google Inc.
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">DirectoryCache</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Single tree record from the &#39;TREE&#39; </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> extension.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> A valid cache tree record contains the object id of a tree object and the</span>
+    <span class="c">///</span><span class="c"> total number of </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> instances (counted recursively) from</span>
+    <span class="c">///</span><span class="c"> the DirCache contained within the tree. This information facilitates faster</span>
+    <span class="c">///</span><span class="c"> traversal of the index and quicker generation of tree objects prior to</span>
+    <span class="c">///</span><span class="c"> creating a new commit.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> An invalid cache tree record indicates a known subtree whose file entries</span>
+    <span class="c">///</span><span class="c"> have changed in ways that cause the tree to no longer have a known object id.</span>
+    <span class="c">///</span><span class="c"> Invalid cache tree records must be revalidated prior to use.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="42fd8bf4d7b45ea6" href="../R/42fd8bf4d7b45ea6.html" target="n" data-glyph="0,0" class="t t">DirCacheTree</a>
+    {
+        <b>private static readonly byte</b>[] <a id="0f03d963ad59a88e" href="../R/0f03d963ad59a88e.html" target="n" data-glyph="46,1" class="i field">NoName</a> = { };
+        <b>private static readonly</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>[] <a id="e088dfaf32b84fa7" href="../R/e088dfaf32b84fa7.html" target="n" data-glyph="46,1" class="i field">NoChildren</a> = { };
+
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#e55872249056ac0e" class="t t">Comparison</a>&lt;<a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>&gt; <a id="c80ab774591d566d" href="../R/c80ab774591d566d.html" target="n" data-glyph="46,1" class="i field">TreeComparison</a> = (<span id="r0 rd" class="r0 r">o1</span>, <span id="r1 rd" class="r1 r">o2</span>) =&gt;
+        {
+            <b>byte</b>[] <span id="r2 rd" class="r2 r">a</span> = <span class="r0 r">o1</span>.<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>;
+            <b>byte</b>[] <span id="r3 rd" class="r3 r">b</span> = <span class="r1 r">o2</span>.<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>;
+            <b>int</b> <span id="r4 rd" class="r4 r">aLen</span> = <span class="r2 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>int</b> <span id="r5 rd" class="r5 r">bLen</span> = <span class="r3 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>int</b> <span id="r6 rd" class="r6 r">cPos</span>;
+
+            <b>for</b> (<span class="r6 r">cPos</span> = 0; <span class="r6 r">cPos</span> &lt; <span class="r4 r">aLen</span> &amp;&amp; <span class="r6 r">cPos</span> &lt; <span class="r5 r">bLen</span>; <span class="r6 r">cPos</span>++)
+            {
+                <b>int</b> <span id="r7 rd" class="r7 r">cmp</span> = (<span class="r2 r">a</span>[<span class="r6 r">cPos</span>] &amp; 0xff) - (<span class="r3 r">b</span>[<span class="r6 r">cPos</span>] &amp; (<b>byte</b>)0xff);
+                <b>if</b> (<span class="r7 r">cmp</span> != 0)
+                {
+                    <b>return</b> <span class="r7 r">cmp</span>;
+                }
+            }
+
+            <b>if</b> (<span class="r4 r">aLen</span> == <span class="r5 r">bLen</span>)
+            {
+                <b>return</b> 0;
+            }
+
+            <b>if</b> (<span class="r4 r">aLen</span> &lt; <span class="r5 r">bLen</span>)
+            {
+                <b>return</b> <span class="s">&#39;/&#39;</span> - (<span class="r3 r">b</span>[<span class="r6 r">cPos</span>] &amp; 0xff);
+            }
+
+            <b>return</b> (<span class="r2 r">a</span>[<span class="r6 r">cPos</span>] &amp; 0xff) - <span class="s">&#39;/&#39;</span>;
+        };
+
+        <span class="c">// Tree this tree resides in; null if we are the root.</span>
+        <b>private readonly</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <a id="df75758d78379983" href="../R/df75758d78379983.html" target="n" data-glyph="46,1" class="i field">_parent</a>;
+
+        <span class="c">// Name of this tree within its parent.</span>
+        <b>private readonly byte</b>[] <a id="5f5d1234a120f72c" href="../R/5f5d1234a120f72c.html" target="n" data-glyph="46,1" class="i field">_encodedName</a>;
+
+        <span class="c">// Number of DirCacheEntry records that belong to this tree.</span>
+        <b>private int</b> <a id="fb8f7e79a4daacfa" href="../R/fb8f7e79a4daacfa.html" target="n" data-glyph="46,1" class="i field">_entrySpan</a>;
+
+        <span class="c">// Unique SHA-1 of this tree; null if invalid.</span>
+        <b>private</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="25568a402d986528" href="../R/25568a402d986528.html" target="n" data-glyph="46,1" class="i field">_id</a>;
+
+        <span class="c">// Child trees, if any, sorted by EncodedName.</span>
+        <b>private</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>[] <a id="499bf85800e3ce2c" href="../R/499bf85800e3ce2c.html" target="n" data-glyph="46,1" class="i field">_children</a>;
+
+        <span class="c">// Number of valid children.</span>
+        <b>private int</b> <a id="154f095a88b4b8f9" href="../R/154f095a88b4b8f9.html" target="n" data-glyph="46,1" class="i field">_childCount</a>;
+
+        <b>public</b> <a id="4824fdae69b99447" href="../R/4824fdae69b99447.html" target="n" data-glyph="72,1" class="i constructor">DirCacheTree</a>()
+        {
+            <a href="#5f5d1234a120f72c" class="i field">_encodedName</a> = <a href="#0f03d963ad59a88e" class="i field">NoName</a>;
+            <a href="#499bf85800e3ce2c" class="i field">_children</a> = <a href="#e088dfaf32b84fa7" class="i field">NoChildren</a>;
+            <a href="#154f095a88b4b8f9" class="i field">_childCount</a> = 0;
+            <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> = -1;
+        }
+
+        <b>private</b> <a id="dfe371e7b59e45bf" href="../R/dfe371e7b59e45bf.html" target="n" data-glyph="76,1" class="i constructor">DirCacheTree</a>(<a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r8 rd" class="r8 r">myParent</span>, <b>byte</b>[] <span id="r9 rd" class="r9 r">path</span>, <b>int</b> <span id="r10 rd" class="r10 r">pathOff</span>, <b>int</b> <span id="r11 rd" class="r11 r">pathLen</span>)
+        {
+            <a href="#df75758d78379983" class="i field">_parent</a> = <span class="r8 r">myParent</span>;
+            <a href="#5f5d1234a120f72c" class="i field">_encodedName</a> = <b>new</b> <b>byte</b>[<span class="r11 r">pathLen</span>];
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r9 r">path</span>, <span class="r10 r">pathOff</span>, <a href="#5f5d1234a120f72c" class="i field">_encodedName</a>, 0, <span class="r11 r">pathLen</span>);
+            <a href="#499bf85800e3ce2c" class="i field">_children</a> = <a href="#e088dfaf32b84fa7" class="i field">NoChildren</a>;
+            <a href="#154f095a88b4b8f9" class="i field">_childCount</a> = 0;
+            <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> = -1;
+        }
+
+        <b>public</b> <a id="30d1e01fced78853" href="../R/30d1e01fced78853.html" target="n" data-glyph="72,1" class="i constructor">DirCacheTree</a>(<b>byte</b>[] <span id="r12 rd" class="r12 r">@in</span>, <a href="../Util/MutableInteger.cs.html#5b3a0be7485d5537" class="t t">MutableInteger</a> <span id="r13 rd" class="r13 r">off</span>, <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r14 rd" class="r14 r">myParent</span>)
+        {
+            <a href="#df75758d78379983" class="i field">_parent</a> = <span class="r14 r">myParent</span>;
+
+            <b>int</b> <span id="r15 rd" class="r15 r">ptr</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8cef6e8f2f0cd26a" class="i method">next</a>(<span class="r12 r">@in</span>, <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>, (<b>byte</b>)<span class="s">&#39;\0&#39;</span>);
+            <b>int</b> <span id="r16 rd" class="r16 r">nameLen</span> = <span class="r15 r">ptr</span> - <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a> - 1;
+            <b>if</b> (<span class="r16 r">nameLen</span> &gt; 0)
+            {
+                <a href="#5f5d1234a120f72c" class="i field">_encodedName</a> = <b>new</b> <b>byte</b>[<span class="r16 r">nameLen</span>];
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r12 r">@in</span>, <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>, <a href="#5f5d1234a120f72c" class="i field">_encodedName</a>, 0, <span class="r16 r">nameLen</span>);
+            }
+            <b>else</b>
+            {
+                <a href="#5f5d1234a120f72c" class="i field">_encodedName</a> = <a href="#0f03d963ad59a88e" class="i field">NoName</a>;
+            }
+
+            <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#52168a0231cef30b" class="i method">parseBase10</a>(<span class="r12 r">@in</span>, <span class="r15 r">ptr</span>, <span class="r13 r">off</span>);
+            <b>int</b> <span id="r17 rd" class="r17 r">subcnt</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#52168a0231cef30b" class="i method">parseBase10</a>(<span class="r12 r">@in</span>, <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>, <span class="r13 r">off</span>);
+            <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8cef6e8f2f0cd26a" class="i method">next</a>(<span class="r12 r">@in</span>, <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>, (<b>byte</b>)<span class="s">&#39;\n&#39;</span>);
+
+            <b>if</b> (<a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> &gt;= 0)
+            {
+                <span class="c">// Valid trees have a positive entry count and an id of a</span>
+                <span class="c">// tree object that should exist in the object database.</span>
+                <span class="c">//</span>
+                <a href="#25568a402d986528" class="i field">_id</a> = <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="../ObjectId.cs.html#6c7378267feaae09" class="i method">FromRaw</a>(<span class="r12 r">@in</span>, <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>);
+                <span class="r13 r">off</span>.<a href="../Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a> += <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>;
+            }
+
+            <b>if</b> (<span class="r17 r">subcnt</span> &gt; 0)
+            {
+                <b>bool</b> <span id="r18 rd" class="r18 r">alreadySorted</span> = <b>true</b>;
+                <a href="#499bf85800e3ce2c" class="i field">_children</a> = <b>new</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>[<span class="r17 r">subcnt</span>];
+                <b>for</b> (<b>int</b> <span id="r19 rd" class="r19 r">i</span> = 0; <span class="r19 r">i</span> &lt; <span class="r17 r">subcnt</span>; <span class="r19 r">i</span>++)
+                {
+                    <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r19 r">i</span>] = <b>new</b> <a href="#30d1e01fced78853" class="t constructor">DirCacheTree</a>(<span class="r12 r">@in</span>, <span class="r13 r">off</span>, <a href="#42fd8bf4d7b45ea6" class="k">this</a>);
+
+                    <span class="c">// C Git&#39;s ordering differs from our own; it prefers to</span>
+                    <span class="c">// sort by Length first. This sometimes produces a sort</span>
+                    <span class="c">// we do not desire. On the other hand it may have been</span>
+                    <span class="c">// created by us, and be sorted the way we want.</span>
+                    <span class="c">//</span>
+                    <b>if</b> (<span class="r18 r">alreadySorted</span> &amp;&amp; <span class="r19 r">i</span> &gt; 0
+                            &amp;&amp; <a href="#c80ab774591d566d" class="i field">TreeComparison</a>(<a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r19 r">i</span> - 1], <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r19 r">i</span>]) &gt; 0)
+                    {
+                        <span class="r18 r">alreadySorted</span> = <b>false</b>;
+                    }
+                }
+
+                <b>if</b> (!<span class="r18 r">alreadySorted</span>)
+                {
+                    <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#c2e31d3cf79aabe2" class="i method">Sort</a>(<a href="#499bf85800e3ce2c" class="i field">_children</a>, <a href="#c80ab774591d566d" class="i field">TreeComparison</a>);
+                }
+            }
+            <b>else</b>
+            {
+                <span class="c">// Leaf level trees have no children, only (file) entries.</span>
+                <span class="c">//</span>
+                <a href="#499bf85800e3ce2c" class="i field">_children</a> = <a href="#e088dfaf32b84fa7" class="i field">NoChildren</a>;
+            }
+            <a href="#154f095a88b4b8f9" class="i field">_childCount</a> = <span class="r17 r">subcnt</span>;
+        }
+
+        <b>public void</b> <a id="503e3c4e0e565fcf" href="../R/503e3c4e0e565fcf.html" target="n" data-glyph="72,1" class="i method">write</a>(<b>byte</b>[] <span id="r20 rd" class="r20 r">tmp</span>, <a href="../Util/TemporaryBuffer.cs.html#657dbd7b9cab3ad5" class="t t">TemporaryBuffer</a> <span id="r21 rd" class="r21 r">os</span>)
+        {
+            <b>int</b> <span id="r22 rd" class="r22 r">ptr</span> = <span class="r20 r">tmp</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <span class="r20 r">tmp</span>[--<span class="r22 r">ptr</span>] = (<b>byte</b>)<span class="s">&#39;\n&#39;</span>;
+            <span class="r22 r">ptr</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#addf829e37b6eea2" class="i method">formatBase10</a>(<span class="r20 r">tmp</span>, <span class="r22 r">ptr</span>, <a href="#154f095a88b4b8f9" class="i field">_childCount</a>);
+            <span class="r20 r">tmp</span>[--<span class="r22 r">ptr</span>] = (<b>byte</b>)<span class="s">&#39; &#39;</span>;
+            <span class="r22 r">ptr</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#addf829e37b6eea2" class="i method">formatBase10</a>(<span class="r20 r">tmp</span>, <span class="r22 r">ptr</span>, <a href="#61c532a761b19880" class="i method">isValid</a>() ? <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> : -1);
+            <span class="r20 r">tmp</span>[--<span class="r22 r">ptr</span>] = 0;
+
+            <span class="r21 r">os</span>.<a href="../Util/TemporaryBuffer.cs.html#310dfda0cef3c274" class="i method">write</a>(<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>, 0, <a href="#5f5d1234a120f72c" class="i field">_encodedName</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+            <span class="r21 r">os</span>.<a href="../Util/TemporaryBuffer.cs.html#310dfda0cef3c274" class="i method">write</a>(<span class="r20 r">tmp</span>, <span class="r22 r">ptr</span>, <span class="r20 r">tmp</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r22 r">ptr</span>);
+
+            <b>if</b> (<a href="#61c532a761b19880" class="i method">isValid</a>())
+            {
+                <a href="#25568a402d986528" class="i field">_id</a>.<a href="../AnyObjectId.cs.html#b2599f05e8f4ca38" class="i method">copyRawTo</a>(<span class="r20 r">tmp</span>, 0);
+                <span class="r21 r">os</span>.<a href="../Util/TemporaryBuffer.cs.html#310dfda0cef3c274" class="i method">write</a>(<span class="r20 r">tmp</span>, 0, <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>);
+            }
+
+            <b>for</b> (<b>int</b> <span id="r23 rd" class="r23 r">i</span> = 0; <span class="r23 r">i</span> &lt; <a href="#154f095a88b4b8f9" class="i field">_childCount</a>; <span class="r23 r">i</span>++)
+            {
+                <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r23 r">i</span>].<a href="#503e3c4e0e565fcf" class="i method">write</a>(<span class="r20 r">tmp</span>, <span class="r21 r">os</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Determine if this cache is currently valid.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> A valid cache tree knows how many </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> instances from</span>
+        <span class="c">///</span><span class="c"> the parent </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> reside within this tree (recursively</span>
+        <span class="c">///</span><span class="c"> enumerated). It also knows the object id of the tree, as the tree should</span>
+        <span class="c">///</span><span class="c"> be readily available from the repository&#39;s object database.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if this tree is knows key details about itself; false if the</span>
+        <span class="c">///</span><span class="c"> tree needs to be regenerated.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="61c532a761b19880" href="../R/61c532a761b19880.html" target="n" data-glyph="72,1" class="i method">isValid</a>()
+        {
+            <b>return</b> <a href="#25568a402d986528" class="i field">_id</a> != <b>null</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the number of entries this tree spans within the DirCache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If this tree is not valid (see </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#61c532a761b19880" class="i method">isValid</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">) this method&#39;s return</span>
+        <span class="c">///</span><span class="c"> value is always strictly negative (less than 0) but is otherwise an</span>
+        <span class="c">///</span><span class="c"> undefined result.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Total number of entries (recursively) contained within this tree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="d4207e4a41a165ee" href="../R/d4207e4a41a165ee.html" target="n" data-glyph="72,1" class="i method">getEntrySpan</a>()
+        {
+            <b>return</b> <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the number of cached subtrees contained within this tree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Number of child trees available through this tree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="b3686531c2c8931d" href="../R/b3686531c2c8931d.html" target="n" data-glyph="72,1" class="i method">getChildCount</a>()
+        {
+            <b>return</b> <a href="#154f095a88b4b8f9" class="i field">_childCount</a>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the i-th child cache tree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">i</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Index of the child to obtain.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The child tree.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <a id="2bc655b9bd1fe6e7" href="../R/2bc655b9bd1fe6e7.html" target="n" data-glyph="72,1" class="i method">getChild</a>(<b>int</b> <span id="r24 rd" class="r24 r">i</span>)
+        {
+            <b>return</b> <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r24 r">i</span>];
+        }
+
+        <b>public</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="a57f82e71684d245" href="../R/a57f82e71684d245.html" target="n" data-glyph="72,1" class="i method">getObjectId</a>()
+        {
+            <b>return</b> <a href="#25568a402d986528" class="i field">_id</a>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the tree&#39;s name within its parent.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method is not very efficient and is primarily meant for debugging</span>
+        <span class="c">///</span><span class="c"> and final output generation. Applications should try to avoid calling it,</span>
+        <span class="c">///</span><span class="c"> and if invoked do so only once per interesting entry, where the name is</span>
+        <span class="c">///</span><span class="c"> absolutely required for correct function.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Name of the tree. This does not contain any &#39;/&#39; characters.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="f8ae2b93fc51cce0" href="../R/f8ae2b93fc51cce0.html" target="n" data-glyph="72,1" class="i method">getNameString</a>()
+        {
+            <b>return</b> <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#b2fcdc67ec48e578" class="i field">CHARSET</a>.<a href="@0@mscorlib/A.html#7310c9cccfaecd17" class="i method">GetString</a>(<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the tree&#39;s path within the repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method is not very efficient and is primarily meant for debugging</span>
+        <span class="c">///</span><span class="c"> and final output generation. Applications should try to avoid calling it,</span>
+        <span class="c">///</span><span class="c"> and if invoked do so only once per interesting entry, where the name is</span>
+        <span class="c">///</span><span class="c"> absolutely required for correct function.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Path of the tree, relative to the repository root. If this is not</span>
+        <span class="c">///</span><span class="c"> the root tree the path ends with &#39;/&#39;. The root tree&#39;s path string</span>
+        <span class="c">///</span><span class="c"> is the empty string (&quot;&quot;).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="4230a6ad5c158d1f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getPathString</a>()
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r25 rd" class="r25 r">sb</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <a href="#a3e126db484eec19" class="i method">AppendName</a>(<span class="r25 r">sb</span>);
+            <b>return</b> <span class="r25 r">sb</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write (if necessary) this tree to the object store.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r26 r">cacheEntry</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the complete cache from DirCache.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">cIdx</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> first position of </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> that is a member of this</span>
+        <span class="c">///</span><span class="c"> tree. The path of </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache[cacheIdx].path</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> for the</span>
+        <span class="c">///</span><span class="c"> range </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">[0,pathOff-1)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> matches the complete path of</span>
+        <span class="c">///</span><span class="c"> this tree, from the root of the repository. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">pathOffset</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> number of bytes of </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache[cacheIdx].path</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> that</span>
+        <span class="c">///</span><span class="c"> matches this tree&#39;s path. The value at array position</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache[cacheIdx].path[pathOff-1]</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> is always &#39;/&#39; if</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">pathOff</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> is &gt; 0.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">ow</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the writer to use when serializing to the store.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">identity of this tree.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/UnmergedPathException.cs.html#622b296030c894bc" class="t t">UnmergedPathException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> one or more paths contain higher-order stages (stage &gt; 0),</span>
+        <span class="c">///</span><span class="c"> which cannot be stored in a tree object.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> an unexpected error occurred writing to the object store.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="8a538eaabac830e8" href="../R/8a538eaabac830e8.html" target="n" data-glyph="72,1" class="i method">writeTree</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <span id="r26 rd" class="r26 r">cacheEntry</span>, <b>int</b> <span id="r27 rd" class="r27 r">cIdx</span>, <b>int</b> <span id="r28 rd" class="r28 r">pathOffset</span>, <a href="../ObjectWriter.cs.html#edd7e08e5ab8145e" class="t t">ObjectWriter</a> <span id="r29 rd" class="r29 r">ow</span>)
+        {
+            <b>if</b> (<a href="#25568a402d986528" class="i field">_id</a> == <b>null</b>)
+            {
+                <b>int</b> <span id="r30 rd" class="r30 r">endIdx</span> = <span class="r27 r">cIdx</span> + <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+                <b>int</b> <span id="r31 rd" class="r31 r">size</span> = <a href="#19a821de6ab9b41e" class="i method">ComputeSize</a>(<span class="r26 r">cacheEntry</span>, <span class="r27 r">cIdx</span>, <span class="r28 r">pathOffset</span>, <span class="r29 r">ow</span>);
+                <a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r32 rd" class="r32 r">@out</span> = <b>new</b> <a href="@0@mscorlib/A.html#0db5cb2960bec2f2" class="t constructor">MemoryStream</a>(<span class="r31 r">size</span>);
+                <b>int</b> <span id="r33 rd" class="r33 r">childIdx</span> = 0;
+                <b>int</b> <span id="r34 rd" class="r34 r">entryIdx</span> = <span class="r27 r">cIdx</span>;
+
+                <b>while</b> (<span class="r34 r">entryIdx</span> &lt; <span class="r30 r">endIdx</span>)
+                {
+                    <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r35 rd" class="r35 r">e</span> = <span class="r26 r">cacheEntry</span>[<span class="r34 r">entryIdx</span>];
+                    <b>byte</b>[] <span id="r36 rd" class="r36 r">ep</span> = <span class="r35 r">e</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>;
+                    <b>if</b> (<span class="r33 r">childIdx</span> &lt; <a href="#154f095a88b4b8f9" class="i field">_childCount</a>)
+                    {
+                        <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r37 rd" class="r37 r">st</span> = <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r33 r">childIdx</span>];
+                        <b>if</b> (<span class="r37 r">st</span>.<a href="#8cce3ee98baef945" class="i method">contains</a>(<span class="r36 r">ep</span>, <span class="r28 r">pathOffset</span>, <span class="r36 r">ep</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>))
+                        {
+                            <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>.<a href="../FileMode.cs.html#71a76d6e2d338a3f" class="i method">CopyTo</a>(<span class="r32 r">@out</span>);
+                            <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<b>new</b>[] { (<b>byte</b>)<span class="s">&#39; &#39;</span> }, 0, 1);
+                            <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r37 r">st</span>.<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>, 0, <span class="r37 r">st</span>.<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                            <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<b>new</b>[] { (<b>byte</b>)0 }, 0, 1);
+                            <span class="r37 r">st</span>.<a href="#25568a402d986528" class="i field">_id</a>.<a href="../AnyObjectId.cs.html#76733ba2b587238b" class="i method">copyRawTo</a>(<span class="r32 r">@out</span>);
+
+                            <span class="r34 r">entryIdx</span> += <span class="r37 r">st</span>.<a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+                            <span class="r33 r">childIdx</span>++;
+                            <b>continue</b>;
+                        }
+                    }
+
+                    <span class="r35 r">e</span>.<a href="DirCacheEntry.cs.html#8bc5ca3d3d3f014a" class="i method">getFileMode</a>().<a href="../FileMode.cs.html#71a76d6e2d338a3f" class="i method">CopyTo</a>(<span class="r32 r">@out</span>);
+                    <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<b>new</b>[] { (<b>byte</b>)<span class="s">&#39; &#39;</span> }, 0, 1);
+                    <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r36 r">ep</span>, <span class="r28 r">pathOffset</span>, <span class="r36 r">ep</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r28 r">pathOffset</span>);
+                    <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<b>new</b> <b>byte</b>[] { 0 }, 0, 1);
+                    <span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r35 r">e</span>.<a href="DirCacheEntry.cs.html#e8b726fa66af4a66" class="i method">idBuffer</a>(), <span class="r35 r">e</span>.<a href="DirCacheEntry.cs.html#3e19fdad5092880b" class="i method">idOffset</a>(), <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>);
+                    <span class="r34 r">entryIdx</span>++;
+                }
+
+                <a href="#25568a402d986528" class="i field">_id</a> = <span class="r29 r">ow</span>.<a href="../ObjectWriter.cs.html#a4564a446eb8863a" class="i method">WriteCanonicalTree</a>(<span class="r32 r">@out</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+            }
+
+            <b>return</b> <a href="#25568a402d986528" class="i field">_id</a>;
+        }
+
+        <b>private int</b> <a id="19a821de6ab9b41e" href="../R/19a821de6ab9b41e.html" target="n" data-glyph="76,1" class="i method">ComputeSize</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <span id="r38 rd" class="r38 r">cache</span>, <b>int</b> <span id="r39 rd" class="r39 r">cIdx</span>, <b>int</b> <span id="r40 rd" class="r40 r">pathOffset</span>, <a href="../ObjectWriter.cs.html#edd7e08e5ab8145e" class="t t">ObjectWriter</a> <span id="r41 rd" class="r41 r">ow</span>)
+        {
+            <b>int</b> <span id="r42 rd" class="r42 r">endIdx</span> = <span class="r39 r">cIdx</span> + <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+            <b>int</b> <span id="r43 rd" class="r43 r">childIdx</span> = 0;
+            <b>int</b> <span id="r44 rd" class="r44 r">entryIdx</span> = <span class="r39 r">cIdx</span>;
+            <b>int</b> <span id="r45 rd" class="r45 r">size</span> = 0;
+
+            <b>while</b> (<span class="r44 r">entryIdx</span> &lt; <span class="r42 r">endIdx</span>)
+            {
+                <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r46 rd" class="r46 r">e</span> = <span class="r38 r">cache</span>[<span class="r44 r">entryIdx</span>];
+                <b>if</b> (<span class="r46 r">e</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>() != 0)
+                {
+                    <b>throw</b> <b>new</b> <a href="../Exceptions/UnmergedPathException.cs.html#7bd1fd78dbf3fe6d" class="t constructor">UnmergedPathException</a>(<span class="r46 r">e</span>);
+                }
+
+                <b>byte</b>[] <span id="r47 rd" class="r47 r">ep</span> = <span class="r46 r">e</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>;
+                <b>if</b> (<span class="r43 r">childIdx</span> &lt; <a href="#154f095a88b4b8f9" class="i field">_childCount</a>)
+                {
+                    <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r48 rd" class="r48 r">st</span> = <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r43 r">childIdx</span>];
+                    <b>if</b> (<span class="r48 r">st</span>.<a href="#8cce3ee98baef945" class="i method">contains</a>(<span class="r47 r">ep</span>, <span class="r40 r">pathOffset</span>, <span class="r47 r">ep</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>))
+                    {
+                        <b>int</b> <span id="r49 rd" class="r49 r">stOffset</span> = <span class="r40 r">pathOffset</span> + <span class="r48 r">st</span>.<a href="#d1abc7e666e79fff" class="i method">nameLength</a>() + 1;
+                        <span class="r48 r">st</span>.<a href="#8a538eaabac830e8" class="i method">writeTree</a>(<span class="r38 r">cache</span>, <span class="r44 r">entryIdx</span>, <span class="r49 r">stOffset</span>, <span class="r41 r">ow</span>);
+
+                        <span class="r45 r">size</span> += <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#b681ce325f8a80cf" class="i field">Tree</a>.<a href="../FileMode.cs.html#78695013da3ba747" class="i method">copyToLength</a>();
+                        <span class="r45 r">size</span> += <span class="r48 r">st</span>.<a href="#d1abc7e666e79fff" class="i method">nameLength</a>();
+                        <span class="r45 r">size</span> += <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a> + 2;
+
+                        <span class="r44 r">entryIdx</span> += <span class="r48 r">st</span>.<a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+                        <span class="r43 r">childIdx</span>++;
+                        <b>continue</b>;
+                    }
+                }
+
+                <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a> <span id="r50 rd" class="r50 r">mode</span> = <span class="r46 r">e</span>.<a href="DirCacheEntry.cs.html#8bc5ca3d3d3f014a" class="i method">getFileMode</a>();
+
+                <span class="r45 r">size</span> += <span class="r50 r">mode</span>.<a href="../FileMode.cs.html#78695013da3ba747" class="i method">copyToLength</a>();
+                <span class="r45 r">size</span> += <span class="r47 r">ep</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r40 r">pathOffset</span>;
+                <span class="r45 r">size</span> += <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a> + 2;
+                <span class="r44 r">entryIdx</span>++;
+            }
+
+            <b>return</b> <span class="r45 r">size</span>;
+        }
+
+        <b>private void</b> <a id="a3e126db484eec19" href="../R/a3e126db484eec19.html" target="n" data-glyph="76,1" class="i method">AppendName</a>(<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r51 rd" class="r51 r">sb</span>)
+        {
+            <b>if</b> (<a href="#df75758d78379983" class="i field">_parent</a> != <b>null</b>)
+            {
+                <a href="#df75758d78379983" class="i field">_parent</a>.<a href="#a3e126db484eec19" class="i method">AppendName</a>(<span class="r51 r">sb</span>);
+                <span class="r51 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#f8ae2b93fc51cce0" class="i method">getNameString</a>());
+                <span class="r51 r">sb</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;/&#39;</span>);
+            }
+            <b>else if</b> (<a href="#d1abc7e666e79fff" class="i method">nameLength</a>() &gt; 0)
+            {
+                <span class="r51 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#f8ae2b93fc51cce0" class="i method">getNameString</a>());
+                <span class="r51 r">sb</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;/&#39;</span>);
+            }
+        }
+
+        <b>public int</b> <a id="d1abc7e666e79fff" href="../R/d1abc7e666e79fff.html" target="n" data-glyph="72,1" class="i method">nameLength</a>()
+        {
+            <b>return</b> <a href="#5f5d1234a120f72c" class="i field">_encodedName</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+        }
+
+        <b>public bool</b> <a id="8cce3ee98baef945" href="../R/8cce3ee98baef945.html" target="n" data-glyph="72,1" class="i method">contains</a>(<b>byte</b>[] <span id="r52 rd" class="r52 r">a</span>, <b>int</b> <span id="r53 rd" class="r53 r">aOff</span>, <b>int</b> <span id="r54 rd" class="r54 r">aLen</span>)
+        {
+            <b>byte</b>[] <span id="r55 rd" class="r55 r">e</span> = <a href="#5f5d1234a120f72c" class="i field">_encodedName</a>;
+            <b>int</b> <span id="r56 rd" class="r56 r">eLen</span> = <span class="r55 r">e</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>for</b> (<b>int</b> <span id="r57 rd" class="r57 r">eOff</span> = 0; <span class="r57 r">eOff</span> &lt; <span class="r56 r">eLen</span> &amp;&amp; <span class="r53 r">aOff</span> &lt; <span class="r54 r">aLen</span>; <span class="r57 r">eOff</span>++, <span class="r53 r">aOff</span>++)
+            {
+                <b>if</b> (<span class="r55 r">e</span>[<span class="r57 r">eOff</span>] != <span class="r52 r">a</span>[<span class="r53 r">aOff</span>]) <b>return false</b>;
+            }
+
+            <b>if</b> (<span class="r53 r">aOff</span> == <span class="r54 r">aLen</span>) <b>return false</b>;
+            <b>return</b> <span class="r52 r">a</span>[<span class="r53 r">aOff</span>] == <span class="s">&#39;/&#39;</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Update (if necessary) this tree&#39;s entrySpan.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r58 r">cache</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the complete cache from DirCache. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r59 r">cCnt</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Number of entries in </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> that are valid for</span>
+        <span class="c">///</span><span class="c"> iteration.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r60 r">cIdx</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> First position of </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> that is a member of this</span>
+        <span class="c">///</span><span class="c"> tree. The path of </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache[cacheIdx].path</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> for the</span>
+        <span class="c">///</span><span class="c"> range </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">[0,pathOff-1)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> matches the complete path of</span>
+        <span class="c">///</span><span class="c"> this tree, from the root of the repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r61 r">pathOff</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> number of bytes of </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache[cacheIdx].path</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> that</span>
+        <span class="c">///</span><span class="c"> matches this tree&#39;s path. The value at array position</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cache[cacheIdx].path[pathOff-1]</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> is always &#39;/&#39; if</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">pathOff</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> is &gt; 0.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="20952e1f0b657f63" href="../R/20952e1f0b657f63.html" target="n" data-glyph="72,1" class="i method">validate</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <span id="r58 rd" class="r58 r">cache</span>, <b>int</b> <span id="r59 rd" class="r59 r">cCnt</span>, <b>int</b> <span id="r60 rd" class="r60 r">cIdx</span>, <b>int</b> <span id="r61 rd" class="r61 r">pathOff</span>)
+        {
+            <b>if</b> (<a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> &gt;= 0)
+            {
+                <span class="c">// If we are valid, our children are also valid.</span>
+                <span class="c">// We have no need to validate them.</span>
+                <span class="c">//</span>
+                <b>return</b>;
+            }
+
+            <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> = 0;
+            <b>if</b> (<span class="r59 r">cCnt</span> == 0)
+            {
+                <span class="c">// Special case of an empty index, and we are the root tree.</span>
+                <span class="c">//</span>
+                <b>return</b>;
+            }
+
+            <b>byte</b>[] <span id="r62 rd" class="r62 r">firstPath</span> = <span class="r58 r">cache</span>[<span class="r60 r">cIdx</span>].<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>;
+            <b>int</b> <span id="r63 rd" class="r63 r">stIdx</span> = 0;
+            <b>while</b> (<span class="r60 r">cIdx</span> &lt; <span class="r59 r">cCnt</span>)
+            {
+                <b>byte</b>[] <span id="r64 rd" class="r64 r">currPath</span> = <span class="r58 r">cache</span>[<span class="r60 r">cIdx</span>].<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>;
+                <b>if</b> (<span class="r61 r">pathOff</span> &gt; 0 &amp;&amp; !<a href="#e1df1bf4b95f28c4" class="i method">peq</a>(<span class="r62 r">firstPath</span>, <span class="r64 r">currPath</span>, <span class="r61 r">pathOff</span>))
+                {
+                    <span class="c">// The current entry is no longer in this tree. Our</span>
+                    <span class="c">// span is updated and the remainder goes elsewhere.</span>
+                    <span class="c">//</span>
+                    <b>break</b>;
+                }
+
+                <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r65 rd" class="r65 r">st</span> = <span class="r63 r">stIdx</span> &lt; <a href="#154f095a88b4b8f9" class="i field">_childCount</a> ? <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r63 r">stIdx</span>] : <b>null</b>;
+                <b>int</b> <span id="r66 rd" class="r66 r">cc</span> = <a href="#5dacf4c49460cfbf" class="i method">NameComparison</a>(<span class="r64 r">currPath</span>, <span class="r61 r">pathOff</span>, <span class="r65 r">st</span>);
+                <b>if</b> (<span class="r66 r">cc</span> &gt; 0)
+                {
+                    <span class="c">// This subtree is now empty.</span>
+                    <span class="c">//</span>
+                    <a href="#37a8c583d0e24c35" class="i method">RemoveChild</a>(<span class="r63 r">stIdx</span>);
+                    <b>continue</b>;
+                }
+
+                <b>if</b> (<span class="r66 r">cc</span> &lt; 0)
+                {
+                    <b>int</b> <span id="r67 rd" class="r67 r">p</span> = <a href="#a7d479d67fa2cede" class="i method">Slash</a>(<span class="r64 r">currPath</span>, <span class="r61 r">pathOff</span>);
+                    <b>if</b> (<span class="r67 r">p</span> &lt; 0)
+                    {
+                        <span class="c">// The entry has no &#39;/&#39; and thus is directly in this</span>
+                        <span class="c">// tree. Count it as one of our own.</span>
+                        <span class="c">//</span>
+                        <span class="r60 r">cIdx</span>++;
+                        <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>++;
+                        <b>continue</b>;
+                    }
+
+                    <span class="c">// Build a new subtree for this entry.</span>
+                    <span class="c">//</span>
+                    <span class="r65 r">st</span> = <b>new</b> <a href="#dfe371e7b59e45bf" class="t constructor">DirCacheTree</a>(<a href="#42fd8bf4d7b45ea6" class="k">this</a>, <span class="r64 r">currPath</span>, <span class="r61 r">pathOff</span>, <span class="r67 r">p</span> - <span class="r61 r">pathOff</span>);
+                    <a href="#653291cca5d9f2fc" class="i method">InsertChild</a>(<span class="r63 r">stIdx</span>, <span class="r65 r">st</span>);
+                }
+
+                <span class="c">// The entry is contained in this subtree.</span>
+                <span class="c">//</span>
+                <span class="r65 r">st</span>.<a href="#20952e1f0b657f63" class="i method">validate</a>(<span class="r58 r">cache</span>, <span class="r59 r">cCnt</span>, <span class="r60 r">cIdx</span>, <span class="r61 r">pathOff</span> + <span class="r65 r">st</span>.<a href="#d1abc7e666e79fff" class="i method">nameLength</a>() + 1);
+                <span class="r60 r">cIdx</span> += <span class="r65 r">st</span>.<a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+                <a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a> += <span class="r65 r">st</span>.<a href="#fb8f7e79a4daacfa" class="i field">_entrySpan</a>;
+                <span class="r63 r">stIdx</span>++;
+            }
+
+            <b>if</b> (<span class="r63 r">stIdx</span> &lt; <a href="#154f095a88b4b8f9" class="i field">_childCount</a>)
+            {
+                <span class="c">// None of our remaining children can be in this tree</span>
+                <span class="c">// as the current cache entry is After our own name.</span>
+                <span class="c">//</span>
+                <b>var</b> <span id="r68 rd" class="r68 r">dct</span> = <b>new</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>[<span class="r63 r">stIdx</span>];
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#499bf85800e3ce2c" class="i field">_children</a>, 0, <span class="r68 r">dct</span>, 0, <span class="r63 r">stIdx</span>);
+                <a href="#499bf85800e3ce2c" class="i field">_children</a> = <span class="r68 r">dct</span>;
+            }
+        }
+
+        <b>private void</b> <a id="653291cca5d9f2fc" href="../R/653291cca5d9f2fc.html" target="n" data-glyph="76,1" class="i method">InsertChild</a>(<b>int</b> <span id="r69 rd" class="r69 r">stIdx</span>, <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r70 rd" class="r70 r">st</span>)
+        {
+            <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>[] <span id="r71 rd" class="r71 r">c</span> = <a href="#499bf85800e3ce2c" class="i field">_children</a>;
+            <b>if</b> (<a href="#154f095a88b4b8f9" class="i field">_childCount</a> + 1 &lt;= <span class="r71 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+            {
+                <b>if</b> (<span class="r69 r">stIdx</span> &lt; <a href="#154f095a88b4b8f9" class="i field">_childCount</a>)
+                {
+                    <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r71 r">c</span>, <span class="r69 r">stIdx</span>, <span class="r71 r">c</span>, <span class="r69 r">stIdx</span> + 1, <a href="#154f095a88b4b8f9" class="i field">_childCount</a> - <span class="r69 r">stIdx</span>);
+                }
+                <span class="r71 r">c</span>[<span class="r69 r">stIdx</span>] = <span class="r70 r">st</span>;
+                <a href="#154f095a88b4b8f9" class="i field">_childCount</a>++;
+                <b>return</b>;
+            }
+
+            <b>int</b> <span id="r72 rd" class="r72 r">n</span> = <span class="r71 r">c</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>var</b> <span id="r73 rd" class="r73 r">a</span> = <b>new</b> <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>[<span class="r72 r">n</span> + 1];
+            <b>if</b> (<span class="r69 r">stIdx</span> &gt; 0)
+            {
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r71 r">c</span>, 0, <span class="r73 r">a</span>, 0, <span class="r69 r">stIdx</span>);
+            }
+            <span class="r73 r">a</span>[<span class="r69 r">stIdx</span>] = <span class="r70 r">st</span>;
+            <b>if</b> (<span class="r69 r">stIdx</span> &lt; <span class="r72 r">n</span>)
+            {
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r71 r">c</span>, <span class="r69 r">stIdx</span>, <span class="r73 r">a</span>, <span class="r69 r">stIdx</span> + 1, <span class="r72 r">n</span> - <span class="r69 r">stIdx</span>);
+            }
+            <a href="#499bf85800e3ce2c" class="i field">_children</a> = <span class="r73 r">a</span>;
+            <a href="#154f095a88b4b8f9" class="i field">_childCount</a>++;
+        }
+
+        <b>private void</b> <a id="37a8c583d0e24c35" href="../R/37a8c583d0e24c35.html" target="n" data-glyph="76,1" class="i method">RemoveChild</a>(<b>int</b> <span id="r74 rd" class="r74 r">stIdx</span>)
+        {
+            <b>int</b> <span id="r75 rd" class="r75 r">n</span> = --<a href="#154f095a88b4b8f9" class="i field">_childCount</a>;
+            <b>if</b> (<span class="r74 r">stIdx</span> &lt; <span class="r75 r">n</span>)
+            {
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#499bf85800e3ce2c" class="i field">_children</a>, <span class="r74 r">stIdx</span> + 1, <a href="#499bf85800e3ce2c" class="i field">_children</a>, <span class="r74 r">stIdx</span>, <span class="r75 r">n</span> - <span class="r74 r">stIdx</span>);
+            }
+            <a href="#499bf85800e3ce2c" class="i field">_children</a>[<span class="r75 r">n</span>] = <b>null</b>;
+        }
+
+        <b>internal static bool</b> <a id="e1df1bf4b95f28c4" href="../R/e1df1bf4b95f28c4.html" target="n" data-glyph="74,1" class="i method">peq</a>(<b>byte</b>[] <span id="r76 rd" class="r76 r">a</span>, <b>byte</b>[] <span id="r77 rd" class="r77 r">b</span>, <b>int</b> <span id="r78 rd" class="r78 r">aLen</span>)
+        {
+            <b>if</b> (<span class="r77 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <span class="r78 r">aLen</span>) <b>return false</b>;
+
+            <b>for</b> (<span class="r78 r">aLen</span>--; <span class="r78 r">aLen</span> &gt;= 0; <span class="r78 r">aLen</span>--)
+            {
+                <b>if</b> (<span class="r76 r">a</span>[<span class="r78 r">aLen</span>] != <span class="r77 r">b</span>[<span class="r78 r">aLen</span>]) <b>return false</b>;
+            }
+
+            <b>return true</b>;
+        }
+
+        <b>private static int</b> <a id="5dacf4c49460cfbf" href="../R/5dacf4c49460cfbf.html" target="n" data-glyph="76,1" class="i method">NameComparison</a>(<b>byte</b>[] <span id="r79 rd" class="r79 r">a</span>, <b>int</b> <span id="r80 rd" class="r80 r">aPos</span>, <a href="#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <span id="r81 rd" class="r81 r">ct</span>)
+        {
+            <b>if</b> (<span class="r81 r">ct</span> == <b>null</b>) <b>return</b> -1;
+
+            <b>byte</b>[] <span id="r82 rd" class="r82 r">b</span> = <span class="r81 r">ct</span>.<a href="#5f5d1234a120f72c" class="i field">_encodedName</a>;
+            <b>int</b> <span id="r83 rd" class="r83 r">aLen</span> = <span class="r79 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>int</b> <span id="r84 rd" class="r84 r">bLen</span> = <span class="r82 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>int</b> <span id="r85 rd" class="r85 r">bPos</span> = 0;
+            <b>for</b> (; <span class="r80 r">aPos</span> &lt; <span class="r83 r">aLen</span> &amp;&amp; <span class="r85 r">bPos</span> &lt; <span class="r84 r">bLen</span>; <span class="r80 r">aPos</span>++, <span class="r85 r">bPos</span>++)
+            {
+                <b>int</b> <span id="r86 rd" class="r86 r">cmp</span> = (<span class="r79 r">a</span>[<span class="r80 r">aPos</span>] &amp; 0xff) - (<span class="r82 r">b</span>[<span class="r85 r">bPos</span>] &amp; 0xff);
+                <b>if</b> (<span class="r86 r">cmp</span> != 0)
+                {
+                    <b>return</b> <span class="r86 r">cmp</span>;
+                }
+            }
+
+            <b>if</b> (<span class="r85 r">bPos</span> == <span class="r84 r">bLen</span>)
+            {
+                <b>return</b> <span class="r79 r">a</span>[<span class="r80 r">aPos</span>] == <span class="s">&#39;/&#39;</span> ? 0 : -1;
+            }
+
+            <b>return</b> <span class="r83 r">aLen</span> - <span class="r84 r">bLen</span>;
+        }
+
+        <b>private static int</b> <a id="a7d479d67fa2cede" href="../R/a7d479d67fa2cede.html" target="n" data-glyph="76,1" class="i method">Slash</a>(<b>byte</b>[] <span id="r87 rd" class="r87 r">a</span>, <b>int</b> <span id="r88 rd" class="r88 r">aPos</span>)
+        {
+            <b>int</b> <span id="r89 rd" class="r89 r">aLen</span> = <span class="r87 r">a</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>for</b> (; <span class="r88 r">aPos</span> &lt; <span class="r89 r">aLen</span>; <span class="r88 r">aPos</span>++)
+            {
+                <b>if</b> (<span class="r87 r">a</span>[<span class="r88 r">aPos</span>] == <span class="s">&#39;/&#39;</span>)
+                {
+                    <b>return</b> <span class="r88 r">aPos</span>;
+                }
+            }
+            <b>return</b> -1;
+        }
+    }
+}</pre></td></tr></table></div></body></html>

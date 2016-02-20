@@ -1,0 +1,875 @@
+﻿<!DOCTYPE html>
+<html><head><title>DefaultModelBinder.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(866);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/DefaultModelBinder.cs" target="_top">DefaultModelBinder.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">ComponentModel</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Runtime</span>.<span class="i n">CompilerServices</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    <b>public class</b> <a id="bff2e03c3190ea1c" href="R/bff2e03c3190ea1c.html" target="n" data-glyph="0,0" class="t t"><span id="33cfcb3a5ecd2a2f">DefaultModelBinder</span></a> : <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a>
+    {
+        <b>private static string</b> <a id="ef80b4b3b7b9c6a3" href="R/ef80b4b3b7b9c6a3.html" target="n" data-glyph="46,1" class="i field">_resourceClassKey</a>;
+        <b>private</b> <a href="ModelBinderDictionary.cs.html#9568831812570ab6" class="t t">ModelBinderDictionary</a> <a id="4d91f718ee8bf716" href="R/4d91f718ee8bf716.html" target="n" data-glyph="46,1" class="i field">_binders</a>;
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2227:CollectionPropertiesShouldBeReadOnly&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;Property is settable so that the dictionary can be provided for unit testing purposes.&quot;</span>)]
+        <b>protected internal</b> <a href="ModelBinderDictionary.cs.html#9568831812570ab6" class="t t">ModelBinderDictionary</a> <a id="4f28a54e06a776b7" href="R/4f28a54e06a776b7.html" target="n" data-glyph="105,1" class="i property">Binders</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#4d91f718ee8bf716" class="i field">_binders</a> == <b>null</b>)
+                {
+                    <a href="#4d91f718ee8bf716" class="i field">_binders</a> = <a href="ModelBinders.cs.html#15cbdde03dc6f20d" class="t t">ModelBinders</a>.<a href="ModelBinders.cs.html#e6a7d72018934af8" class="i property">Binders</a>;
+                }
+                <b>return</b> <a href="#4d91f718ee8bf716" class="i field">_binders</a>;
+            }
+            <b>set</b> { <a href="#4d91f718ee8bf716" class="i field">_binders</a> = <b>value</b>; }
+        }
+ 
+        <b>public static string</b> <a id="9c8e5278d08537af" href="R/9c8e5278d08537af.html" target="n" data-glyph="102,1" class="i property">ResourceClassKey</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#ef80b4b3b7b9c6a3" class="i field">_resourceClassKey</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b> { <a href="#ef80b4b3b7b9c6a3" class="i field">_resourceClassKey</a> = <b>value</b>; }
+        }
+ 
+        <b>private static void</b> <a id="1a26b8255306483e" href="R/1a26b8255306483e.html" target="n" data-glyph="76,1" class="i method">AddValueRequiredMessageToModelState</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r0 rd" class="r0 r">controllerContext</span>, <a href="ModelStateDictionary.cs.html#d434cd8673d1b8a0" class="t t">ModelStateDictionary</a> <span id="r1 rd" class="r1 r">modelState</span>, <b>string</b> <span id="r2 rd" class="r2 r">modelStateKey</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r3 rd" class="r3 r">elementType</span>, <b>object</b> <span id="r4 rd" class="r4 r">value</span>)
+        {
+            <b>if</b> (<span class="r4 r">value</span> == <b>null</b> &amp;&amp; !<a href="TypeHelpers.cs.html#b558ee72f04a4b54" class="t t">TypeHelpers</a>.<a href="TypeHelpers.cs.html#a7fe8ec42f44c82b" class="i method">TypeAllowsNullValue</a>(<span class="r3 r">elementType</span>) &amp;&amp; <span class="r1 r">modelState</span>.<a href="ModelStateDictionary.cs.html#78c695c5e93fcda8" class="i method">IsValidField</a>(<span class="r2 r">modelStateKey</span>))
+            {
+                <span class="r1 r">modelState</span>.<a href="ModelStateDictionary.cs.html#747b2559b8234559" class="i method">AddModelError</a>(<span class="r2 r">modelStateKey</span>, <a href="#408aaeaf7b3ac03a" class="i method">GetValueRequiredResource</a>(<span class="r0 r">controllerContext</span>));
+            }
+        }
+ 
+        <b>internal void</b> <a id="036e0cc7169c2365" href="R/036e0cc7169c2365.html" target="n" data-glyph="74,1" class="i method">BindComplexElementalModel</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r5 rd" class="r5 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r6 rd" class="r6 r">bindingContext</span>, <b>object</b> <span id="r7 rd" class="r7 r">model</span>)
+        {
+            <span class="c">// need to replace the property filter + model object and create an inner binding context</span>
+            <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r8 rd" class="r8 r">newBindingContext</span> = <a href="#81ca9e4950eeb2c5" class="i method">CreateComplexElementalModelBindingContext</a>(<span class="r5 r">controllerContext</span>, <span class="r6 r">bindingContext</span>, <span class="r7 r">model</span>);
+ 
+            <span class="c">// validation</span>
+            <b>if</b> (<a href="#0051cf1cd26f67cd" class="i method">OnModelUpdating</a>(<span class="r5 r">controllerContext</span>, <span class="r8 r">newBindingContext</span>))
+            {
+                <a href="#339fdd158f59cb2a" class="i method">BindProperties</a>(<span class="r5 r">controllerContext</span>, <span class="r8 r">newBindingContext</span>);
+                <a href="#8e06d76db3116cb8" class="i method">OnModelUpdated</a>(<span class="r5 r">controllerContext</span>, <span class="r8 r">newBindingContext</span>);
+            }
+        }
+ 
+        <b>internal object</b> <a id="04ad4e6e37d95d99" href="R/04ad4e6e37d95d99.html" target="n" data-glyph="74,1" class="i method">BindComplexModel</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r9 rd" class="r9 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r10 rd" class="r10 r">bindingContext</span>)
+        {
+            <b>object</b> <span id="r11 rd" class="r11 r">model</span> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b0dc8ab059a858dc" class="i property">Model</a>;
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r12 rd" class="r12 r">modelType</span> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>;
+ 
+            <span class="c">// if we&#39;re being asked to create an array, create a list instead, then coerce to an array after the list is created</span>
+            <b>if</b> (<span class="r11 r">model</span> == <b>null</b> &amp;&amp; <span class="r12 r">modelType</span>.<a href="@0@mscorlib/A.html#ea1503a5ff8a6f45" class="i property">IsArray</a>)
+            {
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r13 rd" class="r13 r">elementType</span> = <span class="r12 r">modelType</span>.<a href="@0@mscorlib/A.html#3199ad67c15d1676" class="i method">GetElementType</a>();
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r14 rd" class="r14 r">listType</span> = <b>typeof</b>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;&gt;).<a href="@0@mscorlib/A.html#3e82dbae123f91fc" class="i method">MakeGenericType</a>(<span class="r13 r">elementType</span>);
+                <b>object</b> <span id="r15 rd" class="r15 r">collection</span> = <a href="#37018b75e0bf7b14" class="i method">CreateModel</a>(<span class="r9 r">controllerContext</span>, <span class="r10 r">bindingContext</span>, <span class="r14 r">listType</span>);
+ 
+                <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r16 rd" class="r16 r">arrayBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+                {
+                    <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(() =&gt; <span class="r15 r">collection</span>, <span class="r14 r">listType</span>),
+                    <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>,
+                    <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                    <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>,
+                    <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+                };
+                <a href="@0@mscorlib/A.html#5d74f6adfeaf6c7d" class="t t">IList</a> <span id="r17 rd" class="r17 r">list</span> = (<a href="@0@mscorlib/A.html#5d74f6adfeaf6c7d" class="t t">IList</a>)<a href="#c0c1c39145de66e5" class="i method">UpdateCollection</a>(<span class="r9 r">controllerContext</span>, <span class="r16 r">arrayBindingContext</span>, <span class="r13 r">elementType</span>);
+ 
+                <b>if</b> (<span class="r17 r">list</span> == <b>null</b>)
+                {
+                    <b>return null</b>;
+                }
+ 
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a> <span id="r18 rd" class="r18 r">array</span> = <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#0125db0f9ffef78b" class="i method">CreateInstance</a>(<span class="r13 r">elementType</span>, <span class="r17 r">list</span>.<a href="@0@mscorlib/A.html#e961aba0053db107" class="i property">Count</a>);
+                <span class="r17 r">list</span>.<a href="@0@mscorlib/A.html#39497d2d50b3f663" class="i method">CopyTo</a>(<span class="r18 r">array</span>, 0);
+                <b>return</b> <span class="r18 r">array</span>;
+            }
+ 
+            <b>if</b> (<span class="r11 r">model</span> == <b>null</b>)
+            {
+                <span class="r11 r">model</span> = <a href="#37018b75e0bf7b14" class="i method">CreateModel</a>(<span class="r9 r">controllerContext</span>, <span class="r10 r">bindingContext</span>, <span class="r12 r">modelType</span>);
+            }
+ 
+            <span class="c">// special-case IDictionary&lt;,&gt; and ICollection&lt;&gt;</span>
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r19 rd" class="r19 r">dictionaryType</span> = <a href="TypeHelpers.cs.html#b558ee72f04a4b54" class="t t">TypeHelpers</a>.<a href="TypeHelpers.cs.html#a5538dba19475fe4" class="i method">ExtractGenericInterface</a>(<span class="r12 r">modelType</span>, <b>typeof</b>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;,&gt;));
+            <b>if</b> (<span class="r19 r">dictionaryType</span> != <b>null</b>)
+            {
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>[] <span id="r20 rd" class="r20 r">genericArguments</span> = <span class="r19 r">dictionaryType</span>.<a href="@0@mscorlib/A.html#e0094047204f40ea" class="i method">GetGenericArguments</a>();
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r21 rd" class="r21 r">keyType</span> = <span class="r20 r">genericArguments</span>[0];
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r22 rd" class="r22 r">valueType</span> = <span class="r20 r">genericArguments</span>[1];
+ 
+                <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r23 rd" class="r23 r">dictionaryBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+                {
+                    <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(() =&gt; <span class="r11 r">model</span>, <span class="r12 r">modelType</span>),
+                    <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>,
+                    <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                    <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>,
+                    <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+                };
+                <b>object</b> <span id="r24 rd" class="r24 r">dictionary</span> = <a href="#91eee2ecd173ad4e" class="i method">UpdateDictionary</a>(<span class="r9 r">controllerContext</span>, <span class="r23 r">dictionaryBindingContext</span>, <span class="r21 r">keyType</span>, <span class="r22 r">valueType</span>);
+                <b>return</b> <span class="r24 r">dictionary</span>;
+            }
+ 
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r25 rd" class="r25 r">enumerableType</span> = <a href="TypeHelpers.cs.html#b558ee72f04a4b54" class="t t">TypeHelpers</a>.<a href="TypeHelpers.cs.html#a5538dba19475fe4" class="i method">ExtractGenericInterface</a>(<span class="r12 r">modelType</span>, <b>typeof</b>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;&gt;));
+            <b>if</b> (<span class="r25 r">enumerableType</span> != <b>null</b>)
+            {
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r26 rd" class="r26 r">elementType</span> = <span class="r25 r">enumerableType</span>.<a href="@0@mscorlib/A.html#e0094047204f40ea" class="i method">GetGenericArguments</a>()[0];
+ 
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r27 rd" class="r27 r">collectionType</span> = <b>typeof</b>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;&gt;).<a href="@0@mscorlib/A.html#3e82dbae123f91fc" class="i method">MakeGenericType</a>(<span class="r26 r">elementType</span>);
+                <b>if</b> (<span class="r27 r">collectionType</span>.<a href="@0@mscorlib/A.html#fe506f282c6fb9c5" class="i method">IsInstanceOfType</a>(<span class="r11 r">model</span>))
+                {
+                    <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r28 rd" class="r28 r">collectionBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+                    {
+                        <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(() =&gt; <span class="r11 r">model</span>, <span class="r12 r">modelType</span>),
+                        <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>,
+                        <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                        <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>,
+                        <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r10 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+                    };
+                    <b>object</b> <span id="r29 rd" class="r29 r">collection</span> = <a href="#c0c1c39145de66e5" class="i method">UpdateCollection</a>(<span class="r9 r">controllerContext</span>, <span class="r28 r">collectionBindingContext</span>, <span class="r26 r">elementType</span>);
+                    <b>return</b> <span class="r29 r">collection</span>;
+                }
+            }
+ 
+            <span class="c">// otherwise, just update the properties on the complex type</span>
+            <a href="#036e0cc7169c2365" class="i method">BindComplexElementalModel</a>(<span class="r9 r">controllerContext</span>, <span class="r10 r">bindingContext</span>, <span class="r11 r">model</span>);
+            <b>return</b> <span class="r11 r">model</span>;
+        }
+ 
+        <b>public virtual object</b> <a id="41e6a8d856f069ef" href="R/41e6a8d856f069ef.html" target="n" data-glyph="72,1" class="i method">BindModel</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r30 rd" class="r30 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r31 rd" class="r31 r">bindingContext</span>)
+        {
+            <a href="@0@mscorlib/A.html#7fb1a6c958ce626e" class="t t">RuntimeHelpers</a>.<a href="@0@mscorlib/A.html#4aa1896b996c429e" class="i method">EnsureSufficientExecutionStack</a>();
+ 
+            <b>if</b> (<span class="r31 r">bindingContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;bindingContext&quot;</span>);
+            }
+ 
+            <b>bool</b> <span id="r32 rd" class="r32 r">performedFallback</span> = <b>false</b>;
+ 
+            <b>if</b> (!<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>) &amp;&amp; !<span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>.<a href="IValueProvider.cs.html#22f0d355134ddf78" class="i method">ContainsPrefix</a>(<span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>))
+            {
+                <span class="c">// We couldn&#39;t find any entry that began with the prefix. If this is the top-level element, fall back</span>
+                <span class="c">// to the empty prefix.</span>
+                <b>if</b> (<span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#54aa4566e7a0f264" class="i property">FallbackToEmptyPrefix</a>)
+                {
+                    <span class="r31 r">bindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+                    {
+                        <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a>,
+                        <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                        <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>,
+                        <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+                    };
+                    <span class="r32 r">performedFallback</span> = <b>true</b>;
+                }
+                <b>else</b>
+                {
+                    <b>return null</b>;
+                }
+            }
+ 
+            <span class="c">// Simple model = int, string, etc.; determined by calling TypeConverter.CanConvertFrom(typeof(string))</span>
+            <span class="c">// or by seeing if a value in the request exactly matches the name of the model we&#39;re binding.</span>
+            <span class="c">// Complex type = everything else.</span>
+            <b>if</b> (!<span class="r32 r">performedFallback</span>)
+            {
+                <b>bool</b> <span id="r33 rd" class="r33 r">performRequestValidation</span> = <a href="#4698f99baced8e2c" class="i method">ShouldPerformRequestValidation</a>(<span class="r30 r">controllerContext</span>, <span class="r31 r">bindingContext</span>);
+                <a href="ValueProviderResult.cs.html#d9da9536bdcd12ff" class="t t">ValueProviderResult</a> <span id="r34 rd" class="r34 r">valueProviderResult</span> = <span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#8002e5594a038fc6" class="i property">UnvalidatedValueProvider</a>.<a href="IUnvalidatedValueProvider.cs.html#6d9df7b25dda0858" class="i method">GetValue</a>(<span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r35 r">skipValidation</span>: !<span class="r33 r">performRequestValidation</span>);
+                <b>if</b> (<span class="r34 r">valueProviderResult</span> != <b>null</b>)
+                {
+                    <b>return</b> <a href="#56ab705415a258ec" class="i method">BindSimpleModel</a>(<span class="r30 r">controllerContext</span>, <span class="r31 r">bindingContext</span>, <span class="r34 r">valueProviderResult</span>);
+                }
+            }
+            <b>if</b> (!<span class="r31 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a>.<a href="ModelMetadata.cs.html#c94fe2e2dde60c8c" class="i property">IsComplexType</a>)
+            {
+                <b>return null</b>;
+            }
+ 
+            <b>return</b> <a href="#04ad4e6e37d95d99" class="i method">BindComplexModel</a>(<span class="r30 r">controllerContext</span>, <span class="r31 r">bindingContext</span>);
+        }
+ 
+        <b>private void</b> <a id="339fdd158f59cb2a" href="R/339fdd158f59cb2a.html" target="n" data-glyph="76,1" class="i method">BindProperties</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r36 rd" class="r36 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r37 rd" class="r37 r">bindingContext</span>)
+        {
+            <a href="@0@System/A.html#2442aaedff6cc765" class="t t">PropertyDescriptorCollection</a> <span id="r38 rd" class="r38 r">properties</span> = <a href="#a73fc6325b29d737" class="i method">GetModelProperties</a>(<span class="r36 r">controllerContext</span>, <span class="r37 r">bindingContext</span>);
+            <a href="@0@mscorlib/A.html#ca72a018059733b1" class="t t">Predicate</a>&lt;<b>string</b>&gt; <span id="r39 rd" class="r39 r">propertyFilter</span> = <span class="r37 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>;
+ 
+            <span class="c">// Loop is a performance sensitive codepath so avoid using enumerators.</span>
+            <b>for</b> (<b>int</b> <span id="r40 rd" class="r40 r">i</span> = 0; <span class="r40 r">i</span> &lt; <span class="r38 r">properties</span>.<a href="@0@System/A.html#1512ded3e6d9f730" class="i property">Count</a>; <span class="r40 r">i</span>++)
+            {
+                <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r41 rd" class="r41 r">property</span> = <span class="r38 r">properties</span><a href="@0@System/A.html#45bedccfba66881f">[</a><span class="r40 r">i</span>];
+                <b>if</b> (<a href="#44d9359e429a0e48" class="i method">ShouldUpdateProperty</a>(<span class="r41 r">property</span>, <span class="r39 r">propertyFilter</span>))
+                {
+                    <a href="#dc430031512ebcfb" class="i method">BindProperty</a>(<span class="r36 r">controllerContext</span>, <span class="r37 r">bindingContext</span>, <span class="r41 r">property</span>);
+                }
+            }
+        }
+ 
+        <b>protected virtual void</b> <a id="dc430031512ebcfb" href="R/dc430031512ebcfb.html" target="n" data-glyph="75,1" class="i method">BindProperty</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r42 rd" class="r42 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r43 rd" class="r43 r">bindingContext</span>, <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r44 rd" class="r44 r">propertyDescriptor</span>)
+        {
+            <span class="c">// need to skip properties that aren&#39;t part of the request, else we might hit a StackOverflowException</span>
+            <b>string</b> <span id="r45 rd" class="r45 r">fullPropertyKey</span> = <a href="#497c472db042eef3" class="i method">CreateSubPropertyName</a>(<span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r44 r">propertyDescriptor</span>.<a href="@0@System/A.html#04b17a133b14e8c6" class="i property">Name</a>);
+            <b>if</b> (!<span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>.<a href="IValueProvider.cs.html#22f0d355134ddf78" class="i method">ContainsPrefix</a>(<span class="r45 r">fullPropertyKey</span>))
+            {
+                <b>return</b>;
+            }
+ 
+            <span class="c">// call into the property&#39;s model binder</span>
+            <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r46 rd" class="r46 r">propertyBinder</span> = <a href="#4f28a54e06a776b7" class="i property">Binders</a>.<a href="ModelBinderDictionary.cs.html#0cbd69413bfac81c" class="i method">GetBinder</a>(<span class="r44 r">propertyDescriptor</span>.<a href="@0@System/A.html#39d956f31be85f75" class="i property">PropertyType</a>);
+            <b>object</b> <span id="r47 rd" class="r47 r">originalPropertyValue</span> = <span class="r44 r">propertyDescriptor</span>.<a href="@0@System/A.html#44af8ebde8cca097" class="i method">GetValue</a>(<span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b0dc8ab059a858dc" class="i property">Model</a>);
+            <a href="ModelMetadata.cs.html#9f822c3699e92a04" class="t t">ModelMetadata</a> <span id="r48 rd" class="r48 r">propertyMetadata</span> = <span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#fd0fc509887434e1" class="i property">PropertyMetadata</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><span class="r44 r">propertyDescriptor</span>.<a href="@0@System/A.html#04b17a133b14e8c6" class="i property">Name</a>];
+            <span class="r48 r">propertyMetadata</span>.<a href="ModelMetadata.cs.html#702e9529d4cd753c" class="i property">Model</a> = <span class="r47 r">originalPropertyValue</span>;
+            <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r49 rd" class="r49 r">innerBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+            {
+                <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <span class="r48 r">propertyMetadata</span>,
+                <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r45 r">fullPropertyKey</span>,
+                <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+            };
+            <b>object</b> <span id="r50 rd" class="r50 r">newPropertyValue</span> = <a href="#f3bf3ae44a754a00" class="i method">GetPropertyValue</a>(<span class="r42 r">controllerContext</span>, <span class="r49 r">innerBindingContext</span>, <span class="r44 r">propertyDescriptor</span>, <span class="r46 r">propertyBinder</span>);
+            <span class="r48 r">propertyMetadata</span>.<a href="ModelMetadata.cs.html#702e9529d4cd753c" class="i property">Model</a> = <span class="r50 r">newPropertyValue</span>;
+ 
+            <span class="c">// validation</span>
+            <a href="ModelState.cs.html#dea1232783b48f12" class="t t">ModelState</a> <span id="r51 rd" class="r51 r">modelState</span> = <span class="r43 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a><a href="ModelStateDictionary.cs.html#37b80afe23e43cff">[</a><span class="r45 r">fullPropertyKey</span>];
+            <b>if</b> (<span class="r51 r">modelState</span> == <b>null</b> || <span class="r51 r">modelState</span>.<a href="ModelState.cs.html#605e8a0a1e6ff657" class="i property">Errors</a>.<a href="@0@mscorlib/A.html#f2419069e9890f5d" class="i property">Count</a> == 0)
+            {
+                <b>if</b> (<a href="#5244b7df37effada" class="i method">OnPropertyValidating</a>(<span class="r42 r">controllerContext</span>, <span class="r43 r">bindingContext</span>, <span class="r44 r">propertyDescriptor</span>, <span class="r50 r">newPropertyValue</span>))
+                {
+                    <a href="#c60ee62ef7182554" class="i method">SetProperty</a>(<span class="r42 r">controllerContext</span>, <span class="r43 r">bindingContext</span>, <span class="r44 r">propertyDescriptor</span>, <span class="r50 r">newPropertyValue</span>);
+                    <a href="#702c3f6e55e694a9" class="i method">OnPropertyValidated</a>(<span class="r42 r">controllerContext</span>, <span class="r43 r">bindingContext</span>, <span class="r44 r">propertyDescriptor</span>, <span class="r50 r">newPropertyValue</span>);
+                }
+            }
+            <b>else</b>
+            {
+                <a href="#c60ee62ef7182554" class="i method">SetProperty</a>(<span class="r42 r">controllerContext</span>, <span class="r43 r">bindingContext</span>, <span class="r44 r">propertyDescriptor</span>, <span class="r50 r">newPropertyValue</span>);
+ 
+                <span class="c">// Convert FormatExceptions (type conversion failures) into InvalidValue messages</span>
+                <b>foreach</b> (<a href="ModelError.cs.html#2399ca882be29612" class="t t">ModelError</a> <span id="r52 rd" class="r52 r">error</span> <b>in</b> <span class="r51 r">modelState</span>.<a href="ModelState.cs.html#605e8a0a1e6ff657" class="i property">Errors</a>.<a href="@0@System.Core/A.html#e73922753675387a" class="i method">Where</a>(<span id="r53 rd" class="r53 r">err</span> =&gt; <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r53 r">err</span>.<a href="ModelError.cs.html#f2d8dd6dafe67239" class="i property">ErrorMessage</a>) &amp;&amp; <span class="r53 r">err</span>.<a href="ModelError.cs.html#9bf64435daaba386" class="i property">Exception</a> != <b>null</b>).<a href="@0@System.Core/A.html#e276d6892241255b" class="i method">ToList</a>())
+                {
+                    <b>for</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r54 rd" class="r54 r">exception</span> = <span class="r52 r">error</span>.<a href="ModelError.cs.html#9bf64435daaba386" class="i property">Exception</a>; <span class="r54 r">exception</span> != <b>null</b>; <span class="r54 r">exception</span> = <span class="r54 r">exception</span>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a>)
+                    {
+                        <span class="c">// We only consider &quot;known&quot; type of exception and do not make too aggressive changes here</span>
+                        <b>if</b> (<span class="r54 r">exception</span> <b>is</b> <a href="@0@mscorlib/A.html#80a470d64a9b80ef" class="t t">FormatException</a> || <span class="r54 r">exception</span> <b>is</b> <a href="@0@mscorlib/A.html#0b6129dd66924863" class="t t">OverflowException</a>)
+                        {
+                            <b>string</b> <span id="r55 rd" class="r55 r">displayName</span> = <span class="r48 r">propertyMetadata</span>.<a href="ModelMetadata.cs.html#9851789d1edf3c55" class="i method">GetDisplayName</a>();
+                            <b>string</b> <span id="r56 rd" class="r56 r">errorMessageTemplate</span> = <a href="#ff052a775fb97a94" class="i method">GetValueInvalidResource</a>(<span class="r42 r">controllerContext</span>);
+                            <b>string</b> <span id="r57 rd" class="r57 r">errorMessage</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>, <span class="r56 r">errorMessageTemplate</span>, <span class="r51 r">modelState</span>.<a href="ModelState.cs.html#7e243cd42ad7a860" class="i property">Value</a>.<a href="ValueProviderResult.cs.html#4993fc47af4e666b" class="i property">AttemptedValue</a>, <span class="r55 r">displayName</span>);
+                            <span class="r51 r">modelState</span>.<a href="ModelState.cs.html#605e8a0a1e6ff657" class="i property">Errors</a>.<a href="@0@mscorlib/A.html#7ea53c2fa96a1c7d" class="i method">Remove</a>(<span class="r52 r">error</span>);
+                            <span class="r51 r">modelState</span>.<a href="ModelState.cs.html#605e8a0a1e6ff657" class="i property">Errors</a>.<a href="ModelErrorCollection.cs.html#fc51df67fe7d7aac" class="i method">Add</a>(<span class="r57 r">errorMessage</span>);
+                            <b>break</b>;
+                        }
+                    }
+                }
+            }
+        }
+ 
+        <b>internal object</b> <a id="56ab705415a258ec" href="R/56ab705415a258ec.html" target="n" data-glyph="74,1" class="i method">BindSimpleModel</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r58 rd" class="r58 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r59 rd" class="r59 r">bindingContext</span>, <a href="ValueProviderResult.cs.html#d9da9536bdcd12ff" class="t t">ValueProviderResult</a> <span id="r60 rd" class="r60 r">valueProviderResult</span>)
+        {
+            <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#250933b88af05c98" class="i method">SetModelValue</a>(<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r60 r">valueProviderResult</span>);
+ 
+            <span class="c">// if the value provider returns an instance of the requested data type, we can just short-circuit</span>
+            <span class="c">// the evaluation and return that instance</span>
+            <b>if</b> (<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>.<a href="@0@mscorlib/A.html#fe506f282c6fb9c5" class="i method">IsInstanceOfType</a>(<span class="r60 r">valueProviderResult</span>.<a href="ValueProviderResult.cs.html#7fa67721ec91ded8" class="i property">RawValue</a>))
+            {
+                <b>return</b> <span class="r60 r">valueProviderResult</span>.<a href="ValueProviderResult.cs.html#7fa67721ec91ded8" class="i property">RawValue</a>;
+            }
+ 
+            <span class="c">// since a string is an IEnumerable&lt;char&gt;, we want it to skip the two checks immediately following</span>
+            <b>if</b> (<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a> != <b>typeof</b>(<b>string</b>))
+            {
+                <span class="c">// conversion results in 3 cases, as below</span>
+                <b>if</b> (<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>.<a href="@0@mscorlib/A.html#ea1503a5ff8a6f45" class="i property">IsArray</a>)
+                {
+                    <span class="c">// case 1: user asked for an array</span>
+                    <span class="c">// ValueProviderResult.ConvertTo() understands array types, so pass in the array type directly</span>
+                    <b>object</b> <span id="r61 rd" class="r61 r">modelArray</span> = <a href="#f27aa2c8a236023b" class="i method">ConvertProviderResult</a>(<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>, <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r60 r">valueProviderResult</span>, <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>);
+                    <b>return</b> <span class="r61 r">modelArray</span>;
+                }
+ 
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r62 rd" class="r62 r">enumerableType</span> = <a href="TypeHelpers.cs.html#b558ee72f04a4b54" class="t t">TypeHelpers</a>.<a href="TypeHelpers.cs.html#a5538dba19475fe4" class="i method">ExtractGenericInterface</a>(<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>, <b>typeof</b>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;&gt;));
+                <b>if</b> (<span class="r62 r">enumerableType</span> != <b>null</b>)
+                {
+                    <span class="c">// case 2: user asked for a collection rather than an array</span>
+                    <span class="c">// need to call ConvertTo() on the array type, then copy the array to the collection</span>
+                    <b>object</b> <span id="r63 rd" class="r63 r">modelCollection</span> = <a href="#37018b75e0bf7b14" class="i method">CreateModel</a>(<span class="r58 r">controllerContext</span>, <span class="r59 r">bindingContext</span>, <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>);
+                    <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r64 rd" class="r64 r">elementType</span> = <span class="r62 r">enumerableType</span>.<a href="@0@mscorlib/A.html#e0094047204f40ea" class="i method">GetGenericArguments</a>()[0];
+                    <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r65 rd" class="r65 r">arrayType</span> = <span class="r64 r">elementType</span>.<a href="@0@mscorlib/A.html#8b51a4ab67f5b554" class="i method">MakeArrayType</a>();
+                    <b>object</b> <span id="r66 rd" class="r66 r">modelArray</span> = <a href="#f27aa2c8a236023b" class="i method">ConvertProviderResult</a>(<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>, <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r60 r">valueProviderResult</span>, <span class="r65 r">arrayType</span>);
+ 
+                    <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r67 rd" class="r67 r">collectionType</span> = <b>typeof</b>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;&gt;).<a href="@0@mscorlib/A.html#3e82dbae123f91fc" class="i method">MakeGenericType</a>(<span class="r64 r">elementType</span>);
+                    <b>if</b> (<span class="r67 r">collectionType</span>.<a href="@0@mscorlib/A.html#fe506f282c6fb9c5" class="i method">IsInstanceOfType</a>(<span class="r63 r">modelCollection</span>))
+                    {
+                        <a href="#4ed438feaddfdf9d" class="t t">CollectionHelpers</a>.<a href="#5abeaeabe8904f28" class="i method">ReplaceCollection</a>(<span class="r64 r">elementType</span>, <span class="r63 r">modelCollection</span>, <span class="r66 r">modelArray</span>);
+                    }
+                    <b>return</b> <span class="r63 r">modelCollection</span>;
+                }
+            }
+ 
+            <span class="c">// case 3: user asked for an individual element</span>
+            <b>object</b> <span id="r68 rd" class="r68 r">model</span> = <a href="#f27aa2c8a236023b" class="i method">ConvertProviderResult</a>(<span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>, <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r60 r">valueProviderResult</span>, <span class="r59 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>);
+            <b>return</b> <span class="r68 r">model</span>;
+        }
+ 
+        <b>private static bool</b> <a id="9dcbc74ab60232f7" href="R/9dcbc74ab60232f7.html" target="n" data-glyph="76,1" class="i method">CanUpdateReadonlyTypedReference</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r69 rd" class="r69 r">type</span>)
+        {
+            <span class="c">// value types aren&#39;t strictly immutable, but because they have copy-by-value semantics</span>
+            <span class="c">// we can&#39;t update a value type that is marked readonly</span>
+            <b>if</b> (<span class="r69 r">type</span>.<a href="@0@mscorlib/A.html#b77b6aa39ab205fa" class="i property">IsValueType</a>)
+            {
+                <b>return false</b>;
+            }
+ 
+            <span class="c">// arrays are mutable, but because we can&#39;t change their length we shouldn&#39;t try</span>
+            <span class="c">// to update an array that is referenced readonly</span>
+            <b>if</b> (<span class="r69 r">type</span>.<a href="@0@mscorlib/A.html#ea1503a5ff8a6f45" class="i property">IsArray</a>)
+            {
+                <b>return false</b>;
+            }
+ 
+            <span class="c">// special-case known common immutable types</span>
+            <b>if</b> (<span class="r69 r">type</span> == <b>typeof</b>(<b>string</b>))
+            {
+                <b>return false</b>;
+            }
+ 
+            <b>return true</b>;
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Globalization&quot;</span>, <span class="s">&quot;CA1304:SpecifyCultureInfo&quot;</span>, <a href="@0@mscorlib/A.html#f5d3bc389dd4c890" class="i property">MessageId</a> = <span class="s">&quot;System.Web.Mvc.ValueProviderResult.ConvertTo(System.Type)&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The target object should make the correct culture determination, not this method.&quot;</span>)]
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1031:DoNotCatchGeneralExceptionTypes&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;We&#39;re recording this exception so that we can act on it later.&quot;</span>)]
+        <b>private static object</b> <a id="f27aa2c8a236023b" href="R/f27aa2c8a236023b.html" target="n" data-glyph="76,1" class="i method">ConvertProviderResult</a>(<a href="ModelStateDictionary.cs.html#d434cd8673d1b8a0" class="t t">ModelStateDictionary</a> <span id="r70 rd" class="r70 r">modelState</span>, <b>string</b> <span id="r71 rd" class="r71 r">modelStateKey</span>, <a href="ValueProviderResult.cs.html#d9da9536bdcd12ff" class="t t">ValueProviderResult</a> <span id="r72 rd" class="r72 r">valueProviderResult</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r73 rd" class="r73 r">destinationType</span>)
+        {
+            <b>try</b>
+            {
+                <b>object</b> <span id="r74 rd" class="r74 r">convertedValue</span> = <span class="r72 r">valueProviderResult</span>.<a href="ValueProviderResult.cs.html#431aa0561c31f777" class="i method">ConvertTo</a>(<span class="r73 r">destinationType</span>);
+                <b>return</b> <span class="r74 r">convertedValue</span>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r75 rd" class="r75 r">ex</span>)
+            {
+                <span class="r70 r">modelState</span>.<a href="ModelStateDictionary.cs.html#78bd1c64e5bbea00" class="i method">AddModelError</a>(<span class="r71 r">modelStateKey</span>, <span class="r75 r">ex</span>);
+                <b>return null</b>;
+            }
+        }
+ 
+        <b>internal</b> <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <a id="81ca9e4950eeb2c5" href="R/81ca9e4950eeb2c5.html" target="n" data-glyph="74,1" class="i method">CreateComplexElementalModelBindingContext</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r76 rd" class="r76 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r77 rd" class="r77 r">bindingContext</span>, <b>object</b> <span id="r78 rd" class="r78 r">model</span>)
+        {
+            <a href="BindAttribute.cs.html#ace2f65d19413ac5" class="t t">BindAttribute</a> <span id="r79 rd" class="r79 r">bindAttr</span> = (<a href="BindAttribute.cs.html#ace2f65d19413ac5" class="t t">BindAttribute</a>)<a href="#f1d6f735b4185582" class="i method">GetTypeDescriptor</a>(<span class="r76 r">controllerContext</span>, <span class="r77 r">bindingContext</span>).<a href="@0@System/A.html#8bc62d7e4b9bb3cc" class="i method">GetAttributes</a>()[<b>typeof</b>(<a href="BindAttribute.cs.html#ace2f65d19413ac5" class="t t">BindAttribute</a>)];
+            <a href="@0@mscorlib/A.html#ca72a018059733b1" class="t t">Predicate</a>&lt;<b>string</b>&gt; <span id="r80 rd" class="r80 r">newPropertyFilter</span> = (<span class="r79 r">bindAttr</span> != <b>null</b>)
+                                                      ? <span id="r81 rd" class="r81 r">propertyName</span> =&gt; <span class="r79 r">bindAttr</span>.<a href="BindAttribute.cs.html#8c625cd46d0b508e" class="i method">IsPropertyAllowed</a>(<span class="r81 r">propertyName</span>) &amp;&amp; <span class="r77 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>(<span class="r81 r">propertyName</span>)
+                                                      : <span class="r77 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>;
+ 
+            <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r82 rd" class="r82 r">newBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+            {
+                <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(() =&gt; <span class="r78 r">model</span>, <span class="r77 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>),
+                <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r77 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>,
+                <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r77 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r80 r">newPropertyFilter</span>,
+                <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r77 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+            };
+ 
+            <b>return</b> <span class="r82 r">newBindingContext</span>;
+        }
+ 
+        <b>protected virtual object</b> <a id="37018b75e0bf7b14" href="R/37018b75e0bf7b14.html" target="n" data-glyph="75,1" class="i method">CreateModel</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r83 rd" class="r83 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r84 rd" class="r84 r">bindingContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r85 rd" class="r85 r">modelType</span>)
+        {
+            <span class="c">// fallback to the type&#39;s default constructor</span>
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r86 rd" class="r86 r">typeToCreate</span> = <span class="r85 r">modelType</span>;
+ 
+            <span class="c">// we can understand some collection interfaces, e.g. IList&lt;&gt;, IDictionary&lt;,&gt;</span>
+            <b>if</b> (<span class="r85 r">modelType</span>.<a href="@0@mscorlib/A.html#b81fd50dfeabd50c" class="i property">IsGenericType</a>)
+            {
+                <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r87 rd" class="r87 r">genericTypeDefinition</span> = <span class="r85 r">modelType</span>.<a href="@0@mscorlib/A.html#7179022318447358" class="i method">GetGenericTypeDefinition</a>();
+                <b>if</b> (<span class="r87 r">genericTypeDefinition</span> == <b>typeof</b>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;,&gt;))
+                {
+                    <span class="r86 r">typeToCreate</span> = <b>typeof</b>(<a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;,&gt;).<a href="@0@mscorlib/A.html#3e82dbae123f91fc" class="i method">MakeGenericType</a>(<span class="r85 r">modelType</span>.<a href="@0@mscorlib/A.html#e0094047204f40ea" class="i method">GetGenericArguments</a>());
+                }
+                <b>else if</b> (<span class="r87 r">genericTypeDefinition</span> == <b>typeof</b>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;&gt;) || <span class="r87 r">genericTypeDefinition</span> == <b>typeof</b>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;&gt;) || <span class="r87 r">genericTypeDefinition</span> == <b>typeof</b>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;&gt;))
+                {
+                    <span class="r86 r">typeToCreate</span> = <b>typeof</b>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;&gt;).<a href="@0@mscorlib/A.html#3e82dbae123f91fc" class="i method">MakeGenericType</a>(<span class="r85 r">modelType</span>.<a href="@0@mscorlib/A.html#e0094047204f40ea" class="i method">GetGenericArguments</a>());
+                }
+            }
+ 
+            <b>try</b>
+            {
+                <b>return</b> <a href="@0@mscorlib/A.html#955a7437554c8efc" class="t t">Activator</a>.<a href="@0@mscorlib/A.html#4c7b92371a93f246" class="i method">CreateInstance</a>(<span class="r86 r">typeToCreate</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#b0d32699efb065e9" class="t t">MissingMethodException</a> <span id="r88 rd" class="r88 r">exception</span>)
+            {
+                <span class="c">// Ensure thrown exception contains the type name.  Might be down a few levels.</span>
+                <a href="@0@mscorlib/A.html#b0d32699efb065e9" class="t t">MissingMethodException</a> <span id="r89 rd" class="r89 r">replacementException</span> =
+                    <a href="TypeHelpers.cs.html#b558ee72f04a4b54" class="t t">TypeHelpers</a>.<a href="TypeHelpers.cs.html#6be204b67677b4c1" class="i method">EnsureDebuggableException</a>(<span class="r88 r">exception</span>, <span class="r86 r">typeToCreate</span>.<a href="@0@mscorlib/A.html#976443bb39dc37cd" class="i property">FullName</a>);
+                <b>if</b> (<span class="r89 r">replacementException</span> != <b>null</b>)
+                {
+                    <b>throw</b> <span class="r89 r">replacementException</span>;
+                }
+ 
+                <b>throw</b>;
+            }
+        }
+ 
+        <b>protected static string</b> <a id="479927bd22f62006" href="R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">CreateSubIndexName</a>(<b>string</b> <span id="r90 rd" class="r90 r">prefix</span>, <b>int</b> <span id="r91 rd" class="r91 r">index</span>)
+        {
+            <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <span class="s">&quot;{0}[{1}]&quot;</span>, <span class="r90 r">prefix</span>, <span class="r91 r">index</span>);
+        }
+ 
+        <b>protected static string</b> <a id="bb90aa968b05e75a" href="R/bb90aa968b05e75a.html" target="n" data-glyph="75,1" class="i method">CreateSubIndexName</a>(<b>string</b> <span id="r92 rd" class="r92 r">prefix</span>, <b>string</b> <span id="r93 rd" class="r93 r">index</span>)
+        {
+            <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <span class="s">&quot;{0}[{1}]&quot;</span>, <span class="r92 r">prefix</span>, <span class="r93 r">index</span>);
+        }
+ 
+        <b>protected internal static string</b> <a id="497c472db042eef3" href="R/497c472db042eef3.html" target="n" data-glyph="75,1" class="i method">CreateSubPropertyName</a>(<b>string</b> <span id="r94 rd" class="r94 r">prefix</span>, <b>string</b> <span id="r95 rd" class="r95 r">propertyName</span>)
+        {
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r94 r">prefix</span>))
+            {
+                <b>return</b> <span class="r95 r">propertyName</span>;
+            }
+            <b>else if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r95 r">propertyName</span>))
+            {
+                <b>return</b> <span class="r94 r">prefix</span>;
+            }
+            <b>else</b>
+            {
+                <b>return</b> <span class="r94 r">prefix</span> + <span class="s">&quot;.&quot;</span> + <span class="r95 r">propertyName</span>;
+            }
+        }
+ 
+        <b>protected</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a>&gt; <a id="6fb16011fd652816" href="R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">GetFilteredModelProperties</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r96 rd" class="r96 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r97 rd" class="r97 r">bindingContext</span>)
+        {
+            <span class="c">// Performance note: Retain for compatibility only. Faster version inlined</span>
+            <a href="@0@System/A.html#2442aaedff6cc765" class="t t">PropertyDescriptorCollection</a> <span id="r98 rd" class="r98 r">properties</span> = <a href="#a73fc6325b29d737" class="i method">GetModelProperties</a>(<span class="r96 r">controllerContext</span>, <span class="r97 r">bindingContext</span>);
+            <a href="@0@mscorlib/A.html#ca72a018059733b1" class="t t">Predicate</a>&lt;<b>string</b>&gt; <span id="r99 rd" class="r99 r">propertyFilter</span> = <span class="r97 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>;
+ 
+            <b>return from</b> <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span class="i">property</span> <b>in</b> <span class="r98 r">properties</span>
+                   <b>where</b> <a href="#44d9359e429a0e48" class="i method">ShouldUpdateProperty</a>(<span class="i">property</span>, <span class="r99 r">propertyFilter</span>)
+                   <b>select</b> <span class="i">property</span>;
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Globalization&quot;</span>, <span class="s">&quot;CA1304:SpecifyCultureInfo&quot;</span>, <a href="@0@mscorlib/A.html#f5d3bc389dd4c890" class="i property">MessageId</a> = <span class="s">&quot;System.Web.Mvc.ValueProviderResult.ConvertTo(System.Type)&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;ValueProviderResult already handles culture conversion appropriately.&quot;</span>)]
+        <b>private static void</b> <a id="4e44f1eeef860d28" href="R/4e44f1eeef860d28.html" target="n" data-glyph="76,1" class="i method">GetIndexes</a>(<a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r100 rd" class="r100 r">bindingContext</span>, <b>out bool</b> <span id="r101 rd" class="r101 r">stopOnIndexNotFound</span>, <b>out</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <span id="r102 rd" class="r102 r">indexes</span>)
+        {
+            <b>string</b> <span id="r103 rd" class="r103 r">indexKey</span> = <a href="#497c472db042eef3" class="i method">CreateSubPropertyName</a>(<span class="r100 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="s">&quot;index&quot;</span>);
+            <a href="ValueProviderResult.cs.html#d9da9536bdcd12ff" class="t t">ValueProviderResult</a> <span id="r104 rd" class="r104 r">valueProviderResult</span> = <span class="r100 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>.<a href="IValueProvider.cs.html#bf53f57677dc1bcc" class="i method">GetValue</a>(<span class="r103 r">indexKey</span>);
+ 
+            <b>if</b> (<span class="r104 r">valueProviderResult</span> != <b>null</b>)
+            {
+                <b>string</b>[] <span id="r105 rd" class="r105 r">indexesArray</span> = <span class="r104 r">valueProviderResult</span>.<a href="ValueProviderResult.cs.html#431aa0561c31f777" class="i method">ConvertTo</a>(<b>typeof</b>(<b>string</b>[])) <b>as string</b>[];
+                <b>if</b> (<span class="r105 r">indexesArray</span> != <b>null</b>)
+                {
+                    <span class="r101 r">stopOnIndexNotFound</span> = <b>false</b>;
+                    <span class="r102 r">indexes</span> = <span class="r105 r">indexesArray</span>;
+                    <b>return</b>;
+                }
+            }
+ 
+            <span class="c">// just use a simple zero-based system</span>
+            <span class="r101 r">stopOnIndexNotFound</span> = <b>true</b>;
+            <span class="r102 r">indexes</span> = <a href="#3477065cd0e0bda1" class="i method">GetZeroBasedIndexes</a>();
+        }
+ 
+        <b>protected virtual</b> <a href="@0@System/A.html#2442aaedff6cc765" class="t t">PropertyDescriptorCollection</a> <a id="a73fc6325b29d737" href="R/a73fc6325b29d737.html" target="n" data-glyph="75,1" class="i method">GetModelProperties</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r106 rd" class="r106 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r107 rd" class="r107 r">bindingContext</span>)
+        {
+            <b>return</b> <a href="#f1d6f735b4185582" class="i method">GetTypeDescriptor</a>(<span class="r106 r">controllerContext</span>, <span class="r107 r">bindingContext</span>).<a href="@0@System/A.html#18decc22f89d256b" class="i method">GetProperties</a>();
+        }
+ 
+        <b>protected virtual object</b> <a id="f3bf3ae44a754a00" href="R/f3bf3ae44a754a00.html" target="n" data-glyph="75,1" class="i method">GetPropertyValue</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r108 rd" class="r108 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r109 rd" class="r109 r">bindingContext</span>, <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r110 rd" class="r110 r">propertyDescriptor</span>, <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r111 rd" class="r111 r">propertyBinder</span>)
+        {
+            <b>object</b> <span id="r112 rd" class="r112 r">value</span> = <span class="r111 r">propertyBinder</span>.<a href="IModelBinder.cs.html#54cf29ab1be2d109" class="i method">BindModel</a>(<span class="r108 r">controllerContext</span>, <span class="r109 r">bindingContext</span>);
+ 
+            <b>if</b> (<span class="r109 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a>.<a href="ModelMetadata.cs.html#6d26ade89e4d3e0c" class="i property">ConvertEmptyStringToNull</a> &amp;&amp; <a href="@0@mscorlib/A.html#f2a579c50b414717" class="i method">Equals</a>(<span class="r112 r">value</span>, <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>))
+            {
+                <b>return null</b>;
+            }
+ 
+            <b>return</b> <span class="r112 r">value</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="@0@System/A.html#93721a8d60bb59b8" class="t t">ICustomTypeDescriptor</a> <a id="f1d6f735b4185582" href="R/f1d6f735b4185582.html" target="n" data-glyph="75,1" class="i method">GetTypeDescriptor</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r113 rd" class="r113 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r114 rd" class="r114 r">bindingContext</span>)
+        {
+            <b>return</b> <a href="TypeDescriptorHelper.cs.html#c482b03fce27f5df" class="t t">TypeDescriptorHelper</a>.<a href="TypeDescriptorHelper.cs.html#12a1de1d749c94ad" class="i method">Get</a>(<span class="r114 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#313dee118ab37b0f" class="i property">ModelType</a>);
+        }
+ 
+        <span class="c">// If the user specified a ResourceClassKey try to load the resource they specified.</span>
+        <span class="c">// If the class key is invalid, an exception will be thrown.</span>
+        <span class="c">// If the class key is valid but the resource is not found, it returns null, in which</span>
+        <span class="c">// case it will fall back to the MVC default error message.</span>
+        <b>private static string</b> <a id="a48a646a5e32a838" href="R/a48a646a5e32a838.html" target="n" data-glyph="76,1" class="i method">GetUserResourceString</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r115 rd" class="r115 r">controllerContext</span>, <b>string</b> <span id="r116 rd" class="r116 r">resourceName</span>)
+        {
+            <b>string</b> <span id="r117 rd" class="r117 r">result</span> = <b>null</b>;
+ 
+            <b>if</b> (!<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<a href="#9c8e5278d08537af" class="i property">ResourceClassKey</a>) &amp;&amp; (<span class="r115 r">controllerContext</span> != <b>null</b>) &amp;&amp; (<span class="r115 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a> != <b>null</b>))
+            {
+                <span class="r117 r">result</span> = <span class="r115 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#15bf59b735379eb0" class="i method">GetGlobalResourceObject</a>(<a href="#9c8e5278d08537af" class="i property">ResourceClassKey</a>, <span class="r116 r">resourceName</span>, <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#ff8fd0bdccb4794e" class="i property">CurrentUICulture</a>) <b>as string</b>;
+            }
+ 
+            <b>return</b> <span class="r117 r">result</span>;
+        }
+ 
+        <b>private static string</b> <a id="ff052a775fb97a94" href="R/ff052a775fb97a94.html" target="n" data-glyph="76,1" class="i method">GetValueInvalidResource</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r118 rd" class="r118 r">controllerContext</span>)
+        {
+            <b>return</b> <a href="#a48a646a5e32a838" class="i method">GetUserResourceString</a>(<span class="r118 r">controllerContext</span>, <span class="s">&quot;PropertyValueInvalid&quot;</span>) ?? <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#d55f9913eeccca6b" class="i property">DefaultModelBinder_ValueInvalid</a>;
+        }
+ 
+        <b>private static string</b> <a id="408aaeaf7b3ac03a" href="R/408aaeaf7b3ac03a.html" target="n" data-glyph="76,1" class="i method">GetValueRequiredResource</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r119 rd" class="r119 r">controllerContext</span>)
+        {
+            <b>return</b> <a href="#a48a646a5e32a838" class="i method">GetUserResourceString</a>(<span class="r119 r">controllerContext</span>, <span class="s">&quot;PropertyValueRequired&quot;</span>) ?? <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#8c098ff20c4b0119" class="i property">DefaultModelBinder_ValueRequired</a>;
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <a id="3477065cd0e0bda1" href="R/3477065cd0e0bda1.html" target="n" data-glyph="76,1" class="i method">GetZeroBasedIndexes</a>()
+        {
+            <b>int</b> <span id="r120 rd" class="r120 r">i</span> = 0;
+            <b>while</b> (<b>true</b>)
+            {
+                <b>yield return</b> <span class="r120 r">i</span>.<a href="@0@mscorlib/A.html#2b1c2bd27f3489eb" class="i method">ToString</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>);
+                <span class="r120 r">i</span>++;
+            }
+        }
+ 
+        <b>protected static bool</b> <a id="13ad2af616ed6b09" href="R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">IsModelValid</a>(<a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r121 rd" class="r121 r">bindingContext</span>)
+        {
+            <b>if</b> (<span class="r121 r">bindingContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;bindingContext&quot;</span>);
+            }
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r121 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>))
+            {
+                <b>return</b> <span class="r121 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#f5766b88e79b2bdc" class="i property">IsValid</a>;
+            }
+            <b>return</b> <span class="r121 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#78c695c5e93fcda8" class="i method">IsValidField</a>(<span class="r121 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>);
+        }
+ 
+        <b>protected virtual void</b> <a id="8e06d76db3116cb8" href="R/8e06d76db3116cb8.html" target="n" data-glyph="75,1" class="i method">OnModelUpdated</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r122 rd" class="r122 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r123 rd" class="r123 r">bindingContext</span>)
+        {
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <b>bool</b>&gt; <span id="r124 rd" class="r124 r">startedValid</span> = <b>new</b> <a href="@0@mscorlib/A.html#05d4a216235a779c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <b>bool</b>&gt;(<a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+ 
+            <b>foreach</b> (<a href="ModelValidationResult.cs.html#f9496f8984262f48" class="t t">ModelValidationResult</a> <span id="r125 rd" class="r125 r">validationResult</span> <b>in</b> <a href="ModelValidator.cs.html#cb61db0d31b5eaba" class="t t">ModelValidator</a>.<a href="ModelValidator.cs.html#ca405c65f45ac7d0" class="i method">GetModelValidator</a>(<span class="r123 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a>, <span class="r122 r">controllerContext</span>).<a href="ModelValidator.cs.html#671dfc0d78637b3f" class="i method">Validate</a>(<b>null</b>))
+            {
+                <b>string</b> <span id="r126 rd" class="r126 r">subPropertyName</span> = <a href="#497c472db042eef3" class="i method">CreateSubPropertyName</a>(<span class="r123 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r125 r">validationResult</span>.<a href="ModelValidationResult.cs.html#ae551c9e9fadb122" class="i property">MemberName</a>);
+ 
+                <b>if</b> (!<span class="r124 r">startedValid</span>.<a href="@0@mscorlib/A.html#22fd7cd7408aed6e" class="i method">ContainsKey</a>(<span class="r126 r">subPropertyName</span>))
+                {
+                    <span class="r124 r">startedValid</span><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r126 r">subPropertyName</span>] = <span class="r123 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#78c695c5e93fcda8" class="i method">IsValidField</a>(<span class="r126 r">subPropertyName</span>);
+                }
+ 
+                <b>if</b> (<span class="r124 r">startedValid</span><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r126 r">subPropertyName</span>])
+                {
+                    <span class="r123 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#747b2559b8234559" class="i method">AddModelError</a>(<span class="r126 r">subPropertyName</span>, <span class="r125 r">validationResult</span>.<a href="ModelValidationResult.cs.html#ef1e78753354ce01" class="i property">Message</a>);
+                }
+            }
+        }
+ 
+        <b>protected virtual bool</b> <a id="0051cf1cd26f67cd" href="R/0051cf1cd26f67cd.html" target="n" data-glyph="75,1" class="i method">OnModelUpdating</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r127 rd" class="r127 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r128 rd" class="r128 r">bindingContext</span>)
+        {
+            <span class="c">// default implementation does nothing</span>
+            <b>return true</b>;
+        }
+ 
+        <b>protected virtual void</b> <a id="702c3f6e55e694a9" href="R/702c3f6e55e694a9.html" target="n" data-glyph="75,1" class="i method">OnPropertyValidated</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r129 rd" class="r129 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r130 rd" class="r130 r">bindingContext</span>, <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r131 rd" class="r131 r">propertyDescriptor</span>, <b>object</b> <span id="r132 rd" class="r132 r">value</span>)
+        {
+            <span class="c">// default implementation does nothing</span>
+        }
+ 
+        <b>protected virtual bool</b> <a id="5244b7df37effada" href="R/5244b7df37effada.html" target="n" data-glyph="75,1" class="i method">OnPropertyValidating</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r133 rd" class="r133 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r134 rd" class="r134 r">bindingContext</span>, <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r135 rd" class="r135 r">propertyDescriptor</span>, <b>object</b> <span id="r136 rd" class="r136 r">value</span>)
+        {
+            <span class="c">// default implementation does nothing</span>
+            <b>return true</b>;
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1031:DoNotCatchGeneralExceptionTypes&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;We&#39;re recording this exception so that we can act on it later.&quot;</span>)]
+        <b>protected virtual void</b> <a id="c60ee62ef7182554" href="R/c60ee62ef7182554.html" target="n" data-glyph="75,1" class="i method">SetProperty</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r137 rd" class="r137 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r138 rd" class="r138 r">bindingContext</span>, <a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r139 rd" class="r139 r">propertyDescriptor</span>, <b>object</b> <span id="r140 rd" class="r140 r">value</span>)
+        {
+            <a href="ModelMetadata.cs.html#9f822c3699e92a04" class="t t">ModelMetadata</a> <span id="r141 rd" class="r141 r">propertyMetadata</span> = <span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#fd0fc509887434e1" class="i property">PropertyMetadata</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><span class="r139 r">propertyDescriptor</span>.<a href="@0@System/A.html#04b17a133b14e8c6" class="i property">Name</a>];
+            <span class="r141 r">propertyMetadata</span>.<a href="ModelMetadata.cs.html#702e9529d4cd753c" class="i property">Model</a> = <span class="r140 r">value</span>;
+            <b>string</b> <span id="r142 rd" class="r142 r">modelStateKey</span> = <a href="#497c472db042eef3" class="i method">CreateSubPropertyName</a>(<span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r141 r">propertyMetadata</span>.<a href="ModelMetadata.cs.html#01f848aa6c0ffb8f" class="i property">PropertyName</a>);
+ 
+            <span class="c">// If the value is null, and the validation system can find a Required validator for</span>
+            <span class="c">// us, we&#39;d prefer to run it before we attempt to set the value; otherwise, property</span>
+            <span class="c">// setters which throw on null (f.e., Entity Framework properties which are backed by</span>
+            <span class="c">// non-nullable strings in the DB) will get their error message in ahead of us.</span>
+            <span class="c">//</span>
+            <span class="c">// We are effectively using the special validator -- Required -- as a helper to the</span>
+            <span class="c">// binding system, which is why this code is here instead of in the Validating/Validated</span>
+            <span class="c">// methods, which are really the old-school validation hooks.</span>
+            <b>if</b> (<span class="r140 r">value</span> == <b>null</b> &amp;&amp; <span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#78c695c5e93fcda8" class="i method">IsValidField</a>(<span class="r142 r">modelStateKey</span>))
+            {
+                <a href="ModelValidator.cs.html#cb61db0d31b5eaba" class="t t">ModelValidator</a> <span id="r143 rd" class="r143 r">requiredValidator</span> = <a href="ModelValidatorProviders.cs.html#8969220f710c81c8" class="t t">ModelValidatorProviders</a>.<a href="ModelValidatorProviders.cs.html#f9a3c6431afebbf8" class="i property">Providers</a>.<a href="ModelValidatorProviderCollection.cs.html#55c7329679969cda" class="i method">GetValidators</a>(<span class="r141 r">propertyMetadata</span>, <span class="r137 r">controllerContext</span>).<a href="@0@System.Core/A.html#e73922753675387a" class="i method">Where</a>(<span id="r144 rd" class="r144 r">v</span> =&gt; <span class="r144 r">v</span>.<a href="ModelValidator.cs.html#be97e108e3d4fe78" class="i property">IsRequired</a>).<a href="@0@System.Core/A.html#8087366974af11d2" class="i method">FirstOrDefault</a>();
+                <b>if</b> (<span class="r143 r">requiredValidator</span> != <b>null</b>)
+                {
+                    <b>foreach</b> (<a href="ModelValidationResult.cs.html#f9496f8984262f48" class="t t">ModelValidationResult</a> <span id="r145 rd" class="r145 r">validationResult</span> <b>in</b> <span class="r143 r">requiredValidator</span>.<a href="ModelValidator.cs.html#671dfc0d78637b3f" class="i method">Validate</a>(<span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b0dc8ab059a858dc" class="i property">Model</a>))
+                    {
+                        <span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#747b2559b8234559" class="i method">AddModelError</a>(<span class="r142 r">modelStateKey</span>, <span class="r145 r">validationResult</span>.<a href="ModelValidationResult.cs.html#ef1e78753354ce01" class="i property">Message</a>);
+                    }
+                }
+            }
+ 
+            <b>bool</b> <span id="r146 rd" class="r146 r">isNullValueOnNonNullableType</span> =
+                <span class="r140 r">value</span> == <b>null</b> &amp;&amp;
+                !<a href="TypeHelpers.cs.html#b558ee72f04a4b54" class="t t">TypeHelpers</a>.<a href="TypeHelpers.cs.html#a7fe8ec42f44c82b" class="i method">TypeAllowsNullValue</a>(<span class="r139 r">propertyDescriptor</span>.<a href="@0@System/A.html#39d956f31be85f75" class="i property">PropertyType</a>);
+ 
+            <span class="c">// Try to set a value into the property unless we know it will fail (read-only</span>
+            <span class="c">// properties and null values with non-nullable types)</span>
+            <b>if</b> (!<span class="r139 r">propertyDescriptor</span>.<a href="@0@System/A.html#d1c2369f860347a9" class="i property">IsReadOnly</a> &amp;&amp; !<span class="r146 r">isNullValueOnNonNullableType</span>)
+            {
+                <b>try</b>
+                {
+                    <span class="r139 r">propertyDescriptor</span>.<a href="@0@System/A.html#a040304e6cc6280a" class="i method">SetValue</a>(<span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b0dc8ab059a858dc" class="i property">Model</a>, <span class="r140 r">value</span>);
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r147 rd" class="r147 r">ex</span>)
+                {
+                    <span class="c">// Only add if we&#39;re not already invalid</span>
+                    <b>if</b> (<span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#78c695c5e93fcda8" class="i method">IsValidField</a>(<span class="r142 r">modelStateKey</span>))
+                    {
+                        <span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#78bd1c64e5bbea00" class="i method">AddModelError</a>(<span class="r142 r">modelStateKey</span>, <span class="r147 r">ex</span>);
+                    }
+                }
+            }
+ 
+            <span class="c">// Last chance for an error on null values with non-nullable types, we&#39;ll use</span>
+            <span class="c">// the default &quot;A value is required.&quot; message.</span>
+            <b>if</b> (<span class="r146 r">isNullValueOnNonNullableType</span> &amp;&amp; <span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#78c695c5e93fcda8" class="i method">IsValidField</a>(<span class="r142 r">modelStateKey</span>))
+            {
+                <span class="r138 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>.<a href="ModelStateDictionary.cs.html#747b2559b8234559" class="i method">AddModelError</a>(<span class="r142 r">modelStateKey</span>, <a href="#408aaeaf7b3ac03a" class="i method">GetValueRequiredResource</a>(<span class="r137 r">controllerContext</span>));
+            }
+        }
+ 
+        <b>private static bool</b> <a id="4698f99baced8e2c" href="R/4698f99baced8e2c.html" target="n" data-glyph="76,1" class="i method">ShouldPerformRequestValidation</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r148 rd" class="r148 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r149 rd" class="r149 r">bindingContext</span>)
+        {
+            <b>if</b> (<span class="r148 r">controllerContext</span> == <b>null</b> || <span class="r148 r">controllerContext</span>.<a href="ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a> == <b>null</b> || <span class="r149 r">bindingContext</span> == <b>null</b> || <span class="r149 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> == <b>null</b>)
+            {
+                <span class="c">// To make unit testing easier, if the caller hasn&#39;t specified enough contextual information we just default</span>
+                <span class="c">// to always pulling the data from a collection that goes through request validation.</span>
+                <b>return true</b>;
+            }
+ 
+            <span class="c">// We should perform request validation only if both the controller and the model ask for it. This is the</span>
+            <span class="c">// default behavior for both. If either the controller (via [ValidateInput(false)]) or the model (via [AllowHtml])</span>
+            <span class="c">// opts out, we don&#39;t validate.</span>
+            <b>return</b> (<span class="r148 r">controllerContext</span>.<a href="ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>.<a href="ControllerBase.cs.html#39c34750f1305927" class="i property">ValidateRequest</a> &amp;&amp; <span class="r149 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a>.<a href="ModelMetadata.cs.html#ec97c894f3e84274" class="i property">RequestValidationEnabled</a>);
+        }
+ 
+        <b>private static bool</b> <a id="44d9359e429a0e48" href="R/44d9359e429a0e48.html" target="n" data-glyph="76,1" class="i method">ShouldUpdateProperty</a>(<a href="@0@System/A.html#a1f8d8808866e595" class="t t">PropertyDescriptor</a> <span id="r150 rd" class="r150 r">property</span>, <a href="@0@mscorlib/A.html#ca72a018059733b1" class="t t">Predicate</a>&lt;<b>string</b>&gt; <span id="r151 rd" class="r151 r">propertyFilter</span>)
+        {
+            <b>if</b> (<span class="r150 r">property</span>.<a href="@0@System/A.html#d1c2369f860347a9" class="i property">IsReadOnly</a> &amp;&amp; !<a href="#9dcbc74ab60232f7" class="i method">CanUpdateReadonlyTypedReference</a>(<span class="r150 r">property</span>.<a href="@0@System/A.html#39d956f31be85f75" class="i property">PropertyType</a>))
+            {
+                <b>return false</b>;
+            }
+ 
+            <span class="c">// if this property is rejected by the filter, move on</span>
+            <b>if</b> (!<span class="r151 r">propertyFilter</span>(<span class="r150 r">property</span>.<a href="@0@System/A.html#04b17a133b14e8c6" class="i property">Name</a>))
+            {
+                <b>return false</b>;
+            }
+ 
+            <span class="c">// otherwise, allow</span>
+            <b>return true</b>;
+        }
+ 
+        <b>internal object</b> <a id="c0c1c39145de66e5" href="R/c0c1c39145de66e5.html" target="n" data-glyph="74,1" class="i method">UpdateCollection</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r152 rd" class="r152 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r153 rd" class="r153 r">bindingContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r154 rd" class="r154 r">elementType</span>)
+        {
+            <b>bool</b> <span id="r155 rd" class="r155 r">stopOnIndexNotFound</span>;
+            <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <span id="r156 rd" class="r156 r">indexes</span>;
+            <a href="#4e44f1eeef860d28" class="i method">GetIndexes</a>(<span class="r153 r">bindingContext</span>, <b>out</b> <span class="r155 r">stopOnIndexNotFound</span>, <b>out</b> <span class="r156 r">indexes</span>);
+            <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r157 rd" class="r157 r">elementBinder</span> = <a href="#4f28a54e06a776b7" class="i property">Binders</a>.<a href="ModelBinderDictionary.cs.html#0cbd69413bfac81c" class="i method">GetBinder</a>(<span class="r154 r">elementType</span>);
+ 
+            <span class="c">// build up a list of items from the request</span>
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>object</b>&gt; <span id="r158 rd" class="r158 r">modelList</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>object</b>&gt;();
+            <b>foreach</b> (<b>string</b> <span id="r159 rd" class="r159 r">currentIndex</span> <b>in</b> <span class="r156 r">indexes</span>)
+            {
+                <b>string</b> <span id="r160 rd" class="r160 r">subIndexKey</span> = <a href="#bb90aa968b05e75a" class="i method">CreateSubIndexName</a>(<span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r159 r">currentIndex</span>);
+                <b>if</b> (!<span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>.<a href="IValueProvider.cs.html#22f0d355134ddf78" class="i method">ContainsPrefix</a>(<span class="r160 r">subIndexKey</span>))
+                {
+                    <b>if</b> (<span class="r155 r">stopOnIndexNotFound</span>)
+                    {
+                        <span class="c">// we ran out of elements to pull</span>
+                        <b>break</b>;
+                    }
+                    <b>else</b>
+                    {
+                        <b>continue</b>;
+                    }
+                }
+ 
+                <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r161 rd" class="r161 r">innerContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+                {
+                    <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(<b>null</b>, <span class="r154 r">elementType</span>),
+                    <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r160 r">subIndexKey</span>,
+                    <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                    <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>,
+                    <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+                };
+                <b>object</b> <span id="r162 rd" class="r162 r">thisElement</span> = <span class="r157 r">elementBinder</span>.<a href="IModelBinder.cs.html#54cf29ab1be2d109" class="i method">BindModel</a>(<span class="r152 r">controllerContext</span>, <span class="r161 r">innerContext</span>);
+ 
+                <span class="c">// we need to merge model errors up</span>
+                <a href="#1a26b8255306483e" class="i method">AddValueRequiredMessageToModelState</a>(<span class="r152 r">controllerContext</span>, <span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>, <span class="r160 r">subIndexKey</span>, <span class="r154 r">elementType</span>, <span class="r162 r">thisElement</span>);
+                <span class="r158 r">modelList</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r162 r">thisElement</span>);
+            }
+ 
+            <span class="c">// if there weren&#39;t any elements at all in the request, just return</span>
+            <b>if</b> (<span class="r158 r">modelList</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 0)
+            {
+                <b>return null</b>;
+            }
+ 
+            <span class="c">// replace the original collection</span>
+            <b>object</b> <span id="r163 rd" class="r163 r">collection</span> = <span class="r153 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b0dc8ab059a858dc" class="i property">Model</a>;
+            <a href="#4ed438feaddfdf9d" class="t t">CollectionHelpers</a>.<a href="#5abeaeabe8904f28" class="i method">ReplaceCollection</a>(<span class="r154 r">elementType</span>, <span class="r163 r">collection</span>, <span class="r158 r">modelList</span>);
+            <b>return</b> <span class="r163 r">collection</span>;
+        }
+ 
+        <b>internal object</b> <a id="91eee2ecd173ad4e" href="R/91eee2ecd173ad4e.html" target="n" data-glyph="74,1" class="i method">UpdateDictionary</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r164 rd" class="r164 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r165 rd" class="r165 r">bindingContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r166 rd" class="r166 r">keyType</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r167 rd" class="r167 r">valueType</span>)
+        {
+            <b>bool</b> <span id="r168 rd" class="r168 r">stopOnIndexNotFound</span>;
+            <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <span id="r169 rd" class="r169 r">indexes</span>;
+            <a href="#4e44f1eeef860d28" class="i method">GetIndexes</a>(<span class="r165 r">bindingContext</span>, <b>out</b> <span class="r168 r">stopOnIndexNotFound</span>, <b>out</b> <span class="r169 r">indexes</span>);
+ 
+            <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r170 rd" class="r170 r">keyBinder</span> = <a href="#4f28a54e06a776b7" class="i property">Binders</a>.<a href="ModelBinderDictionary.cs.html#0cbd69413bfac81c" class="i method">GetBinder</a>(<span class="r166 r">keyType</span>);
+            <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r171 rd" class="r171 r">valueBinder</span> = <a href="#4f28a54e06a776b7" class="i property">Binders</a>.<a href="ModelBinderDictionary.cs.html#0cbd69413bfac81c" class="i method">GetBinder</a>(<span class="r167 r">valueType</span>);
+ 
+            <span class="c">// build up a list of items from the request</span>
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>object</b>, <b>object</b>&gt;&gt; <span id="r172 rd" class="r172 r">modelList</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>object</b>, <b>object</b>&gt;&gt;();
+            <b>foreach</b> (<b>string</b> <span id="r173 rd" class="r173 r">currentIndex</span> <b>in</b> <span class="r169 r">indexes</span>)
+            {
+                <b>string</b> <span id="r174 rd" class="r174 r">subIndexKey</span> = <a href="#bb90aa968b05e75a" class="i method">CreateSubIndexName</a>(<span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>, <span class="r173 r">currentIndex</span>);
+                <b>string</b> <span id="r175 rd" class="r175 r">keyFieldKey</span> = <a href="#497c472db042eef3" class="i method">CreateSubPropertyName</a>(<span class="r174 r">subIndexKey</span>, <span class="s">&quot;key&quot;</span>);
+                <b>string</b> <span id="r176 rd" class="r176 r">valueFieldKey</span> = <a href="#497c472db042eef3" class="i method">CreateSubPropertyName</a>(<span class="r174 r">subIndexKey</span>, <span class="s">&quot;value&quot;</span>);
+ 
+                <b>if</b> (!(<span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>.<a href="IValueProvider.cs.html#22f0d355134ddf78" class="i method">ContainsPrefix</a>(<span class="r175 r">keyFieldKey</span>) &amp;&amp; <span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>.<a href="IValueProvider.cs.html#22f0d355134ddf78" class="i method">ContainsPrefix</a>(<span class="r176 r">valueFieldKey</span>)))
+                {
+                    <b>if</b> (<span class="r168 r">stopOnIndexNotFound</span>)
+                    {
+                        <span class="c">// we ran out of elements to pull</span>
+                        <b>break</b>;
+                    }
+                    <b>else</b>
+                    {
+                        <b>continue</b>;
+                    }
+                }
+ 
+                <span class="c">// bind the key</span>
+                <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r177 rd" class="r177 r">keyBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+                {
+                    <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(<b>null</b>, <span class="r166 r">keyType</span>),
+                    <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r175 r">keyFieldKey</span>,
+                    <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                    <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+                };
+                <b>object</b> <span id="r178 rd" class="r178 r">thisKey</span> = <span class="r170 r">keyBinder</span>.<a href="IModelBinder.cs.html#54cf29ab1be2d109" class="i method">BindModel</a>(<span class="r164 r">controllerContext</span>, <span class="r177 r">keyBindingContext</span>);
+ 
+                <span class="c">// we need to merge model errors up</span>
+                <a href="#1a26b8255306483e" class="i method">AddValueRequiredMessageToModelState</a>(<span class="r164 r">controllerContext</span>, <span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>, <span class="r175 r">keyFieldKey</span>, <span class="r166 r">keyType</span>, <span class="r178 r">thisKey</span>);
+                <b>if</b> (!<span class="r166 r">keyType</span>.<a href="@0@mscorlib/A.html#fe506f282c6fb9c5" class="i method">IsInstanceOfType</a>(<span class="r178 r">thisKey</span>))
+                {
+                    <span class="c">// we can&#39;t add an invalid key, so just move on</span>
+                    <b>continue</b>;
+                }
+ 
+                <span class="c">// bind the value</span>
+                <span class="r172 r">modelList</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<a href="#cbf06ecf749770e7" class="i method">CreateEntryForModel</a>(<span class="r164 r">controllerContext</span>, <span class="r165 r">bindingContext</span>, <span class="r167 r">valueType</span>, <span class="r171 r">valueBinder</span>, <span class="r176 r">valueFieldKey</span>, <span class="r178 r">thisKey</span>));
+            }
+ 
+            <span class="c">// Let&#39;s try another method</span>
+            <b>if</b> (<span class="r172 r">modelList</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 0)
+            {
+                <a href="IEnumerableValueProvider.cs.html#ebb3f9bec9e4e830" class="t t">IEnumerableValueProvider</a> <span id="r179 rd" class="r179 r">enumerableValueProvider</span> = <span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> <b>as</b> <a href="IEnumerableValueProvider.cs.html#ebb3f9bec9e4e830" class="t t">IEnumerableValueProvider</a>;
+                <b>if</b> (<span class="r179 r">enumerableValueProvider</span> != <b>null</b>)
+                {
+                    <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>string</b>&gt; <span id="r180 rd" class="r180 r">keys</span> = <span class="r179 r">enumerableValueProvider</span>.<a href="IEnumerableValueProvider.cs.html#5ea95ae4943d7f9b" class="i method">GetKeysFromPrefix</a>(<span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a>);
+                    <b>foreach</b> (<a href="@0@mscorlib/A.html#8585965bb176a426" class="k">var</a> <span id="r181 rd" class="r181 r">thisKey</span> <b>in</b> <span class="r180 r">keys</span>)
+                    {
+                        <span class="r172 r">modelList</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<a href="#cbf06ecf749770e7" class="i method">CreateEntryForModel</a>(<span class="r164 r">controllerContext</span>, <span class="r165 r">bindingContext</span>, <span class="r167 r">valueType</span>, <span class="r171 r">valueBinder</span>, <span class="r181 r">thisKey</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a>, <span class="r181 r">thisKey</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a>));
+                    }
+                }
+            }
+ 
+            <span class="c">// replace the original collection</span>
+            <b>object</b> <span id="r182 rd" class="r182 r">dictionary</span> = <span class="r165 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b0dc8ab059a858dc" class="i property">Model</a>;
+            <a href="#4ed438feaddfdf9d" class="t t">CollectionHelpers</a>.<a href="#f3b143b752e830bc" class="i method">ReplaceDictionary</a>(<span class="r166 r">keyType</span>, <span class="r167 r">valueType</span>, <span class="r182 r">dictionary</span>, <span class="r172 r">modelList</span>);
+            <b>return</b> <span class="r182 r">dictionary</span>;
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>object</b>, <b>object</b>&gt; <a id="cbf06ecf749770e7" href="R/cbf06ecf749770e7.html" target="n" data-glyph="76,1" class="i method">CreateEntryForModel</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r183 rd" class="r183 r">controllerContext</span>, <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r184 rd" class="r184 r">bindingContext</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r185 rd" class="r185 r">valueType</span>, <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r186 rd" class="r186 r">valueBinder</span>, <b>string</b> <span id="r187 rd" class="r187 r">modelName</span>, <b>object</b> <span id="r188 rd" class="r188 r">modelKey</span>)
+        {
+            <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r189 rd" class="r189 r">valueBindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+            {
+                <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(<b>null</b>, <span class="r185 r">valueType</span>),
+                <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r187 r">modelName</span>,
+                <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r184 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>,
+                <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r184 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a>,
+                <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r184 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a>
+            };
+            <b>object</b> <span id="r190 rd" class="r190 r">thisValue</span> = <span class="r186 r">valueBinder</span>.<a href="IModelBinder.cs.html#54cf29ab1be2d109" class="i method">BindModel</a>(<span class="r183 r">controllerContext</span>, <span class="r189 r">valueBindingContext</span>);
+            <a href="#1a26b8255306483e" class="i method">AddValueRequiredMessageToModelState</a>(<span class="r183 r">controllerContext</span>, <span class="r184 r">bindingContext</span>.<a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a>, <span class="r187 r">modelName</span>, <span class="r185 r">valueType</span>, <span class="r190 r">thisValue</span>);
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#0d04c81b31e41262" class="t constructor">KeyValuePair</a>&lt;<b>object</b>, <b>object</b>&gt;(<span class="r188 r">modelKey</span>, <span class="r190 r">thisValue</span>);
+        }
+ 
+        <span class="c">// This helper type is used because we&#39;re working with strongly-typed collections, but we don&#39;t know the Ts</span>
+        <span class="c">// ahead of time. By using the generic methods below, we can consolidate the collection-specific code in a</span>
+        <span class="c">// single helper type rather than having reflection-based calls spread throughout the DefaultModelBinder type.</span>
+        <span class="c">// There is a single point of entry to each of the methods below, so they&#39;re fairly simple to maintain.</span>
+ 
+        <b>private static class</b> <a id="4ed438feaddfdf9d" href="R/4ed438feaddfdf9d.html" target="n" data-glyph="4,1" class="t t">CollectionHelpers</a>
+        {
+            <b>private static readonly</b> <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <a id="c6259f4916336f73" href="R/c6259f4916336f73.html" target="n" data-glyph="46,2" class="i field">_replaceCollectionMethod</a> = <b>typeof</b>(<a href="#4ed438feaddfdf9d" class="t t">CollectionHelpers</a>).<a href="@0@mscorlib/A.html#f24e0c9fd5441fd5" class="i method">GetMethod</a>(<span class="s">&quot;ReplaceCollectionImpl&quot;</span>, <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#d1fa47f9abe3c16a" class="i field">Static</a> | <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#5144189c11f6b668" class="i field">NonPublic</a>);
+            <b>private static readonly</b> <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <a id="9fc74f05c80233f7" href="R/9fc74f05c80233f7.html" target="n" data-glyph="46,2" class="i field">_replaceDictionaryMethod</a> = <b>typeof</b>(<a href="#4ed438feaddfdf9d" class="t t">CollectionHelpers</a>).<a href="@0@mscorlib/A.html#f24e0c9fd5441fd5" class="i method">GetMethod</a>(<span class="s">&quot;ReplaceDictionaryImpl&quot;</span>, <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#d1fa47f9abe3c16a" class="i field">Static</a> | <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#5144189c11f6b668" class="i field">NonPublic</a>);
+ 
+            [<a href="@0@mscorlib/A.html#b2f5af2558f436d5" class="t constructor">MethodImpl</a>(<a href="@0@mscorlib/A.html#4159f5c528de6ee8" class="t t">MethodImplOptions</a>.<a href="@0@mscorlib/A.html#f7d69d229fb17be2" class="i field">NoInlining</a> | <a href="@0@mscorlib/A.html#4159f5c528de6ee8" class="t t">MethodImplOptions</a>.<a href="@0@mscorlib/A.html#02b7c82d502b2a34" class="i field">NoOptimization</a>)]
+            <b>public static void</b> <a id="5abeaeabe8904f28" href="R/5abeaeabe8904f28.html" target="n" data-glyph="72,2" class="i method">ReplaceCollection</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r191 rd" class="r191 r">collectionType</span>, <b>object</b> <span id="r192 rd" class="r192 r">collection</span>, <b>object</b> <span id="r193 rd" class="r193 r">newContents</span>)
+            {
+                <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r194 rd" class="r194 r">targetMethod</span> = <a href="#c6259f4916336f73" class="i field">_replaceCollectionMethod</a>.<a href="@0@mscorlib/A.html#6f9c3eb767cf3cc7" class="i method">MakeGenericMethod</a>(<span class="r191 r">collectionType</span>);
+                <span class="r194 r">targetMethod</span>.<a href="@0@mscorlib/A.html#c8277ed81262a367" class="i method">Invoke</a>(<b>null</b>, <b>new</b> <b>object</b>[] { <span class="r192 r">collection</span>, <span class="r193 r">newContents</span> });
+            }
+ 
+            <b>private static void</b> <a id="d9eecfbd6efb614d" href="R/../../0000000000.html" target="n" data-glyph="76,2" class="i method">ReplaceCollectionImpl</a>&lt;<span id="r195 rd t" class="r195 r t">T</span>&gt;(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<span class="r195 r t">T</span>&gt; <span id="r196 rd" class="r196 r">collection</span>, <a href="@0@mscorlib/A.html#9be451ac13d86a97" class="t t">IEnumerable</a> <span id="r197 rd" class="r197 r">newContents</span>)
+            {
+                <span class="r196 r">collection</span>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+                <b>if</b> (<span class="r197 r">newContents</span> != <b>null</b>)
+                {
+                    <b>foreach</b> (<b>object</b> <span id="r198 rd" class="r198 r">item</span> <b>in</b> <span class="r197 r">newContents</span>)
+                    {
+                        <span class="c">// if the item was not a T, some conversion failed. the error message will be propagated,</span>
+                        <span class="c">// but in the meanwhile we need to make a placeholder element in the array.</span>
+                        <span class="r195 r t">T</span> <span id="r199 rd" class="r199 r">castItem</span> = (<span class="r198 r">item</span> <b>is</b> <span class="r195 r t">T</span>) ? (<span class="r195 r t">T</span>)<span class="r198 r">item</span> : <b>default</b>(<span class="r195 r t">T</span>);
+                        <span class="r196 r">collection</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<span class="r199 r">castItem</span>);
+                    }
+                }
+            }
+ 
+            [<a href="@0@mscorlib/A.html#b2f5af2558f436d5" class="t constructor">MethodImpl</a>(<a href="@0@mscorlib/A.html#4159f5c528de6ee8" class="t t">MethodImplOptions</a>.<a href="@0@mscorlib/A.html#f7d69d229fb17be2" class="i field">NoInlining</a> | <a href="@0@mscorlib/A.html#4159f5c528de6ee8" class="t t">MethodImplOptions</a>.<a href="@0@mscorlib/A.html#02b7c82d502b2a34" class="i field">NoOptimization</a>)]
+            <b>public static void</b> <a id="f3b143b752e830bc" href="R/f3b143b752e830bc.html" target="n" data-glyph="72,2" class="i method">ReplaceDictionary</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r200 rd" class="r200 r">keyType</span>, <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r201 rd" class="r201 r">valueType</span>, <b>object</b> <span id="r202 rd" class="r202 r">dictionary</span>, <b>object</b> <span id="r203 rd" class="r203 r">newContents</span>)
+            {
+                <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r204 rd" class="r204 r">targetMethod</span> = <a href="#9fc74f05c80233f7" class="i field">_replaceDictionaryMethod</a>.<a href="@0@mscorlib/A.html#6f9c3eb767cf3cc7" class="i method">MakeGenericMethod</a>(<span class="r200 r">keyType</span>, <span class="r201 r">valueType</span>);
+                <span class="r204 r">targetMethod</span>.<a href="@0@mscorlib/A.html#c8277ed81262a367" class="i method">Invoke</a>(<b>null</b>, <b>new</b> <b>object</b>[] { <span class="r202 r">dictionary</span>, <span class="r203 r">newContents</span> });
+            }
+ 
+            <b>private static void</b> <a id="a3b8dd315ee3306f" href="R/../../0000000000.html" target="n" data-glyph="76,2" class="i method">ReplaceDictionaryImpl</a>&lt;<span id="r205 rd t" class="r205 r t">TKey</span>, <span id="r206 rd t" class="r206 r t">TValue</span>&gt;(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<span class="r205 r t">TKey</span>, <span class="r206 r t">TValue</span>&gt; <span id="r207 rd" class="r207 r">dictionary</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>object</b>, <b>object</b>&gt;&gt; <span id="r208 rd" class="r208 r">newContents</span>)
+            {
+                <span class="r207 r">dictionary</span>.<a href="@0@mscorlib/A.html#6144bc2a22ce28c4" class="i method">Clear</a>();
+                <b>foreach</b> (<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r209 rd" class="r209 r">item</span> <b>in</b> <span class="r208 r">newContents</span>)
+                {
+                    <b>if</b> (<span class="r209 r">item</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a> <b>is</b> <span class="r205 r t">TKey</span>)
+                    {
+                        <span class="c">// if the item was not a T, some conversion failed. the error message will be propagated,</span>
+                        <span class="c">// but in the meanwhile we need to make a placeholder element in the dictionary.</span>
+                        <span class="r205 r t">TKey</span> <span id="r210 rd" class="r210 r">castKey</span> = (<span class="r205 r t">TKey</span>)<span class="r209 r">item</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a>; <span class="c">// this cast shouldn&#39;t fail</span>
+                        <span class="r206 r t">TValue</span> <span id="r211 rd" class="r211 r">castValue</span> = (<span class="r209 r">item</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a> <b>is</b> <span class="r206 r t">TValue</span>) ? (<span class="r206 r t">TValue</span>)<span class="r209 r">item</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a> : <b>default</b>(<span class="r206 r t">TValue</span>);
+                        <span class="r207 r">dictionary</span><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><span class="r210 r">castKey</span>] = <span class="r211 r">castValue</span>;
+                    }
+                }
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

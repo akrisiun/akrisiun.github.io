@@ -1,0 +1,275 @@
+﻿<!DOCTYPE html>
+<html><head><title>RevertCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(266);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/RevertCommand.cs" target="_top">NGit.Api\RevertCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Merge</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A class used to execute a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">revert</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> command. It has setters for all</span>
+	<span class="c">///</span><span class="c"> supported options and arguments of this command and a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#b91fe5889ecb3026" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> method</span>
+	<span class="c">///</span><span class="c"> to finally execute the command. Each instance of this class should only be</span>
+	<span class="c">///</span><span class="c"> used for one invocation of the command (means: one call to</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#b91fe5889ecb3026" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> )</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span>href=&quot;http://www.kernel.org/pub/software/scm/git/docs/git-revert.html&quot;
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about revert</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="84e1b6ae38b05ba1" href="../R/84e1b6ae38b05ba1.html" target="n" data-glyph="0,0" class="t t">RevertCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt;
+	{
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="b61d1676c9228d58" href="../R/b61d1676c9228d58.html" target="n" data-glyph="46,1" class="i field">commits</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="e00bfd6e35d7efef" href="../R/e00bfd6e35d7efef.html" target="n" data-glyph="46,1" class="i field">revertedRefs</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;();
+
+		<b>private</b> <a href="MergeCommandResult.cs.html#b57bf09e533ebff3" class="t t">MergeCommandResult</a> <a id="966d0c26bf567fd6" href="../R/966d0c26bf567fd6.html" target="n" data-glyph="46,1" class="i field">failingResult</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <a id="7ace385314480324" href="../R/7ace385314480324.html" target="n" data-glyph="46,1" class="i field">unmergedPaths</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="997d301024d3ee97" href="../R/997d301024d3ee97.html" target="n" data-glyph="75,1" class="i constructor">RevertCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r0 r">repo</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Executes the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">revert</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> command with all the options and parameters</span>
+		<span class="c">///</span><span class="c"> collected by the setter methods (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4e878dbc0346c509" class="i method">Include</a>(<span class="i n">NGit</span>.<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Include(NGit.Ref)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> of this</span>
+		<span class="c">///</span><span class="c"> class. Each instance of this class should only be used for one invocation</span>
+		<span class="c">///</span><span class="c"> of the command. Don&#39;t call this method twice on an instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> on success the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevCommit</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> pointed to by the new HEAD is</span>
+		<span class="c">///</span><span class="c"> returned. If a failure occurred during revert </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is returned. The list of successfully reverted</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Ref</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> &#39;s can</span>
+		<span class="c">///</span><span class="c"> be obtained by calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#204d415b025ca42f" class="i method">GetRevertedRefs</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetRevertedRefs()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.GitAPIException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#5d7264b257703642" class="t t">WrongRepositoryStateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.WrongRepositoryStateException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/ConcurrentRefUpdateException.cs.html#3c820c6954c55f0e" class="t t">ConcurrentRefUpdateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.ConcurrentRefUpdateException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/UnmergedPathsException.cs.html#095370662d6874b1" class="t t">UnmergedPathsException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.UnmergedPathsException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoMessageException.cs.html#1bb1c0288a90560e" class="t t">NoMessageException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.NoMessageException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="b91fe5889ecb3026" href="../R/b91fe5889ecb3026.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r1 rd" class="r1 r">newHead</span> = <b>null</b>;
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r2 rd" class="r2 r">revWalk</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<b>try</b>
+			{
+				<span class="c">// get the head commit</span>
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r3 rd" class="r3 r">headRef</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<b>if</b> (<span class="r3 r">headRef</span> == <b>null</b>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#65a573bc59a8e4d4" class="i field">commitOnRepoWithoutHEADCurrentlyNotSupported</a>
+						);
+				}
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r4 rd" class="r4 r">headCommit</span> = <span class="r2 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r3 r">headRef</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>());
+				<span class="r1 r">newHead</span> = <span class="r4 r">headCommit</span>;
+				<span class="c">// loop through all refs to be reverted</span>
+				<b>foreach</b> (<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r5 rd" class="r5 r">src</span> <b>in</b> <a href="#b61d1676c9228d58" class="i field">commits</a>)
+				{
+					<span class="c">// get the commit to be reverted</span>
+					<span class="c">// handle annotated tags</span>
+					<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r6 rd" class="r6 r">srcObjectId</span> = <span class="r5 r">src</span>.<a href="../NGit/Ref.cs.html#f9c6216152c573d8" class="i method">GetPeeledObjectId</a>();
+					<b>if</b> (<span class="r6 r">srcObjectId</span> == <b>null</b>)
+					{
+						<span class="r6 r">srcObjectId</span> = <span class="r5 r">src</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+					}
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r7 rd" class="r7 r">srcCommit</span> = <span class="r2 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r6 r">srcObjectId</span>);
+					<span class="c">// get the parent of the commit to revert</span>
+					<b>if</b> (<span class="r7 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#6804a6589a038c04" class="i property">ParentCount</a> != 1)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/MultipleParentsNotAllowedException.cs.html#1073d6fa556c6464" class="t constructor">MultipleParentsNotAllowedException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#871ef7ddb77d20e1" class="i field">canOnlyRevertCommitsWithOneParent</a>
+							);
+					}
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r8 rd" class="r8 r">srcParent</span> = <span class="r7 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#f8123aa92e7623eb" class="i method">GetParent</a>(0);
+					<span class="r2 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#4ab02db9afbfe5a4" class="i method">ParseHeaders</a>(<span class="r8 r">srcParent</span>);
+					<a href="../NGit.Merge/ResolveMerger.cs.html#4c89cde851216ecd" class="t t">ResolveMerger</a> <span id="r9 rd" class="r9 r">merger</span> = (<a href="../NGit.Merge/ResolveMerger.cs.html#4c89cde851216ecd" class="t t">ResolveMerger</a>)((<a href="../NGit.Merge/ThreeWayMerger.cs.html#01715721722e8e06" class="t t">ThreeWayMerger</a>)<a href="../NGit.Merge/MergeStrategy.cs.html#bf0d56dc88902b3d" class="t t">MergeStrategy</a>.<a href="../NGit.Merge/MergeStrategy.cs.html#83a09cb5f560d626" class="i field">RESOLVE</a>.<a href="../NGit.Merge/ThreeWayMergeStrategy.cs.html#0e1ba994bf38b641" class="i method">NewMerger</a>
+						(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>));
+					<span class="r9 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#3fe40c1885083ecc" class="i method">SetWorkingTreeIterator</a>(<b>new</b> <a href="../NGit.Treewalk/FileTreeIterator.cs.html#b46cb8801d309325" class="t constructor">FileTreeIterator</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>));
+					<span class="r9 r">merger</span>.<a href="../NGit.Merge/ThreeWayMerger.cs.html#21e638328d807ca7" class="i method">SetBase</a>(<span class="r7 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+					<b>if</b> (<span class="r9 r">merger</span>.<a href="../NGit.Merge/ThreeWayMerger.cs.html#a4dce006ef2b62c0" class="i method">Merge</a>(<span class="r4 r">headCommit</span>, <span class="r8 r">srcParent</span>))
+					{
+						<b>if</b> (<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>.<a href="../NGit/AnyObjectId.cs.html#ead3b31b42c5aa99" class="i method">Equals</a>(<span class="r4 r">headCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>, <span class="r9 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#556f5f4131b30900" class="i method">GetResultTreeId</a>()))
+						{
+							<b>continue</b>;
+						}
+						<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a> <span id="r10 rd" class="r10 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#726275afb70b49a6" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r4 r">headCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>
+							(), <span class="r9 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#556f5f4131b30900" class="i method">GetResultTreeId</a>());
+						<span class="r10 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#c98b11bb8e5d0b91" class="i method">SetFailOnConflict</a>(<b>true</b>);
+						<span class="r10 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#e56f2429d666ea70" class="i method">Checkout</a>();
+						<b>string</b> <span id="r11 rd" class="r11 r">shortMessage</span> = <span class="s">&quot;Revert \&quot;&quot;</span> + <span class="r7 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>() + <span class="s">&quot;\&quot;&quot;</span>;
+						<b>string</b> <span id="r12 rd" class="r12 r">newMessage</span> = <span class="r11 r">shortMessage</span> + <span class="s">&quot;\n\n&quot;</span> + <span class="s">&quot;This reverts commit &quot;</span> + <span class="r7 r">srcCommit</span>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>
+							.<a href="../NGit/AnyObjectId.cs.html#4e9c38ea87ec4f33" class="i method">GetName</a>() + <span class="s">&quot;.\n&quot;</span>;
+						<span class="r1 r">newHead</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#d09113f37676df4c" class="i method">GetRepository</a>()).<a href="Git.cs.html#58eeb297ac383ce3" class="i method">Commit</a>().<a href="CommitCommand.cs.html#ac81c562a4b857d0" class="i method">SetMessage</a>(<span class="r12 r">newMessage</span>).<a href="CommitCommand.cs.html#c4055e781a96b985" class="i method">SetReflogComment</a>
+							(<span class="s">&quot;revert: &quot;</span> + <span class="r11 r">shortMessage</span>).<a href="CommitCommand.cs.html#e40c4c0200577029" class="i method">Call</a>();
+						<a href="#e00bfd6e35d7efef" class="i field">revertedRefs</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r5 r">src</span>);
+					}
+					<b>else</b>
+					{
+						<a href="#7ace385314480324" class="i field">unmergedPaths</a> = <span class="r9 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#3b4e6baaf125f972" class="i method">GetUnmergedPaths</a>();
+						<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <a href="../NGit.Merge/ResolveMerger.cs.html#4c89cde851216ecd" class="t t">ResolveMerger</a>.<a href="../NGit.Merge/ResolveMerger.cs.html#c0ddce5c0cb3cb26" class="t t">MergeFailureReason</a>&gt; <span id="r13 rd" class="r13 r">failingPaths</span> = <span class="r9 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#78dec7de895c0a1c" class="i method">GetFailingPaths</a>
+							();
+						<b>if</b> (<span class="r13 r">failingPaths</span> != <b>null</b>)
+						{
+							<a href="#966d0c26bf567fd6" class="i field">failingResult</a> = <b>new</b> <a href="MergeCommandResult.cs.html#94547a659ac056ee" class="t constructor">MergeCommandResult</a>(<b>null</b>, <span class="r9 r">merger</span>.<a href="../NGit.Merge/Merger.cs.html#b9111e671dc5a18f" class="i method">GetBaseCommit</a>(0, 1), <b>new</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>
+								[] { <span class="r4 r">headCommit</span>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>, <span class="r8 r">srcParent</span>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a> }, <a href="MergeCommandResult.cs.html#f39d6f8bc86efcf0" class="t t">MergeStatus</a>.<a href="MergeCommandResult.cs.html#bc0500c8a41ce453" class="i field">FAILED</a>, <a href="../NGit.Merge/MergeStrategy.cs.html#bf0d56dc88902b3d" class="t t">MergeStrategy</a>.<a href="../NGit.Merge/MergeStrategy.cs.html#83a09cb5f560d626" class="i field">RESOLVE</a>, <span class="r9 r">merger</span>
+								.<a href="../NGit.Merge/ResolveMerger.cs.html#eac464b93d7f50a1" class="i method">GetMergeResults</a>(), <span class="r13 r">failingPaths</span>, <b>null</b>);
+						}
+						<b>return null</b>;
+					}
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r14 rd" class="r14 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#f2866660370ab3a9" class="i field">exceptionCaughtDuringExecutionOfRevertCommand</a>
+					, <span class="r14 r">e</span>), <span class="r14 r">e</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r2 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+			<b>return</b> <span class="r1 r">newHead</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a reference to a commit which is reverted into the current</span>
+		<span class="c">///</span><span class="c"> head</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#84e1b6ae38b05ba1" class="t t">RevertCommand</a> <a id="4e878dbc0346c509" href="../R/4e878dbc0346c509.html" target="n" data-glyph="72,1" class="i method">Include</a>(<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r15 rd" class="r15 r">commit</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#b61d1676c9228d58" class="i field">commits</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r15 r">commit</span>);
+			<b>return</b> <a href="#84e1b6ae38b05ba1" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the Id of a commit which is reverted into the current head</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#84e1b6ae38b05ba1" class="t t">RevertCommand</a> <a id="5b65ab14eb828271" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Include</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r16 rd" class="r16 r">commit</span>)
+		{
+			<b>return</b> <a href="#2ff5b2e5d51e6905" class="i method">Include</a>(<span class="r16 r">commit</span>.<a href="../NGit/AnyObjectId.cs.html#4e9c38ea87ec4f33" class="i method">GetName</a>(), <span class="r16 r">commit</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a name given to the commit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the Id of a commit which is reverted into the current head</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#84e1b6ae38b05ba1" class="t t">RevertCommand</a> <a id="2ff5b2e5d51e6905" href="../R/2ff5b2e5d51e6905.html" target="n" data-glyph="72,1" class="i method">Include</a>(<b>string</b> <span id="r17 rd" class="r17 r">name</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r18 rd" class="r18 r">commit</span>)
+		{
+			<b>return</b> <a href="#4e878dbc0346c509" class="i method">Include</a>(<b>new</b> <a href="../NGit/ObjectIdRef.cs.html#e05503644522791c" class="t t">ObjectIdRef</a>.<a href="../NGit/ObjectIdRef.cs.html#85e37651aff49114" class="t constructor">Unpeeled</a>(<a href="../NGit/Ref.cs.html#1b606deb8e918043" class="t t">RefStorage</a>.<a href="../NGit/Ref.cs.html#e10e437befc95c59" class="i field">LOOSE</a>, <span class="r17 r">name</span>, <span class="r18 r">commit</span>.<a href="../NGit/AnyObjectId.cs.html#82a834fd5f79e3ca" class="i method">Copy</a>()));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the list of successfully reverted</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Ref</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> &#39;s. Never</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> but maybe an empty list if no commit was</span>
+		<span class="c">///</span><span class="c"> successfully cherry-picked</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="204d415b025ca42f" href="../R/204d415b025ca42f.html" target="n" data-glyph="72,1" class="i method">GetRevertedRefs</a>()
+		{
+			<b>return</b> <a href="#e00bfd6e35d7efef" class="i field">revertedRefs</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the result of the merge failure, </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> if no merge</span>
+		<span class="c">///</span><span class="c"> failure occurred during the revert</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="MergeCommandResult.cs.html#b57bf09e533ebff3" class="t t">MergeCommandResult</a> <a id="a9b125b206d96b2d" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetFailingResult</a>()
+		{
+			<b>return</b> <a href="#966d0c26bf567fd6" class="i field">failingResult</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the unmerged paths, will be null if no merge conflicts</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <a id="17ae60bb0526a58c" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetUnmergedPaths</a>()
+		{
+			<b>return</b> <a href="#7ace385314480324" class="i field">unmergedPaths</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

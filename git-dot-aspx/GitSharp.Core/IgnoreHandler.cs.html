@@ -1,0 +1,247 @@
+﻿<!DOCTYPE html>
+<html><head><title>IgnoreHandler.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(238);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/IgnoreHandler.cs" target="_top">IgnoreHandler.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2009, Stefan Schake &lt;caytchen@gmail.com&gt;
+ * Copyright (C) 2010, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">FnMatch</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<b>public interface</b> <a id="cd17940d6409841b" href="R/cd17940d6409841b.html" target="n" data-glyph="48,0" class="t t">IPattern</a>
+	{
+		<b>bool</b> <a id="5254304bf4734c64" href="R/5254304bf4734c64.html" target="n" data-glyph="72,1" class="i method">IsIgnored</a>(<b>string</b> <span id="r0 rd" class="r0 r">path</span>);
+	}
+
+	<b>public class</b> <a id="ece4871b1031e230" href="R/ece4871b1031e230.html" target="n" data-glyph="0,0" class="t t">IgnoreHandler</a>
+	{
+		<b>private readonly</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="75f29cc9fbffc5a9" href="R/75f29cc9fbffc5a9.html" target="n" data-glyph="46,1" class="i field">_repo</a>;
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt; <a id="59ff12f91155838d" href="R/59ff12f91155838d.html" target="n" data-glyph="46,1" class="i field">_commandLinePatterns</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt;();
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt; <a id="9bf305095dcfa8e0" href="R/9bf305095dcfa8e0.html" target="n" data-glyph="46,1" class="i field">_excludePatterns</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt;();
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt;&gt; <a id="105d923485e3cb88" href="R/105d923485e3cb88.html" target="n" data-glyph="46,1" class="i field">_directoryPatterns</a> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt;&gt;();
+
+		<b>public</b> <a id="9efa22b2e2dcc73d" href="R/9efa22b2e2dcc73d.html" target="n" data-glyph="72,1" class="i constructor">IgnoreHandler</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r1 rd" class="r1 r">repo</span>)
+		{
+			<b>if</b> (<span class="r1 r">repo</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;repo&quot;</span>);
+			}
+
+			<a href="#75f29cc9fbffc5a9" class="i field">_repo</a> = <span class="r1 r">repo</span>;
+
+			<b>try</b>
+			{
+				<b>string</b> <span id="r2 rd" class="r2 r">excludeFile</span> = <span class="r1 r">repo</span>.<a href="Repository.cs.html#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="RepositoryConfig.cs.html#288eed24ede43959" class="i method">getCore</a>().<a href="CoreConfig.cs.html#1984b49ca8181843" class="i method">getExcludesFile</a>();
+				<b>if</b> (!<b>string</b>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r2 r">excludeFile</span>))
+				{
+					<a href="#dd545056de8c9296" class="i method">ReadPatternsFromFile</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<span class="r1 r">repo</span>.<a href="Repository.cs.html#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="r2 r">excludeFile</span>), <a href="#9bf305095dcfa8e0" class="i field">_excludePatterns</a>);
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+			{
+				<span class="c">//optional</span>
+			}
+
+			<b>try</b>
+			{
+				<a href="#dd545056de8c9296" class="i method">ReadPatternsFromFile</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<span class="r1 r">repo</span>.<a href="Repository.cs.html#77a819ff8f2ad4d4" class="i property">Directory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;info/exclude&quot;</span>), <a href="#9bf305095dcfa8e0" class="i field">_excludePatterns</a>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+			{
+				<span class="c">// optional</span>
+			}
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="6b6a2e8eec213e55" href="R/6b6a2e8eec213e55.html" target="n" data-glyph="76,1" class="i method">GetPathDirectories</a>(<b>string</b> <span id="r3 rd" class="r3 r">path</span>)
+		{
+			<b>if</b> (<span class="r3 r">path</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;/&quot;</span>))
+				<span class="r3 r">path</span> = <span class="r3 r">path</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1);
+
+			<span class="c">// always check our repository directory since path is relative to this</span>
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r4 rd" class="r4 r">ret</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt; { <span class="s">&quot;.&quot;</span> };
+
+			<span class="c">// this ensures top down</span>
+			<b>for</b> (<b>int</b> <span id="r5 rd" class="r5 r">i</span> = 0; <span class="r5 r">i</span> &lt; <span class="r3 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; <span class="r5 r">i</span>++)
+			{
+				<b>char</b> <span id="r6 rd" class="r6 r">c</span> = <span class="r3 r">path</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r5 r">i</span>];
+				<b>if</b> (<span class="r6 r">c</span> == <span class="s">&#39;/&#39;</span>)
+					<span class="r4 r">ret</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r3 r">path</span>.<a href="@0@mscorlib/A.html#8124961f027d9ac9" class="i method">Substring</a>(0, <span class="r5 r">i</span>));
+			}
+			<b>return</b> <span class="r4 r">ret</span>;
+		}
+
+		<b>private void</b> <a id="9cd2869473a53263" href="R/9cd2869473a53263.html" target="n" data-glyph="76,1" class="i method">LoadDirectoryPatterns</a>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <span id="r7 rd" class="r7 r">dirs</span>)
+		{
+			<b>foreach</b> (<b>string</b> <span id="r8 rd" class="r8 r">p</span> <b>in</b> <span class="r7 r">dirs</span>)
+			{
+				<b>if</b> (<a href="#105d923485e3cb88" class="i field">_directoryPatterns</a>.<a href="@0@mscorlib/A.html#22fd7cd7408aed6e" class="i method">ContainsKey</a>(<span class="r8 r">p</span>))
+					<b>continue</b>;
+
+				<a href="#105d923485e3cb88" class="i field">_directoryPatterns</a>.<a href="@0@mscorlib/A.html#a7861da7aaa500fe" class="i method">Add</a>(<span class="r8 r">p</span>, <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt;());
+				<b>string</b> <span id="r9 rd" class="r9 r">ignorePath</span> = <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#75f29cc9fbffc5a9" class="i field">_repo</a>.<a href="Repository.cs.html#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="r8 r">p</span>);
+				<span class="r9 r">ignorePath</span> = <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<span class="r9 r">ignorePath</span>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#0a4555cc5af871b3" class="i field">GITIGNORE_FILENAME</a>);
+				<b>if</b> (<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<span class="r9 r">ignorePath</span>))
+				{
+					<a href="#dd545056de8c9296" class="i method">ReadPatternsFromFile</a>(<span class="r9 r">ignorePath</span>, <a href="#105d923485e3cb88" class="i field">_directoryPatterns</a><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r8 r">p</span>]);
+				}
+			}
+		}
+
+		<b>private static void</b> <a id="dd545056de8c9296" href="R/dd545056de8c9296.html" target="n" data-glyph="76,1" class="i method">ReadPatternsFromFile</a>(<b>string</b> <span id="r10 rd" class="r10 r">path</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt; <span id="r11 rd" class="r11 r">to</span>)
+		{
+			<b>if</b> (!<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<span class="r10 r">path</span>))
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#e49034af96bf20b2" class="t constructor">FileNotFoundException</a>(<span class="s">&quot;File not found&quot;</span>, <span class="r10 r">path</span>);
+
+			<b>try</b>
+			{
+				<b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r12 rd" class="r12 r">s</span> = <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<span class="r10 r">path</span>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#0f1c68c756d0636b" class="i field">Read</a>))
+				{
+					<a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="k">var</a> <span id="r13 rd" class="r13 r">reader</span> = <b>new</b> <a href="@0@mscorlib/A.html#72447927169f6b77" class="t constructor">StreamReader</a>(<span class="r12 r">s</span>);
+					<b>while</b> (!<span class="r13 r">reader</span>.<a href="@0@mscorlib/A.html#27a804c872881c54" class="i property">EndOfStream</a>)
+						<a href="#7c281e36015ff2d7" class="i method">AddPattern</a>(<span class="r13 r">reader</span>.<a href="@0@mscorlib/A.html#a4ada5f765646068" class="i method">ReadLine</a>(), <span class="r11 r">to</span>);
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r14 rd" class="r14 r">inner</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#34e9967ccd840525" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;Can&#39;t read from &quot;</span> + <span class="r10 r">path</span>, <span class="r14 r">inner</span>);
+			}
+		}
+
+		<b>private static bool</b> <a id="9dbfcea2a8bc6458" href="R/9dbfcea2a8bc6458.html" target="n" data-glyph="76,1" class="i method">IsIgnored</a>(<b>string</b> <span id="r15 rd" class="r15 r">path</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt; <span id="r16 rd" class="r16 r">patterns</span>, <b>bool</b> <span id="r17 rd" class="r17 r">ret</span>)
+		{
+			<span class="c">// if ret is true, path was marked as ignored by a previous pattern, so only NegatedPatterns can still change this</span>
+			<b>if</b> (<span class="r17 r">ret</span>)
+			{
+				<b>return</b> !<span class="r16 r">patterns</span>.<a href="@0@System.Core/A.html#6a1af7c3d17845e3" class="i method">Any</a>(<span id="r18 rd" class="r18 r">p</span> =&gt; (<span class="r18 r">p</span> <b>is</b> <a href="#628a7c9c90ff3be2" class="t t">NegatedPattern</a>) &amp;&amp; <span class="r18 r">p</span>.<a href="#5254304bf4734c64" class="i method">IsIgnored</a>(<span class="r15 r">path</span>));
+			}
+
+			<b>return</b> <span class="r16 r">patterns</span>.<a href="@0@System.Core/A.html#6a1af7c3d17845e3" class="i method">Any</a>(<span id="r19 rd" class="r19 r">p</span> =&gt; !(<span class="r19 r">p</span> <b>is</b> <a href="#628a7c9c90ff3be2" class="t t">NegatedPattern</a>) &amp;&amp; <span class="r19 r">p</span>.<a href="#5254304bf4734c64" class="i method">IsIgnored</a>(<span class="r15 r">path</span>));
+		}
+
+		<b>public void</b> <a id="6b8b0874a4111f86" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">AddCommandLinePattern</a>(<b>string</b> <span id="r20 rd" class="r20 r">pattern</span>)
+		{
+			<a href="#7c281e36015ff2d7" class="i method">AddPattern</a>(<span class="r20 r">pattern</span>, <a href="#59ff12f91155838d" class="i field">_commandLinePatterns</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Evaluate if the given path is ignored. If not yet loaded this loads all .gitignore files on the path and respects them.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r21 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">relative path to a file in the repository</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="22c7b1fb1e7a021b" href="R/22c7b1fb1e7a021b.html" target="n" data-glyph="72,1" class="i method">IsIgnored</a>(<b>string</b> <span id="r21 rd" class="r21 r">path</span>)
+		{
+			<b>bool</b> <span id="r22 rd" class="r22 r">ret</span> = <b>false</b>;
+			<b>string</b> <span id="r23 rd" class="r23 r">filename</span> = <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#95facc58d06cadd0" class="i method">GetFileName</a>(<span class="r21 r">path</span>);
+			<span class="r22 r">ret</span> = <a href="#9dbfcea2a8bc6458" class="i method">IsIgnored</a>(<span class="r23 r">filename</span>, <a href="#9bf305095dcfa8e0" class="i field">_excludePatterns</a>, <span class="r22 r">ret</span>);
+
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r24 rd" class="r24 r">dirs</span> = <a href="#6b6a2e8eec213e55" class="i method">GetPathDirectories</a>(<span class="r21 r">path</span>);
+			<a href="#9cd2869473a53263" class="i method">LoadDirectoryPatterns</a>(<span class="r24 r">dirs</span>);
+
+			<b>foreach</b> (<b>string</b> <span id="r25 rd" class="r25 r">p</span> <b>in</b> <span class="r24 r">dirs</span>)
+			{
+				<span class="r22 r">ret</span> = <a href="#9dbfcea2a8bc6458" class="i method">IsIgnored</a>(<span class="r23 r">filename</span>, <a href="#105d923485e3cb88" class="i field">_directoryPatterns</a><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r25 r">p</span>], <span class="r22 r">ret</span>);
+			}
+
+			<span class="r22 r">ret</span> = <a href="#9dbfcea2a8bc6458" class="i method">IsIgnored</a>(<span class="r23 r">filename</span>, <a href="#59ff12f91155838d" class="i field">_commandLinePatterns</a>, <span class="r22 r">ret</span>);
+
+			<b>return</b> <span class="r22 r">ret</span>;
+		}
+
+		<b>private static void</b> <a id="7c281e36015ff2d7" href="R/7c281e36015ff2d7.html" target="n" data-glyph="76,1" class="i method">AddPattern</a>(<b>string</b> <span id="r26 rd" class="r26 r">line</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="#cd17940d6409841b" class="t t">IPattern</a>&gt; <span id="r27 rd" class="r27 r">to</span>)
+		{
+			<b>if</b> (<span class="r26 r">line</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 0)
+				<b>return</b>;
+
+			<span class="c">// Comment</span>
+			<b>if</b> (<span class="r26 r">line</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;#&quot;</span>))
+				<b>return</b>;
+
+			<span class="c">// Negated</span>
+			<b>if</b> (<span class="r26 r">line</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;!&quot;</span>))
+			{
+				<span class="r26 r">line</span> = <span class="r26 r">line</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1);
+				<span class="r27 r">to</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<b>new</b> <a href="#94fa9e26eff50c93" class="t constructor">NegatedPattern</a>(<b>new</b> <a href="#e247a3f4ccd386e0" class="t constructor">FnMatchPattern</a>(<span class="r26 r">line</span>)));
+				<b>return</b>;
+			}
+
+			<span class="r27 r">to</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<b>new</b> <a href="#e247a3f4ccd386e0" class="t constructor">FnMatchPattern</a>(<span class="r26 r">line</span>));
+		}
+
+		<b>private class</b> <a id="a208f27c3215fcd6" href="R/a208f27c3215fcd6.html" target="n" data-glyph="4,1" class="t t">FnMatchPattern</a> : <a href="#cd17940d6409841b" class="t t">IPattern</a>
+		{
+			<b>private readonly</b> <a href="FnMatch/FileNameMatcher.cs.html#7e6f19984f20d333" class="t t">FileNameMatcher</a> <a id="d0a35b14f8a4a42c" href="R/d0a35b14f8a4a42c.html" target="n" data-glyph="46,2" class="i field">_matcher</a>;
+
+			<b>public</b> <a id="e247a3f4ccd386e0" href="R/e247a3f4ccd386e0.html" target="n" data-glyph="72,2" class="i constructor">FnMatchPattern</a>(<b>string</b> <span id="r28 rd" class="r28 r">line</span>)
+			{
+				<a href="#d0a35b14f8a4a42c" class="i field">_matcher</a> = <b>new</b> <a href="FnMatch/FileNameMatcher.cs.html#02933eb0258f44ac" class="t constructor">FileNameMatcher</a>(<span class="r28 r">line</span>, <b>null</b>);
+			}
+
+			<b>public bool</b> <a id="347cd1afef8423bb" href="R/347cd1afef8423bb.html" target="n" data-glyph="72,2" class="i method">IsIgnored</a>(<b>string</b> <span id="r29 rd" class="r29 r">path</span>)
+			{
+				<a href="#d0a35b14f8a4a42c" class="i field">_matcher</a>.<a href="FnMatch/FileNameMatcher.cs.html#b9059dcc4065719a" class="i method">Reset</a>();
+				<a href="#d0a35b14f8a4a42c" class="i field">_matcher</a>.<a href="FnMatch/FileNameMatcher.cs.html#dacbaf941f1066d3" class="i method">Append</a>(<span class="r29 r">path</span>);
+				<b>return</b> <a href="#d0a35b14f8a4a42c" class="i field">_matcher</a>.<a href="FnMatch/FileNameMatcher.cs.html#cc448e77f1172fd3" class="i method">IsMatch</a>();
+			}
+		}
+
+		<b>private class</b> <a id="628a7c9c90ff3be2" href="R/628a7c9c90ff3be2.html" target="n" data-glyph="4,1" class="t t">NegatedPattern</a> : <a href="#cd17940d6409841b" class="t t">IPattern</a>
+		{
+			<b>private readonly</b> <a href="#cd17940d6409841b" class="t t">IPattern</a> <a id="8d7a5b7035d89336" href="R/8d7a5b7035d89336.html" target="n" data-glyph="46,2" class="i field">_original</a>;
+
+			<b>public</b> <a id="94fa9e26eff50c93" href="R/94fa9e26eff50c93.html" target="n" data-glyph="72,2" class="i constructor">NegatedPattern</a>(<a href="#cd17940d6409841b" class="t t">IPattern</a> <span id="r30 rd" class="r30 r">pattern</span>)
+			{
+				<a href="#8d7a5b7035d89336" class="i field">_original</a> = <span class="r30 r">pattern</span>;
+			}
+
+			<b>public bool</b> <a id="95c67007df410e6e" href="R/95c67007df410e6e.html" target="n" data-glyph="72,2" class="i method">IsIgnored</a>(<b>string</b> <span id="r31 rd" class="r31 r">path</span>)
+			{
+				<b>return</b> <a href="#8d7a5b7035d89336" class="i field">_original</a>.<a href="#5254304bf4734c64" class="i method">IsIgnored</a>(<span class="r31 r">path</span>);
+			}
+		}
+	}
+}</pre></td></tr></table></div></body></html>

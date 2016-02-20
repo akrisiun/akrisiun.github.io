@@ -1,0 +1,754 @@
+﻿<!DOCTYPE html>
+<html><head><title>RefUpdate.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(745);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/RefUpdate.cs" target="_top">NGit\RefUpdate.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Creates, updates or deletes any reference.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Creates, updates or deletes any reference.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public abstract class</b> <a id="2164cd1d8095d95b" href="../R/2164cd1d8095d95b.html" target="n" data-glyph="0,0" class="t t">RefUpdate</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Status of an update request.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Status of an update request.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public enum</b> <a id="bc146b107244d167" href="../R/bc146b107244d167.html" target="n" data-glyph="18,1" class="t t"><span id="2be0edba66596796">Result</span></a>
+		{
+			<a id="064b870bfed4a7fd" href="../R/064b870bfed4a7fd.html" target="n" data-glyph="24,2" class="i field">NOT_ATTEMPTED</a>,
+			<a id="b7f458761c28cf3d" href="../R/b7f458761c28cf3d.html" target="n" data-glyph="24,2" class="i field">LOCK_FAILURE</a>,
+			<a id="279b180136195c74" href="../R/279b180136195c74.html" target="n" data-glyph="24,2" class="i field">NO_CHANGE</a>,
+			<a id="896c2eb530d7a9bb" href="../R/896c2eb530d7a9bb.html" target="n" data-glyph="24,2" class="i field">NEW</a>,
+			<a id="749b19aaeca1ee8d" href="../R/749b19aaeca1ee8d.html" target="n" data-glyph="24,2" class="i field">FORCED</a>,
+			<a id="e2aa5be4cac8eae0" href="../R/e2aa5be4cac8eae0.html" target="n" data-glyph="24,2" class="i field">FAST_FORWARD</a>,
+			<a id="565fa79e7f9bdb40" href="../R/565fa79e7f9bdb40.html" target="n" data-glyph="24,2" class="i field">REJECTED</a>,
+			<a id="f492553f225b0245" href="../R/f492553f225b0245.html" target="n" data-glyph="24,2" class="i field">REJECTED_CURRENT_BRANCH</a>,
+			<a id="5ef615a104f49f99" href="../R/5ef615a104f49f99.html" target="n" data-glyph="24,2" class="i field">IO_FAILURE</a>,
+			<a id="4ba22c244361651a" href="../R/4ba22c244361651a.html" target="n" data-glyph="24,2" class="i field">RENAMED</a>
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">New value the caller wants this ref to have.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">New value the caller wants this ref to have.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="32ea7e2b155681b6" href="../R/32ea7e2b155681b6.html" target="n" data-glyph="46,1" class="i field">newValue</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Does this specification ask for forced updated (rewind/reset)?</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="ddcc44ba9cdbba3b" href="../R/ddcc44ba9cdbba3b.html" target="n" data-glyph="46,1" class="i field">force</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Identity to record action as within the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Identity to record action as within the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="724cfd268262bc15" href="../R/724cfd268262bc15.html" target="n" data-glyph="46,1" class="i field">refLogIdent</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Message the caller wants included in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Message the caller wants included in the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private string</b> <a id="ed914032d59cfa38" href="../R/ed914032d59cfa38.html" target="n" data-glyph="46,1" class="i field">refLogMessage</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Should the Result value be appended to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#ed914032d59cfa38" class="i field">refLogMessage</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">refLogMessage</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="94ac057273dad975" href="../R/94ac057273dad975.html" target="n" data-glyph="46,1" class="i field">refLogIncludeResult</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Old value of the ref, obtained after we lock it.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Old value of the ref, obtained after we lock it.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="74489eb9cbb15b4b" href="../R/74489eb9cbb15b4b.html" target="n" data-glyph="46,1" class="i field">oldValue</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If non-null, the value</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#74489eb9cbb15b4b" class="i field">oldValue</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">oldValue</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> must have to continue.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="01dfefa84b80f8d2" href="../R/01dfefa84b80f8d2.html" target="n" data-glyph="46,1" class="i field">expValue</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Result of the update operation.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Result of the update operation.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="8b77a91468006453" href="../R/8b77a91468006453.html" target="n" data-glyph="46,1" class="i field">result</a> = <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#064b870bfed4a7fd" class="i field">NOT_ATTEMPTED</a>;
+
+		<b>private readonly</b> <a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <a id="23e787ccbabfd0dc" href="../R/23e787ccbabfd0dc.html" target="n" data-glyph="46,1" class="i field">@ref</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Is this RefUpdate detaching a symbolic ref?</span>
+		<span class="c">///</span><span class="c"> We need this info since this.ref will normally be peeled of in case of</span>
+		<span class="c">///</span><span class="c"> detaching a symbolic ref (HEAD for example).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Is this RefUpdate detaching a symbolic ref?</span>
+		<span class="c">///</span><span class="c"> We need this info since this.ref will normally be peeled of in case of</span>
+		<span class="c">///</span><span class="c"> detaching a symbolic ref (HEAD for example).</span>
+		<span class="c">///</span><span class="c"> Without this flag we cannot decide whether the ref has to be updated or</span>
+		<span class="c">///</span><span class="c"> not in case when it was a symbolic ref and the newValue == oldValue.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="869866cb676d5199" href="../R/869866cb676d5199.html" target="n" data-glyph="46,1" class="i field">detachingSymbolicRef</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a new update operation for the reference.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a new update operation for the reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ref.getObjectId()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> will be used to seed</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f802a377e7ef2636" class="i method">GetOldObjectId</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetOldObjectId()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ,</span>
+		<span class="c">///</span><span class="c"> which callers can use as part of their own update logic.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the reference that will be updated by this operation.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="cc1abc3d50d2e1f7" href="../R/cc1abc3d50d2e1f7.html" target="n" data-glyph="75,1" class="i constructor">RefUpdate</a>(<a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r0 rd" class="r0 r">@ref</span>)
+		{
+			<a href="#2164cd1d8095d95b" class="k">this</a>.<a href="#23e787ccbabfd0dc" class="i field">@ref</a> = <span class="r0 r">@ref</span>;
+			<a href="#74489eb9cbb15b4b" class="i field">oldValue</a> = <span class="r0 r">@ref</span>.<a href="Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+			<a href="#ed914032d59cfa38" class="i field">refLogMessage</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the reference database this update modifies.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected internal abstract</b> <a href="RefDatabase.cs.html#a8335c0f37d2d313" class="t t">RefDatabase</a> <a id="1006646bdcf40bf7" href="../R/1006646bdcf40bf7.html" target="n" data-glyph="75,1" class="i method">GetRefDatabase</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the repository storing the database&#39;s objects.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected internal abstract</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="8a68101d5f7252db" href="../R/8a68101d5f7252db.html" target="n" data-glyph="75,1" class="i method">GetRepository</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Try to acquire the lock on the reference.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Try to acquire the lock on the reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If the locking was successful the implementor must set the current</span>
+		<span class="c">///</span><span class="c"> identity value by calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6fee7524e2216bf2" class="i method">SetOldObjectId</a>(<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetOldObjectId(ObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">deref</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the lock should be taken against the leaf level</span>
+		<span class="c">///</span><span class="c"> reference; false if it should be taken exactly against the</span>
+		<span class="c">///</span><span class="c"> current reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the lock was acquired and the reference is likely</span>
+		<span class="c">///</span><span class="c"> protected from concurrent modification; false if it failed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the lock couldn&#39;t be taken due to an unexpected storage</span>
+		<span class="c">///</span><span class="c"> failure, and not because of a concurrent update.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal abstract bool</b> <a id="c4415ef156b13851" href="../R/c4415ef156b13851.html" target="n" data-glyph="75,1" class="i method">TryLock</a>(<b>bool</b> <span id="r1 rd" class="r1 r">deref</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Releases the lock taken by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c4415ef156b13851" class="i method">TryLock</a>(<b>bool</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">TryLock(bool)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if it succeeded.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>protected internal abstract void</b> <a id="ed499c26d70c3cb1" href="../R/ed499c26d70c3cb1.html" target="n" data-glyph="75,1" class="i method">Unlock</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">desiredResult</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">result</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal abstract</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="c9aa589f7b2f6f86" href="../R/c9aa589f7b2f6f86.html" target="n" data-glyph="75,1" class="i method">DoUpdate</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <span id="r2 rd" class="r2 r">desiredResult</span>
+			);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">desiredResult</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">result</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal abstract</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="bd74cfdd3ff26ffc" href="../R/bd74cfdd3ff26ffc.html" target="n" data-glyph="75,1" class="i method">DoDelete</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <span id="r3 rd" class="r3 r">desiredResult</span>
+			);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">target</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#bc146b107244d167" class="t t">Result</a>.<a href="#896c2eb530d7a9bb" class="i field">NEW</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Result.NEW</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> on success.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal abstract</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="0cc054b3e2155806" href="../R/0cc054b3e2155806.html" target="n" data-glyph="75,1" class="i method">DoLink</a>(<b>string</b> <span id="r4 rd" class="r4 r">target</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the name of the ref this update will operate on.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the name of the ref this update will operate on.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">name of underlying ref.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="3ed61e1a177066e0" href="../R/3ed61e1a177066e0.html" target="n" data-glyph="72,1" class="i method">GetName</a>()
+		{
+			<b>return</b> <a href="#89e50033d10f7def" class="i method">GetRef</a>().<a href="Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the reference this update will create or modify.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <a id="89e50033d10f7def" href="../R/89e50033d10f7def.html" target="n" data-glyph="72,1" class="i method">GetRef</a>()
+		{
+			<b>return</b> <a href="#23e787ccbabfd0dc" class="i field">@ref</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the new value the ref will be (or was) updated to.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the new value the ref will be (or was) updated to.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">new value. Null if the caller has not configured it.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="1f452c0ac941416b" href="../R/1f452c0ac941416b.html" target="n" data-glyph="72,1" class="i method">GetNewObjectId</a>()
+		{
+			<b>return</b> <a href="#32ea7e2b155681b6" class="i field">newValue</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Tells this RefUpdate that it is actually detaching a symbolic ref.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Tells this RefUpdate that it is actually detaching a symbolic ref.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="cdc28dcbd9a343d4" href="../R/cdc28dcbd9a343d4.html" target="n" data-glyph="72,1" class="i method">SetDetachingSymbolicRef</a>()
+		{
+			<a href="#869866cb676d5199" class="i field">detachingSymbolicRef</a> = <b>true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the new value the ref will update to.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the new value the ref will update to.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="add20e73bb7a1bcc" href="../R/add20e73bb7a1bcc.html" target="n" data-glyph="72,1" class="i method">SetNewObjectId</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r5 rd" class="r5 r">id</span>)
+		{
+			<a href="#32ea7e2b155681b6" class="i field">newValue</a> = <span class="r5 r">id</span>.<a href="AnyObjectId.cs.html#82a834fd5f79e3ca" class="i method">Copy</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the expected value of the ref after the lock is taken, but before</span>
+		<span class="c">///</span><span class="c"> update occurs. Null to avoid the compare and swap test. Use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ObjectId.ZeroId()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to indicate expectation of a</span>
+		<span class="c">///</span><span class="c"> non-existant ref.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="19d79b57cbb4810e" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetExpectedOldObjectId</a>()
+		{
+			<b>return</b> <a href="#01dfefa84b80f8d2" class="i field">expValue</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the expected value of the ref after the lock is taken, but</span>
+		<span class="c">///</span><span class="c"> before update occurs. Null to avoid the compare and swap test.</span>
+		<span class="c">///</span><span class="c"> Use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ObjectId.ZeroId()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to indicate expectation of a</span>
+		<span class="c">///</span><span class="c"> non-existant ref.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="0755d2ab83b340b2" href="../R/0755d2ab83b340b2.html" target="n" data-glyph="72,1" class="i method">SetExpectedOldObjectId</a>(<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r6 rd" class="r6 r">id</span>)
+		{
+			<a href="#01dfefa84b80f8d2" class="i field">expValue</a> = <span class="r6 r">id</span> != <b>null</b> ? <span class="r6 r">id</span>.<a href="AnyObjectId.cs.html#6490f5ce5f06db15" class="i method">ToObjectId</a>() : <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Check if this update wants to forcefully change the ref.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Check if this update wants to forcefully change the ref.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if this update should ignore merge tests.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="8439a9c506bd38ca" href="../R/8439a9c506bd38ca.html" target="n" data-glyph="72,1" class="i method">IsForceUpdate</a>()
+		{
+			<b>return</b> <a href="#ddcc44ba9cdbba3b" class="i field">force</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set if this update wants to forcefully change the ref.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set if this update wants to forcefully change the ref.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">true if this update should ignore merge tests.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="4758c92b1fdf5234" href="../R/4758c92b1fdf5234.html" target="n" data-glyph="72,1" class="i method">SetForceUpdate</a>(<b>bool</b> <span id="r7 rd" class="r7 r">b</span>)
+		{
+			<a href="#ddcc44ba9cdbba3b" class="i field">force</a> = <span class="r7 r">b</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">identity of the user making the change in the reflog.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="da5d7191e8245a52" href="../R/da5d7191e8245a52.html" target="n" data-glyph="72,1" class="i method">GetRefLogIdent</a>()
+		{
+			<b>return</b> <a href="#724cfd268262bc15" class="i field">refLogIdent</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the identity of the user appearing in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the identity of the user appearing in the reflog.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The timestamp portion of the identity is ignored. A new identity with the</span>
+		<span class="c">///</span><span class="c"> current timestamp will be created automatically when the update occurs</span>
+		<span class="c">///</span><span class="c"> and the log record is written.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">pi</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> identity of the user. If null the identity will be</span>
+		<span class="c">///</span><span class="c"> automatically determined based on the repository</span>
+		<span class="c">///</span><span class="c"> configuration.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="3682e8eea86ced29" href="../R/3682e8eea86ced29.html" target="n" data-glyph="72,1" class="i method">SetRefLogIdent</a>(<a href="PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r8 rd" class="r8 r">pi</span>)
+		{
+			<a href="#724cfd268262bc15" class="i field">refLogIdent</a> = <span class="r8 r">pi</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> message the caller wants to include in the reflog; null if the</span>
+		<span class="c">///</span><span class="c"> update should not be logged.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="661dc04e964fb716" href="../R/661dc04e964fb716.html" target="n" data-glyph="72,1" class="i method">GetRefLogMessage</a>()
+		{
+			<b>return</b> <a href="#ed914032d59cfa38" class="i field">refLogMessage</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the ref log message should show the result.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected internal virtual bool</b> <a id="3f9a379d2748176f" href="../R/3f9a379d2748176f.html" target="n" data-glyph="75,1" class="i method">IsRefLogIncludingResult</a>()
+		{
+			<b>return</b> <a href="#94ac057273dad975" class="i field">refLogIncludeResult</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">msg</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the message to describe this change. It may be null if</span>
+		<span class="c">///</span><span class="c"> appendStatus is null in order not to append to the reflog</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">appendStatus</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the status of the ref change (fast-forward or</span>
+		<span class="c">///</span><span class="c"> forced-update) should be appended to the user supplied</span>
+		<span class="c">///</span><span class="c"> message.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="05bba7b15544fe2d" href="../R/05bba7b15544fe2d.html" target="n" data-glyph="72,1" class="i method">SetRefLogMessage</a>(<b>string</b> <span id="r9 rd" class="r9 r">msg</span>, <b>bool</b> <span id="r10 rd" class="r10 r">appendStatus</span>)
+		{
+			<b>if</b> (<span class="r9 r">msg</span> == <b>null</b> &amp;&amp; !<span class="r10 r">appendStatus</span>)
+			{
+				<a href="#9c674aa42b8f922f" class="i method">DisableRefLog</a>();
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<span class="r9 r">msg</span> == <b>null</b> &amp;&amp; <span class="r10 r">appendStatus</span>)
+				{
+					<a href="#ed914032d59cfa38" class="i field">refLogMessage</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+					<a href="#94ac057273dad975" class="i field">refLogIncludeResult</a> = <b>true</b>;
+				}
+				<b>else</b>
+				{
+					<a href="#ed914032d59cfa38" class="i field">refLogMessage</a> = <span class="r9 r">msg</span>;
+					<a href="#94ac057273dad975" class="i field">refLogIncludeResult</a> = <span class="r10 r">appendStatus</span>;
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Don&#39;t record this update in the ref&#39;s associated reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Don&#39;t record this update in the ref&#39;s associated reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="9c674aa42b8f922f" href="../R/9c674aa42b8f922f.html" target="n" data-glyph="72,1" class="i method">DisableRefLog</a>()
+		{
+			<a href="#ed914032d59cfa38" class="i field">refLogMessage</a> = <b>null</b>;
+			<a href="#94ac057273dad975" class="i field">refLogIncludeResult</a> = <b>false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The old value of the ref, prior to the update being attempted.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The old value of the ref, prior to the update being attempted.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This value may differ before and after the update method. Initially it is</span>
+		<span class="c">///</span><span class="c"> populated with the value of the ref before the lock is taken, but the old</span>
+		<span class="c">///</span><span class="c"> value may change if someone else modified the ref between the time we</span>
+		<span class="c">///</span><span class="c"> last read it and when the ref was locked for update.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the value of the ref prior to the update being attempted; null if</span>
+		<span class="c">///</span><span class="c"> the updated has not been attempted yet.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="f802a377e7ef2636" href="../R/f802a377e7ef2636.html" target="n" data-glyph="72,1" class="i method">GetOldObjectId</a>()
+		{
+			<b>return</b> <a href="#74489eb9cbb15b4b" class="i field">oldValue</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the old value of the ref.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the old value of the ref.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">old</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="6fee7524e2216bf2" href="../R/6fee7524e2216bf2.html" target="n" data-glyph="75,1" class="i method">SetOldObjectId</a>(<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r11 rd" class="r11 r">old</span>)
+		{
+			<a href="#74489eb9cbb15b4b" class="i field">oldValue</a> = <span class="r11 r">old</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the status of this update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the status of this update.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The same value that was previously returned from an update method.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the status of the update.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="ab947064422a316c" href="../R/ab947064422a316c.html" target="n" data-glyph="72,1" class="i method">GetResult</a>()
+		{
+			<b>return</b> <a href="#8b77a91468006453" class="i field">result</a>;
+		}
+
+		<b>private void</b> <a id="1b8f83d71165f0b5" href="../R/1b8f83d71165f0b5.html" target="n" data-glyph="76,1" class="i method">RequireCanDoUpdate</a>()
+		{
+			<b>if</b> (<a href="#32ea7e2b155681b6" class="i field">newValue</a> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#4e070e47e3006746" class="i field">aNewObjectIdIsRequired</a>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Force the ref to take the new value.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Force the ref to take the new value.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This is just a convenient helper for setting the force flag, and as such</span>
+		<span class="c">///</span><span class="c"> the merge test is performed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result status of the update.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">an unexpected IO error occurred while writing changes.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="d4cc527448f83ba4" href="../R/d4cc527448f83ba4.html" target="n" data-glyph="72,1" class="i method">ForceUpdate</a>()
+		{
+			<a href="#ddcc44ba9cdbba3b" class="i field">force</a> = <b>true</b>;
+			<b>return</b> <a href="#ece63c90aff0b606" class="i method">Update</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Gracefully update the ref to the new value.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gracefully update the ref to the new value.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Merge test will be performed according to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8439a9c506bd38ca" class="i method">IsForceUpdate</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">IsForceUpdate()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This is the same as:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> return update(new RevWalk(getRepository()));</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result status of the update.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">an unexpected IO error occurred while writing changes.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="ece63c90aff0b606" href="../R/ece63c90aff0b606.html" target="n" data-glyph="72,1" class="i method">Update</a>()
+		{
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r12 rd" class="r12 r">rw</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="#8a68101d5f7252db" class="i method">GetRepository</a>());
+			<b>try</b>
+			{
+				<b>return</b> <a href="#5c4a3bfa2cd5386a" class="i method">Update</a>(<span class="r12 r">rw</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r12 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Gracefully update the ref to the new value.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gracefully update the ref to the new value.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Merge test will be performed according to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8439a9c506bd38ca" class="i method">IsForceUpdate</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">IsForceUpdate()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">walk</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a RevWalk instance this update command can borrow to perform</span>
+		<span class="c">///</span><span class="c"> the merge test. The walk will be reset to perform the test.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result status of the update.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">an unexpected IO error occurred while writing changes.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="5c4a3bfa2cd5386a" href="../R/5c4a3bfa2cd5386a.html" target="n" data-glyph="72,1" class="i method">Update</a>(<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r13 rd" class="r13 r">walk</span>)
+		{
+			<a href="#1b8f83d71165f0b5" class="i method">RequireCanDoUpdate</a>();
+			<b>try</b>
+			{
+				<b>return</b> <a href="#8b77a91468006453" class="i field">result</a> = <a href="#c34bb8503feaa8ce" class="i method">UpdateImpl</a>(<span class="r13 r">walk</span>, <b>new</b> <a href="#467ca43e70a5da3c" class="t constructor">_Store_484</a>(<a href="#2164cd1d8095d95b" class="k">this</a>));
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r14 rd" class="r14 r">x</span>)
+			{
+				<a href="#8b77a91468006453" class="i field">result</a> = <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#5ef615a104f49f99" class="i field">IO_FAILURE</a>;
+				<b>throw</b>;
+			}
+		}
+
+		<b>private sealed class</b> <a id="1427ac44c1cd91ac" href="../R/1427ac44c1cd91ac.html" target="n" data-glyph="4,1" class="t t">_Store_484</a> : <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#847b8216511f8b64" class="t t">Store</a>
+		{
+			<b>public</b> <a id="467ca43e70a5da3c" href="../R/467ca43e70a5da3c.html" target="n" data-glyph="72,2" class="i constructor">_Store_484</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r15 rd" class="r15 r">_enclosing</span>) : <a href="#15c8a10524387ba9" class="k">base</a>(<span class="r15 r">_enclosing</span>)
+			{
+				<a href="#1427ac44c1cd91ac" class="k">this</a>.<a href="#acaf1c3e799a68db" class="i field">_enclosing</a> = <span class="r15 r">_enclosing</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>internal override</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="1e6d4b43e955426d" href="../R/1e6d4b43e955426d.html" target="n" data-glyph="74,2" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <span id="r16 rd" class="r16 r">status</span>)
+			{
+				<b>if</b> (<span class="r16 r">status</span> == <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#279b180136195c74" class="i field">NO_CHANGE</a>)
+				{
+					<b>return</b> <span class="r16 r">status</span>;
+				}
+				<b>return</b> <a href="#1427ac44c1cd91ac" class="k">this</a>.<a href="#acaf1c3e799a68db" class="i field">_enclosing</a>.<a href="#c9aa589f7b2f6f86" class="i method">DoUpdate</a>(<span class="r16 r">status</span>);
+			}
+
+			<b>private readonly</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a> <a id="acaf1c3e799a68db" href="../R/acaf1c3e799a68db.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Delete the ref.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Delete the ref.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This is the same as:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> return delete(new RevWalk(getRepository()));</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result status of the delete.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="ce4413fdd0b0c941" href="../R/ce4413fdd0b0c941.html" target="n" data-glyph="72,1" class="i method">Delete</a>()
+		{
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r17 rd" class="r17 r">rw</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="#8a68101d5f7252db" class="i method">GetRepository</a>());
+			<b>try</b>
+			{
+				<b>return</b> <a href="#28bc616f7fc658ba" class="i method">Delete</a>(<span class="r17 r">rw</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r17 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Delete the ref.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Delete the ref.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">walk</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a RevWalk instance this delete command can borrow to perform</span>
+		<span class="c">///</span><span class="c"> the merge test. The walk will be reset to perform the test.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result status of the delete.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="28bc616f7fc658ba" href="../R/28bc616f7fc658ba.html" target="n" data-glyph="72,1" class="i method">Delete</a>(<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r18 rd" class="r18 r">walk</span>)
+		{
+			<b>string</b> <span id="r19 rd" class="r19 r">myName</span> = <a href="#89e50033d10f7def" class="i method">GetRef</a>().<a href="Ref.cs.html#e4cf36bd3b40adac" class="i method">GetLeaf</a>().<a href="Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>();
+			<b>if</b> (<span class="r19 r">myName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#51f9cfd1933180d7" class="i field">R_HEADS</a>))
+			{
+				<a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r20 rd" class="r20 r">head</span> = <a href="#1006646bdcf40bf7" class="i method">GetRefDatabase</a>().<a href="RefDatabase.cs.html#a56789de2fa35e9c" class="i method">GetRef</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<b>while</b> (<span class="r20 r">head</span>.<a href="Ref.cs.html#298ee9c00de1f373" class="i method">IsSymbolic</a>())
+				{
+					<span class="r20 r">head</span> = <span class="r20 r">head</span>.<a href="Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>();
+					<b>if</b> (<span class="r19 r">myName</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r20 r">head</span>.<a href="Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>()))
+					{
+						<b>return</b> <a href="#8b77a91468006453" class="i field">result</a> = <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#f492553f225b0245" class="i field">REJECTED_CURRENT_BRANCH</a>;
+					}
+				}
+			}
+			<b>try</b>
+			{
+				<b>return</b> <a href="#8b77a91468006453" class="i field">result</a> = <a href="#c34bb8503feaa8ce" class="i method">UpdateImpl</a>(<span class="r18 r">walk</span>, <b>new</b> <a href="#5f2ecba51d15cd58" class="t constructor">_Store_540</a>(<a href="#2164cd1d8095d95b" class="k">this</a>));
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r21 rd" class="r21 r">x</span>)
+			{
+				<a href="#8b77a91468006453" class="i field">result</a> = <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#5ef615a104f49f99" class="i field">IO_FAILURE</a>;
+				<b>throw</b>;
+			}
+		}
+
+		<b>private sealed class</b> <a id="1b17728442cd9cbc" href="../R/1b17728442cd9cbc.html" target="n" data-glyph="4,1" class="t t">_Store_540</a> : <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#847b8216511f8b64" class="t t">Store</a>
+		{
+			<b>public</b> <a id="5f2ecba51d15cd58" href="../R/5f2ecba51d15cd58.html" target="n" data-glyph="72,2" class="i constructor">_Store_540</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r22 rd" class="r22 r">_enclosing</span>) : <a href="#15c8a10524387ba9" class="k">base</a>(<span class="r22 r">_enclosing</span>)
+			{
+				<a href="#1b17728442cd9cbc" class="k">this</a>.<a href="#84b34eca33598a53" class="i field">_enclosing</a> = <span class="r22 r">_enclosing</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>internal override</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="b3ec610438bafe50" href="../R/b3ec610438bafe50.html" target="n" data-glyph="74,2" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <span id="r23 rd" class="r23 r">status</span>)
+			{
+				<b>return</b> <a href="#1b17728442cd9cbc" class="k">this</a>.<a href="#84b34eca33598a53" class="i field">_enclosing</a>.<a href="#bd74cfdd3ff26ffc" class="i method">DoDelete</a>(<span class="r23 r">status</span>);
+			}
+
+			<b>private readonly</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a> <a id="84b34eca33598a53" href="../R/84b34eca33598a53.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Replace this reference with a symbolic reference to another reference.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Replace this reference with a symbolic reference to another reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This exact reference (not its traversed leaf) is replaced with a symbolic</span>
+		<span class="c">///</span><span class="c"> reference to the requested name.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">target</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> name of the new target for this reference. The new target name</span>
+		<span class="c">///</span><span class="c"> must be absolute, so it must begin with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">refs/</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#bc146b107244d167" class="t t">Result</a>.<a href="#896c2eb530d7a9bb" class="i field">NEW</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Result.NEW</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> or</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#bc146b107244d167" class="t t">Result</a>.<a href="#749b19aaeca1ee8d" class="i field">FORCED</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Result.FORCED</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> on success.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="fc49aa0d08627943" href="../R/fc49aa0d08627943.html" target="n" data-glyph="72,1" class="i method">Link</a>(<b>string</b> <span id="r24 rd" class="r24 r">target</span>)
+		{
+			<b>if</b> (!<span class="r24 r">target</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#ec4c59db33b2098e" class="i field">R_REFS</a>))
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#15fb2291a541fb29" class="i field">illegalArgumentNotA</a>
+					, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#ec4c59db33b2098e" class="i field">R_REFS</a>));
+			}
+			<b>if</b> (<a href="#1006646bdcf40bf7" class="i method">GetRefDatabase</a>().<a href="RefDatabase.cs.html#79fa80857f94a118" class="i method">IsNameConflicting</a>(<a href="#3ed61e1a177066e0" class="i method">GetName</a>()))
+			{
+				<b>return</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#b7f458761c28cf3d" class="i field">LOCK_FAILURE</a>;
+			}
+			<b>try</b>
+			{
+				<b>if</b> (!<a href="#c4415ef156b13851" class="i method">TryLock</a>(<b>false</b>))
+				{
+					<b>return</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#b7f458761c28cf3d" class="i field">LOCK_FAILURE</a>;
+				}
+				<a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r25 rd" class="r25 r">old</span> = <a href="#1006646bdcf40bf7" class="i method">GetRefDatabase</a>().<a href="RefDatabase.cs.html#a56789de2fa35e9c" class="i method">GetRef</a>(<a href="#3ed61e1a177066e0" class="i method">GetName</a>());
+				<b>if</b> (<span class="r25 r">old</span> != <b>null</b> &amp;&amp; <span class="r25 r">old</span>.<a href="Ref.cs.html#298ee9c00de1f373" class="i method">IsSymbolic</a>())
+				{
+					<a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r26 rd" class="r26 r">dst</span> = <span class="r25 r">old</span>.<a href="Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>();
+					<b>if</b> (<span class="r24 r">target</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r26 r">dst</span>.<a href="Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>()))
+					{
+						<b>return</b> <a href="#8b77a91468006453" class="i field">result</a> = <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#279b180136195c74" class="i field">NO_CHANGE</a>;
+					}
+				}
+				<b>if</b> (<span class="r25 r">old</span> != <b>null</b> &amp;&amp; <span class="r25 r">old</span>.<a href="Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>() != <b>null</b>)
+				{
+					<a href="#6fee7524e2216bf2" class="i method">SetOldObjectId</a>(<span class="r25 r">old</span>.<a href="Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>());
+				}
+				<a href="Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r27 rd" class="r27 r">dst_1</span> = <a href="#1006646bdcf40bf7" class="i method">GetRefDatabase</a>().<a href="RefDatabase.cs.html#a56789de2fa35e9c" class="i method">GetRef</a>(<span class="r24 r">target</span>);
+				<b>if</b> (<span class="r27 r">dst_1</span> != <b>null</b> &amp;&amp; <span class="r27 r">dst_1</span>.<a href="Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>() != <b>null</b>)
+				{
+					<a href="#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r27 r">dst_1</span>.<a href="Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>());
+				}
+				<b>return</b> <a href="#8b77a91468006453" class="i field">result</a> = <a href="#0cc054b3e2155806" class="i method">DoLink</a>(<span class="r24 r">target</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r28 rd" class="r28 r">x</span>)
+			{
+				<a href="#8b77a91468006453" class="i field">result</a> = <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#5ef615a104f49f99" class="i field">IO_FAILURE</a>;
+				<b>throw</b>;
+			}
+			<b>finally</b>
+			{
+				<a href="#ed499c26d70c3cb1" class="i method">Unlock</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="c34bb8503feaa8ce" href="../R/c34bb8503feaa8ce.html" target="n" data-glyph="76,1" class="i method">UpdateImpl</a>(<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r29 rd" class="r29 r">walk</span>, <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#847b8216511f8b64" class="t t">Store</a> <span id="r30 rd" class="r30 r">store</span>)
+		{
+			<a href="../NGit.Revwalk/RevObject.cs.html#94cf9632ceeaac28" class="t t">RevObject</a> <span id="r31 rd" class="r31 r">newObj</span>;
+			<a href="../NGit.Revwalk/RevObject.cs.html#94cf9632ceeaac28" class="t t">RevObject</a> <span id="r32 rd" class="r32 r">oldObj</span>;
+			<b>if</b> (<a href="#1006646bdcf40bf7" class="i method">GetRefDatabase</a>().<a href="RefDatabase.cs.html#79fa80857f94a118" class="i method">IsNameConflicting</a>(<a href="#3ed61e1a177066e0" class="i method">GetName</a>()))
+			{
+				<b>return</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#b7f458761c28cf3d" class="i field">LOCK_FAILURE</a>;
+			}
+			<b>try</b>
+			{
+				<b>if</b> (!<a href="#c4415ef156b13851" class="i method">TryLock</a>(<b>true</b>))
+				{
+					<b>return</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#b7f458761c28cf3d" class="i field">LOCK_FAILURE</a>;
+				}
+				<b>if</b> (<a href="#01dfefa84b80f8d2" class="i field">expValue</a> != <b>null</b>)
+				{
+					<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r33 rd" class="r33 r">o</span>;
+					<span class="r33 r">o</span> = <a href="#74489eb9cbb15b4b" class="i field">oldValue</a> != <b>null</b> ? <a href="#74489eb9cbb15b4b" class="i field">oldValue</a> : <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>;
+					<b>if</b> (!<a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>.<a href="AnyObjectId.cs.html#ead3b31b42c5aa99" class="i method">Equals</a>(<a href="#01dfefa84b80f8d2" class="i field">expValue</a>, <span class="r33 r">o</span>))
+					{
+						<b>return</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#b7f458761c28cf3d" class="i field">LOCK_FAILURE</a>;
+					}
+				}
+				<b>if</b> (<a href="#74489eb9cbb15b4b" class="i field">oldValue</a> == <b>null</b>)
+				{
+					<b>return</b> <span class="r30 r">store</span>.<a href="#08ab0e005b69d6e4" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#896c2eb530d7a9bb" class="i field">NEW</a>);
+				}
+				<span class="r31 r">newObj</span> = <a href="#d83a2b0c76abc6db" class="i method">SafeParse</a>(<span class="r29 r">walk</span>, <a href="#32ea7e2b155681b6" class="i field">newValue</a>);
+				<span class="r32 r">oldObj</span> = <a href="#d83a2b0c76abc6db" class="i method">SafeParse</a>(<span class="r29 r">walk</span>, <a href="#74489eb9cbb15b4b" class="i field">oldValue</a>);
+				<b>if</b> (<span class="r31 r">newObj</span> == <span class="r32 r">oldObj</span> &amp;&amp; !<a href="#869866cb676d5199" class="i field">detachingSymbolicRef</a>)
+				{
+					<b>return</b> <span class="r30 r">store</span>.<a href="#08ab0e005b69d6e4" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#279b180136195c74" class="i field">NO_CHANGE</a>);
+				}
+				<b>if</b> (<span class="r31 r">newObj</span> <b>is</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> &amp;&amp; <span class="r32 r">oldObj</span> <b>is</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>)
+				{
+					<b>if</b> (<span class="r29 r">walk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#a6cf3bbd5155d51a" class="i method">IsMergedInto</a>((<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>)<span class="r32 r">oldObj</span>, (<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>)<span class="r31 r">newObj</span>))
+					{
+						<b>return</b> <span class="r30 r">store</span>.<a href="#08ab0e005b69d6e4" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>);
+					}
+				}
+				<b>if</b> (<a href="#8439a9c506bd38ca" class="i method">IsForceUpdate</a>())
+				{
+					<b>return</b> <span class="r30 r">store</span>.<a href="#08ab0e005b69d6e4" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#749b19aaeca1ee8d" class="i field">FORCED</a>);
+				}
+				<b>return</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a>.<a href="#565fa79e7f9bdb40" class="i field">REJECTED</a>;
+			}
+			<b>finally</b>
+			{
+				<a href="#ed499c26d70c3cb1" class="i method">Unlock</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private static</b> <a href="../NGit.Revwalk/RevObject.cs.html#94cf9632ceeaac28" class="t t">RevObject</a> <a id="d83a2b0c76abc6db" href="../R/d83a2b0c76abc6db.html" target="n" data-glyph="76,1" class="i method">SafeParse</a>(<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r34 rd" class="r34 r">rw</span>, <a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r35 rd" class="r35 r">id</span>)
+		{
+			<b>try</b>
+			{
+				<b>return</b> <span class="r35 r">id</span> != <b>null</b> ? <span class="r34 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#a166ea601908d640" class="i method">ParseAny</a>(<span class="r35 r">id</span>) : <b>null</b>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a>)
+			{
+				<span class="c">// We can expect some objects to be missing, like if we are</span>
+				<span class="c">// trying to force a deletion of a branch and the object it</span>
+				<span class="c">// points to has been pruned from the database due to freak</span>
+				<span class="c">// corruption accidents (it happens with &#39;git new-work-dir&#39;).</span>
+				<span class="c">//</span>
+				<b>return null</b>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Handle the abstraction of storing a ref update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Handle the abstraction of storing a ref update. This is because both</span>
+		<span class="c">///</span><span class="c"> updating and deleting of a ref have merge testing in common.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private abstract class</b> <a id="847b8216511f8b64" href="../R/847b8216511f8b64.html" target="n" data-glyph="4,1" class="t t">Store</a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>internal abstract</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <a id="08ab0e005b69d6e4" href="../R/08ab0e005b69d6e4.html" target="n" data-glyph="74,2" class="i method">Execute</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="#bc146b107244d167" class="t t">Result</a> <span id="r36 rd" class="r36 r">status</span>);
+
+			<b>internal</b> <a id="15c8a10524387ba9" href="../R/15c8a10524387ba9.html" target="n" data-glyph="74,2" class="i constructor">Store</a>(<a href="#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r37 rd" class="r37 r">_enclosing</span>)
+			{
+				<a href="#847b8216511f8b64" class="k">this</a>.<a href="#6b5ca64250262059" class="i field">_enclosing</a> = <span class="r37 r">_enclosing</span>;
+			}
+
+			<b>private readonly</b> <a href="#2164cd1d8095d95b" class="t t">RefUpdate</a> <a id="6b5ca64250262059" href="../R/6b5ca64250262059.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

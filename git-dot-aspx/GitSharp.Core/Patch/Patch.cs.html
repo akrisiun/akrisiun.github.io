@@ -1,0 +1,430 @@
+﻿<!DOCTYPE html>
+<html><head><title>Patch.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(421);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Patch/Patch.cs" target="_top">Patch\Patch.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Google Inc.
+ * Copyright (C) 2009, Gil Ran &lt;gilrun@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Patch</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A parsed collection of </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">s from a unified diff patch file.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	[<a href="@0@mscorlib/A.html#e971d5381ca60183" class="t constructor">Serializable</a>]
+	<b>public class</b> <a id="f89a789ac3454a0c" href="../R/f89a789ac3454a0c.html" target="n" data-glyph="0,0" class="t t">Patch</a>
+	{
+		<b>private static readonly byte</b>[] <a id="5c6892d5b3c1bb21" href="../R/5c6892d5b3c1bb21.html" target="n" data-glyph="46,1" class="i field">DiffGit</a> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;diff --git &quot;</span>);
+		<b>private static readonly byte</b>[] <a id="f6a972b77b4719f7" href="../R/f6a972b77b4719f7.html" target="n" data-glyph="46,1" class="i field">DiffCc</a> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;diff --cc &quot;</span>);
+		<b>private static readonly byte</b>[] <a id="52b48d41fa13a384" href="../R/52b48d41fa13a384.html" target="n" data-glyph="46,1" class="i field">DiffCombined</a> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;diff --combined &quot;</span>);
+		<b>private static readonly byte</b>[][] <a id="d0b0ac3d4bdbbde9" href="../R/d0b0ac3d4bdbbde9.html" target="n" data-glyph="46,1" class="i field">BinHeaders</a> = <b>new</b>[] { <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;Binary files &quot;</span>), <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;Files &quot;</span>) };
+		<b>private static readonly byte</b>[] <a id="bd9a0a5581b6bd37" href="../R/bd9a0a5581b6bd37.html" target="n" data-glyph="46,1" class="i field">BinTrailer</a> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot; differ\n&quot;</span>);
+		<b>private static readonly byte</b>[] <a id="8f2e4aedc0909100" href="../R/8f2e4aedc0909100.html" target="n" data-glyph="46,1" class="i field">GitBinary</a> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;GIT binary patch\n&quot;</span>);
+
+		<b>public static readonly byte</b>[] <a id="39d17d878fcdd4ec" href="../R/39d17d878fcdd4ec.html" target="n" data-glyph="42,1" class="i field">SigFooter</a> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;-- \n&quot;</span>);
+
+		<span class="c">// The files, in the order they were parsed out of the input.</span>
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>&gt; <a id="c422c6271f241ca7" href="../R/c422c6271f241ca7.html" target="n" data-glyph="46,1" class="i field">_files</a>;
+
+		<span class="c">// Formatting errors, if any were identified.</span>
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="FormatError.cs.html#210350f11f19f733" class="t t">FormatError</a>&gt; <a id="daef559a61b5fb6d" href="../R/daef559a61b5fb6d.html" target="n" data-glyph="46,1" class="i field">_errors</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create an empty patch.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a id="6b03c51eade47809" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">Patch</a>()
+		{
+			<a href="#c422c6271f241ca7" class="i field">_files</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>&gt;();
+			<a href="#daef559a61b5fb6d" class="i field">_errors</a> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="FormatError.cs.html#210350f11f19f733" class="t t">FormatError</a>&gt;(0);
+		}
+
+		<span class="c">/**</span>
+		 <span class="c">*</span><span class="c"> Add a single file to this patch.</span>
+		 <span class="c">*</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		 <span class="c">*</span><span class="c"> Typically files should be added by parsing the text through one of this</span>
+		 <span class="c">*</span><span class="c"> class&#39;s parse methods.</span>
+		 <span class="c">*</span>
+		 <span class="c">*</span><span class="c"> @param fh</span>
+		 <span class="c">*</span><span class="c">            the header of the file.</span>
+		 <span class="c">*/</span>
+		<b>public void</b> <a id="0a92ad5ec4e0384f" href="../R/0a92ad5ec4e0384f.html" target="n" data-glyph="72,1" class="i method">addFile</a>(<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a> <span id="r0 rd" class="r0 r">fh</span>)
+		{
+			<a href="#c422c6271f241ca7" class="i field">_files</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r0 r">fh</span>);
+		}
+
+		<span class="c">/**</span><span class="c"> @return list of files described in the patch, in occurrence order. </span><span class="c">*/</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>&gt; <a id="0a8a57ac2fa3d1d0" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getFiles</a>()
+		{
+			<b>return</b> <a href="#c422c6271f241ca7" class="i field">_files</a>;
+		}
+
+		<span class="c">/**</span>
+		 <span class="c">*</span><span class="c"> Add a formatting error to this patch script.</span>
+		 <span class="c">*</span>
+		 <span class="c">*</span><span class="c"> @param err</span>
+		 <span class="c">*</span><span class="c">            the error description.</span>
+		 <span class="c">*/</span>
+		<b>public void</b> <a id="65085f25f765e98e" href="../R/65085f25f765e98e.html" target="n" data-glyph="72,1" class="i method">addError</a>(<a href="FormatError.cs.html#210350f11f19f733" class="t t">FormatError</a> <span id="r1 rd" class="r1 r">err</span>)
+		{
+			<a href="#daef559a61b5fb6d" class="i field">_errors</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r1 r">err</span>);
+		}
+
+		<span class="c">/**</span><span class="c"> @return collection of formatting errors, if any. </span><span class="c">*/</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="FormatError.cs.html#210350f11f19f733" class="t t">FormatError</a>&gt; <a id="878de88e4a1e6b5c" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getErrors</a>()
+		{
+			<b>return</b> <a href="#daef559a61b5fb6d" class="i field">_errors</a>;
+		}
+
+		<span class="c">/**</span>
+		 <span class="c">*</span><span class="c"> Parse a patch received from an InputStream.</span>
+		 <span class="c">*</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		 <span class="c">*</span><span class="c"> Multiple parse calls on the same instance will concatenate the patch</span>
+		 <span class="c">*</span><span class="c"> data, but each parse input must start with a valid file header (don&#39;t</span>
+		 <span class="c">*</span><span class="c"> split a single file across parse calls).</span>
+		 <span class="c">*</span>
+		 <span class="c">*</span><span class="c"> @param is</span>
+		 <span class="c">*</span><span class="c">            the stream to Read the patch data from. The stream is Read</span>
+		 <span class="c">*</span><span class="c">            until EOF is reached.</span>
+		 <span class="c">*</span><span class="c"> @throws IOException</span>
+		 <span class="c">*</span><span class="c">             there was an error reading from the input stream.</span>
+		 <span class="c">*/</span>
+		<b>public void</b> <a id="5b8546dfb762878f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">parse</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r2 rd" class="r2 r">iStream</span>)
+		{
+			<b>byte</b>[] <span id="r3 rd" class="r3 r">buf</span> = <a href="#aec11a1aab69c969" class="i method">ReadFully</a>(<span class="r2 r">iStream</span>);
+			<a href="#7034c9ee1c4e97d2" class="i method">parse</a>(<span class="r3 r">buf</span>, 0, <span class="r3 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<b>private static byte</b>[] <a id="aec11a1aab69c969" href="../R/aec11a1aab69c969.html" target="n" data-glyph="76,1" class="i method">ReadFully</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r4 rd" class="r4 r">stream</span>)
+		{
+			<a href="../Util/TemporaryBuffer.cs.html#5727e5431555d215" class="k">var</a> <span id="r5 rd" class="r5 r">b</span> = <b>new</b> <a href="../Util/TemporaryBuffer.cs.html#aefbe444c2eb9e5e" class="t constructor">LocalFileBuffer</a>();
+			<b>try</b>
+			{
+				<span class="r5 r">b</span>.<a href="../Util/TemporaryBuffer.cs.html#b0919b1eafb19ecb" class="i method">copy</a>(<span class="r4 r">stream</span>);
+				<span class="r5 r">b</span>.<a href="../Util/TemporaryBuffer.cs.html#8f4eaab55462b154" class="i method">close</a>();
+				<b>return</b> <span class="r5 r">b</span>.<a href="../Util/TemporaryBuffer.cs.html#59291c59fb39d93e" class="i method">ToArray</a>();
+			}
+			<b>finally</b>
+			{
+				<span class="r5 r">b</span>.<a href="../Util/TemporaryBuffer.cs.html#f93d05483b30c62a" class="i method">destroy</a>();
+			}
+		}
+
+		<span class="c">/**</span>
+		 <span class="c">*</span><span class="c"> Parse a patch stored in a byte[].</span>
+		 <span class="c">*</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		 <span class="c">*</span><span class="c"> Multiple parse calls on the same instance will concatenate the patch</span>
+		 <span class="c">*</span><span class="c"> data, but each parse input must start with a valid file header (don&#39;t</span>
+		 <span class="c">*</span><span class="c"> split a single file across parse calls).</span>
+		 <span class="c">*</span>
+		 <span class="c">*</span><span class="c"> @param buf</span>
+		 <span class="c">*</span><span class="c">            the buffer to parse.</span>
+		 <span class="c">*</span><span class="c"> @param ptr</span>
+		 <span class="c">*</span><span class="c">            starting position to parse from.</span>
+		 <span class="c">*</span><span class="c"> @param end</span>
+		 <span class="c">*</span><span class="c">            1 past the last position to end parsing. The total length to</span>
+		 <span class="c">*</span><span class="c">            be parsed is </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">end - ptr</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span>
+		 <span class="c">*/</span>
+		<b>public void</b> <a id="7034c9ee1c4e97d2" href="../R/7034c9ee1c4e97d2.html" target="n" data-glyph="72,1" class="i method">parse</a>(<b>byte</b>[] <span id="r6 rd" class="r6 r">buf</span>, <b>int</b> <span id="r7 rd" class="r7 r">ptr</span>, <b>int</b> <span id="r8 rd" class="r8 r">end</span>)
+		{
+			<b>while</b> (<span class="r7 r">ptr</span> &lt; <span class="r8 r">end</span>)
+			{
+				<span class="r7 r">ptr</span> = <a href="#8d5338309669f131" class="i method">ParseFile</a>(<span class="r6 r">buf</span>, <span class="r7 r">ptr</span>, <span class="r8 r">end</span>);
+			}
+		}
+
+		<b>public void</b> <a id="ccdabce8830f675a" href="../R/ccdabce8830f675a.html" target="n" data-glyph="72,1" class="i method">warn</a>(<b>byte</b>[] <span id="r9 rd" class="r9 r">buf</span>, <b>int</b> <span id="r10 rd" class="r10 r">ptr</span>, <b>string</b> <span id="r11 rd" class="r11 r">msg</span>)
+		{
+			<a href="#65085f25f765e98e" class="i method">addError</a>(<b>new</b> <a href="FormatError.cs.html#5f4def2aca8f41b8" class="t constructor">FormatError</a>(<span class="r9 r">buf</span>, <span class="r10 r">ptr</span>, <a href="FormatError.cs.html#210350f11f19f733" class="t t">FormatError</a>.<a href="FormatError.cs.html#5c9c7edfe9e8249e" class="t t">Severity</a>.<a href="FormatError.cs.html#be070d3ea43915dd" class="i field">WARNING</a>, <span class="r11 r">msg</span>));
+		}
+
+		<b>public void</b> <a id="3350102bbebb910e" href="../R/3350102bbebb910e.html" target="n" data-glyph="72,1" class="i method">error</a>(<b>byte</b>[] <span id="r12 rd" class="r12 r">buf</span>, <b>int</b> <span id="r13 rd" class="r13 r">ptr</span>, <b>string</b> <span id="r14 rd" class="r14 r">msg</span>)
+		{
+			<a href="#65085f25f765e98e" class="i method">addError</a>(<b>new</b> <a href="FormatError.cs.html#5f4def2aca8f41b8" class="t constructor">FormatError</a>(<span class="r12 r">buf</span>, <span class="r13 r">ptr</span>, <a href="FormatError.cs.html#210350f11f19f733" class="t t">FormatError</a>.<a href="FormatError.cs.html#5c9c7edfe9e8249e" class="t t">Severity</a>.<a href="FormatError.cs.html#779770c5ba269e68" class="i field">ERROR</a>, <span class="r14 r">msg</span>));
+		}
+
+		<b>private int</b> <a id="8d5338309669f131" href="../R/8d5338309669f131.html" target="n" data-glyph="76,1" class="i method">ParseFile</a>(<b>byte</b>[] <span id="r15 rd" class="r15 r">buf</span>, <b>int</b> <span id="r16 rd" class="r16 r">c</span>, <b>int</b> <span id="r17 rd" class="r17 r">end</span>)
+		{
+			<b>while</b> (<span class="r16 r">c</span> &lt; <span class="r17 r">end</span>)
+			{
+				<b>if</b> (<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#e870c1373bd74319" class="i method">isHunkHdr</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <span class="r17 r">end</span>) &gt;= 1)
+				{
+					<span class="c">// If we find a disconnected hunk header we might</span>
+					<span class="c">// have missed a file header previously. The hunk</span>
+					<span class="c">// isn&#39;t valid without knowing where it comes from.</span>
+					<span class="c">//</span>
+					<a href="#3350102bbebb910e" class="i method">error</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <span class="s">&quot;Hunk disconnected from file&quot;</span>);
+					<span class="r16 r">c</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#0989702123852d37" class="i method">nextLF</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>);
+					<b>continue</b>;
+				}
+
+				<span class="c">// Valid git style patch?</span>
+				<span class="c">//</span>
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <a href="#5c6892d5b3c1bb21" class="i field">DiffGit</a>) &gt;= 0)
+				{
+					<b>return</b> <a href="#b6f9e41236d856e6" class="i method">ParseDiffGit</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <span class="r17 r">end</span>);
+				}
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <a href="#f6a972b77b4719f7" class="i field">DiffCc</a>) &gt;= 0)
+				{
+					<b>return</b> <a href="#49f33a6e19046583" class="i method">ParseDiffCombined</a>(<a href="#f6a972b77b4719f7" class="i field">DiffCc</a>, <span class="r15 r">buf</span>, <span class="r16 r">c</span>, <span class="r17 r">end</span>);
+				}
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <a href="#52b48d41fa13a384" class="i field">DiffCombined</a>) &gt;= 0)
+				{
+					<b>return</b> <a href="#49f33a6e19046583" class="i method">ParseDiffCombined</a>(<a href="#52b48d41fa13a384" class="i field">DiffCombined</a>, <span class="r15 r">buf</span>, <span class="r16 r">c</span>, <span class="r17 r">end</span>);
+				}
+
+				<span class="c">// Junk between files? Leading junk? Traditional</span>
+				<span class="c">// (non-git generated) patch?</span>
+				<span class="c">//</span>
+				<b>int</b> <span id="r18 rd" class="r18 r">n</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#0989702123852d37" class="i method">nextLF</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>);
+				<b>if</b> (<span class="r18 r">n</span> &gt;= <span class="r17 r">end</span>)
+				{
+					<span class="c">// Patches cannot be only one line long. This must be</span>
+					<span class="c">// trailing junk that we should ignore.</span>
+					<span class="c">//</span>
+					<b>return</b> <span class="r17 r">end</span>;
+				}
+
+				<b>if</b> (<span class="r18 r">n</span> - <span class="r16 r">c</span> &lt; 6)
+				{
+					<span class="c">// A valid header must be at least 6 bytes on the</span>
+					<span class="c">// first line, e.g. &quot;--- a/b\n&quot;.</span>
+					<span class="c">//</span>
+					<span class="r16 r">c</span> = <span class="r18 r">n</span>;
+					<b>continue</b>;
+				}
+
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#c28ae1eeaf01e369" class="i field">OLD_NAME</a>) &gt;= 0 &amp;&amp;
+					<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r15 r">buf</span>, <span class="r18 r">n</span>, <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#c908d4c2ae66b7ca" class="i field">NEW_NAME</a>) &gt;= 0)
+				{
+					<span class="c">// Probably a traditional patch. Ensure we have at least</span>
+					<span class="c">// a &quot;@@ -0,0&quot; smelling line next. We only check the &quot;@@ -&quot;.</span>
+					<span class="c">//</span>
+					<b>int</b> <span id="r19 rd" class="r19 r">f</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#0989702123852d37" class="i method">nextLF</a>(<span class="r15 r">buf</span>, <span class="r18 r">n</span>);
+					<b>if</b> (<span class="r19 r">f</span> &gt;= <span class="r17 r">end</span>)
+						<b>return</b> <span class="r17 r">end</span>;
+					<b>if</b> (<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#e870c1373bd74319" class="i method">isHunkHdr</a>(<span class="r15 r">buf</span>, <span class="r19 r">f</span>, <span class="r17 r">end</span>) == 1)
+						<b>return</b> <a href="#255f95ffe7d6aaed" class="i method">ParseTraditionalPatch</a>(<span class="r15 r">buf</span>, <span class="r16 r">c</span>, <span class="r17 r">end</span>);
+				}
+
+				<span class="r16 r">c</span> = <span class="r18 r">n</span>;
+			}
+			<b>return</b> <span class="r16 r">c</span>;
+		}
+
+		<b>private int</b> <a id="b6f9e41236d856e6" href="../R/b6f9e41236d856e6.html" target="n" data-glyph="76,1" class="i method">ParseDiffGit</a>(<b>byte</b>[] <span id="r20 rd" class="r20 r">buf</span>, <b>int</b> <span id="r21 rd" class="r21 r">start</span>, <b>int</b> <span id="r22 rd" class="r22 r">end</span>)
+		{
+			<a href="FileHeader.cs.html#94dd558d804785e0" class="k">var</a> <span id="r23 rd" class="r23 r">fileHeader</span> = <b>new</b> <a href="FileHeader.cs.html#b43f3ae677e99220" class="t constructor">FileHeader</a>(<span class="r20 r">buf</span>, <span class="r21 r">start</span>);
+			<b>int</b> <span id="r24 rd" class="r24 r">ptr</span> = <span class="r23 r">fileHeader</span>.<a href="FileHeader.cs.html#98d047d23f6d5302" class="i method">parseGitFileName</a>(<span class="r21 r">start</span> + <a href="#5c6892d5b3c1bb21" class="i field">DiffGit</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r22 r">end</span>);
+			<b>if</b> (<span class="r24 r">ptr</span> &lt; 0)
+			{
+				<b>return</b> <a href="#041cc90858fb8bba" class="i method">SkipFile</a>(<span class="r20 r">buf</span>, <span class="r21 r">start</span>);
+			}
+
+			<span class="r24 r">ptr</span> = <span class="r23 r">fileHeader</span>.<a href="FileHeader.cs.html#1261529ddfebf6eb" class="i method">parseGitHeaders</a>(<span class="r24 r">ptr</span>, <span class="r22 r">end</span>);
+			<span class="r24 r">ptr</span> = <a href="#887d6d83f829fa72" class="i method">ParseHunks</a>(<span class="r23 r">fileHeader</span>, <span class="r24 r">ptr</span>, <span class="r22 r">end</span>);
+			<span class="r23 r">fileHeader</span>.<a href="FileHeader.cs.html#6bc694e41e813370" class="i property">EndOffset</a> = <span class="r24 r">ptr</span>;
+			<a href="#0a92ad5ec4e0384f" class="i method">addFile</a>(<span class="r23 r">fileHeader</span>);
+			<b>return</b> <span class="r24 r">ptr</span>;
+		}
+
+		<b>private int</b> <a id="49f33a6e19046583" href="../R/49f33a6e19046583.html" target="n" data-glyph="76,1" class="i method">ParseDiffCombined</a>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>byte</b>&gt; <span id="r25 rd" class="r25 r">hdr</span>, <b>byte</b>[] <span id="r26 rd" class="r26 r">buf</span>, <b>int</b> <span id="r27 rd" class="r27 r">start</span>, <b>int</b> <span id="r28 rd" class="r28 r">end</span>)
+		{
+			<a href="CombinedFileHeader.cs.html#dc83f59c1fb08d95" class="k">var</a> <span id="r29 rd" class="r29 r">fh</span> = <b>new</b> <a href="CombinedFileHeader.cs.html#66df34c058f58312" class="t constructor">CombinedFileHeader</a>(<span class="r26 r">buf</span>, <span class="r27 r">start</span>);
+			<b>int</b> <span id="r30 rd" class="r30 r">ptr</span> = <span class="r29 r">fh</span>.<a href="FileHeader.cs.html#98d047d23f6d5302" class="i method">parseGitFileName</a>(<span class="r27 r">start</span> + <span class="r25 r">hdr</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>, <span class="r28 r">end</span>);
+			<b>if</b> (<span class="r30 r">ptr</span> &lt; 0)
+			{
+				<b>return</b> <a href="#041cc90858fb8bba" class="i method">SkipFile</a>(<span class="r26 r">buf</span>, <span class="r27 r">start</span>);
+			}
+
+			<span class="r30 r">ptr</span> = <span class="r29 r">fh</span>.<a href="CombinedFileHeader.cs.html#972318250e7a8225" class="i method">parseGitHeaders</a>(<span class="r30 r">ptr</span>, <span class="r28 r">end</span>);
+			<span class="r30 r">ptr</span> = <a href="#887d6d83f829fa72" class="i method">ParseHunks</a>(<span class="r29 r">fh</span>, <span class="r30 r">ptr</span>, <span class="r28 r">end</span>);
+			<span class="r29 r">fh</span>.<a href="FileHeader.cs.html#6bc694e41e813370" class="i property">EndOffset</a> = <span class="r30 r">ptr</span>;
+			<a href="#0a92ad5ec4e0384f" class="i method">addFile</a>(<span class="r29 r">fh</span>);
+			<b>return</b> <span class="r30 r">ptr</span>;
+		}
+
+		<b>private int</b> <a id="255f95ffe7d6aaed" href="../R/255f95ffe7d6aaed.html" target="n" data-glyph="76,1" class="i method">ParseTraditionalPatch</a>(<b>byte</b>[] <span id="r31 rd" class="r31 r">buf</span>, <b>int</b> <span id="r32 rd" class="r32 r">start</span>, <b>int</b> <span id="r33 rd" class="r33 r">end</span>)
+		{
+			<a href="FileHeader.cs.html#94dd558d804785e0" class="k">var</a> <span id="r34 rd" class="r34 r">fh</span> = <b>new</b> <a href="FileHeader.cs.html#b43f3ae677e99220" class="t constructor">FileHeader</a>(<span class="r31 r">buf</span>, <span class="r32 r">start</span>);
+			<b>int</b> <span id="r35 rd" class="r35 r">ptr</span> = <span class="r34 r">fh</span>.<a href="FileHeader.cs.html#b32b40338ee8d18c" class="i method">parseTraditionalHeaders</a>(<span class="r32 r">start</span>, <span class="r33 r">end</span>);
+			<span class="r35 r">ptr</span> = <a href="#887d6d83f829fa72" class="i method">ParseHunks</a>(<span class="r34 r">fh</span>, <span class="r35 r">ptr</span>, <span class="r33 r">end</span>);
+			<span class="r34 r">fh</span>.<a href="FileHeader.cs.html#6bc694e41e813370" class="i property">EndOffset</a> = <span class="r35 r">ptr</span>;
+			<a href="#0a92ad5ec4e0384f" class="i method">addFile</a>(<span class="r34 r">fh</span>);
+			<b>return</b> <span class="r35 r">ptr</span>;
+		}
+
+		<b>private static int</b> <a id="041cc90858fb8bba" href="../R/041cc90858fb8bba.html" target="n" data-glyph="76,1" class="i method">SkipFile</a>(<b>byte</b>[] <span id="r36 rd" class="r36 r">buf</span>, <b>int</b> <span id="r37 rd" class="r37 r">ptr</span>)
+		{
+			<span class="r37 r">ptr</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#0989702123852d37" class="i method">nextLF</a>(<span class="r36 r">buf</span>, <span class="r37 r">ptr</span>);
+			<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r36 r">buf</span>, <span class="r37 r">ptr</span>, <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#c28ae1eeaf01e369" class="i field">OLD_NAME</a>) &gt;= 0)
+			{
+				<span class="r37 r">ptr</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#0989702123852d37" class="i method">nextLF</a>(<span class="r36 r">buf</span>, <span class="r37 r">ptr</span>);
+			}
+			<b>return</b> <span class="r37 r">ptr</span>;
+		}
+
+		<b>private int</b> <a id="887d6d83f829fa72" href="../R/887d6d83f829fa72.html" target="n" data-glyph="76,1" class="i method">ParseHunks</a>(<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a> <span id="r38 rd" class="r38 r">fh</span>, <b>int</b> <span id="r39 rd" class="r39 r">c</span>, <b>int</b> <span id="r40 rd" class="r40 r">end</span>)
+		{
+			<b>byte</b>[] <span id="r41 rd" class="r41 r">buf</span> = <span class="r38 r">fh</span>.<a href="FileHeader.cs.html#fc52a48e75a69e9b" class="i property">Buffer</a>;
+			<b>while</b> (<span class="r39 r">c</span> &lt; <span class="r40 r">end</span>)
+			{
+				<span class="c">// If we see a file header at this point, we have all of the</span>
+				<span class="c">// hunks for our current file. We should stop and report back</span>
+				<span class="c">// with this position so it can be parsed again later.</span>
+				<span class="c">//</span>
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="#5c6892d5b3c1bb21" class="i field">DiffGit</a>) &gt;= 0)
+					<b>break</b>;
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="#f6a972b77b4719f7" class="i field">DiffCc</a>) &gt;= 0)
+					<b>break</b>;
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="#52b48d41fa13a384" class="i field">DiffCombined</a>) &gt;= 0)
+					<b>break</b>;
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#c28ae1eeaf01e369" class="i field">OLD_NAME</a>) &gt;= 0)
+					<b>break</b>;
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#c908d4c2ae66b7ca" class="i field">NEW_NAME</a>) &gt;= 0)
+					<b>break</b>;
+
+				<b>if</b> (<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#e870c1373bd74319" class="i method">isHunkHdr</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <span class="r40 r">end</span>) == <span class="r38 r">fh</span>.<a href="FileHeader.cs.html#93752739944b0499" class="i property">ParentCount</a>)
+				{
+					<a href="HunkHeader.cs.html#b93819dcfb6af782" class="t t">HunkHeader</a> <span id="r42 rd" class="r42 r">h</span> = <span class="r38 r">fh</span>.<a href="FileHeader.cs.html#5ee7686823de62c4" class="i method">newHunkHeader</a>(<span class="r39 r">c</span>);
+					<span class="r42 r">h</span>.<a href="HunkHeader.cs.html#550cf16a46105ad8" class="i method">parseHeader</a>();
+					<span class="r39 r">c</span> = <span class="r42 r">h</span>.<a href="HunkHeader.cs.html#cc9fb8b23c09675b" class="i method">parseBody</a>(<a href="#f89a789ac3454a0c" class="k">this</a>, <span class="r40 r">end</span>);
+					<span class="r42 r">h</span>.<a href="HunkHeader.cs.html#7b1424ffa8942b30" class="i property">EndOffset</a> = <span class="r39 r">c</span>;
+					<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#05c98240913ecee6" class="i method">addHunk</a>(<span class="r42 r">h</span>);
+					<b>if</b> (<span class="r39 r">c</span> &lt; <span class="r40 r">end</span>)
+					{
+						<b>switch</b> (<span class="r41 r">buf</span>[<span class="r39 r">c</span>])
+						{
+							<b>case</b> (<b>byte</b>)<span class="s">&#39;@&#39;</span>:
+							<b>case</b> (<b>byte</b>)<span class="s">&#39;d&#39;</span>:
+							<b>case</b> (<b>byte</b>)<span class="s">&#39;\n&#39;</span>:
+								<b>break</b>;
+
+							<b>default</b>:
+								<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="#39d17d878fcdd4ec" class="i field">SigFooter</a>) &lt; 0)
+									<a href="#ccdabce8830f675a" class="i method">warn</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <span class="s">&quot;Unexpected hunk trailer&quot;</span>);
+								<b>break</b>;
+						}
+					}
+					<b>continue</b>;
+				}
+
+				<b>int</b> <span id="r43 rd" class="r43 r">eol</span> = <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#0989702123852d37" class="i method">nextLF</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>);
+				<b>if</b> (<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#2197149c7f023462" class="i property">Hunks</a>.<a href="../Util/IListUtil.cs.html#c5a3f99142afbc37" class="i method">isEmpty</a>() &amp;&amp; <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="#8f2e4aedc0909100" class="i field">GitBinary</a>) &gt;= 0)
+				{
+					<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#a643f74d3d93f5f8" class="i property">PatchType</a> = <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#0ac606b35f6e6063" class="t t">PatchTypeEnum</a>.<a href="FileHeader.cs.html#c100325aefcba500" class="i field">GIT_BINARY</a>;
+					<b>return</b> <a href="#86aae88403e8fb82" class="i method">ParseGitBinary</a>(<span class="r38 r">fh</span>, <span class="r43 r">eol</span>, <span class="r40 r">end</span>);
+				}
+
+				<b>if</b> (<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#2197149c7f023462" class="i property">Hunks</a>.<a href="../Util/IListUtil.cs.html#c5a3f99142afbc37" class="i method">isEmpty</a>() &amp;&amp; <a href="#bd9a0a5581b6bd37" class="i field">BinTrailer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <span class="r43 r">eol</span> - <span class="r39 r">c</span>
+						&amp;&amp; <a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r41 r">buf</span>, <span class="r43 r">eol</span> - <a href="#bd9a0a5581b6bd37" class="i field">BinTrailer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <a href="#bd9a0a5581b6bd37" class="i field">BinTrailer</a>) &gt;= 0
+						&amp;&amp; <a href="#d8ed2fd8422b9b88" class="i method">MatchAny</a>(<span class="r41 r">buf</span>, <span class="r39 r">c</span>, <a href="#d0b0ac3d4bdbbde9" class="i field">BinHeaders</a>))
+				{
+					<span class="c">// The patch is a binary file diff, with no deltas.</span>
+					<span class="c">//</span>
+					<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#a643f74d3d93f5f8" class="i property">PatchType</a> = <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#0ac606b35f6e6063" class="t t">PatchTypeEnum</a>.<a href="FileHeader.cs.html#f0ff432b6f5c0353" class="i field">BINARY</a>;
+					<b>return</b> <span class="r43 r">eol</span>;
+				}
+
+				<span class="c">// Skip this line and move to the next. Its probably garbage</span>
+				<span class="c">// After the last hunk of a file.</span>
+				<span class="c">//</span>
+				<span class="r39 r">c</span> = <span class="r43 r">eol</span>;
+			}
+
+			<b>if</b> (<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#2197149c7f023462" class="i property">Hunks</a>.<a href="../Util/IListUtil.cs.html#c5a3f99142afbc37" class="i method">isEmpty</a>()
+					&amp;&amp; <span class="r38 r">fh</span>.<a href="FileHeader.cs.html#c2c1b94f3847ad54" class="i method">getPatchType</a>() == <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#0ac606b35f6e6063" class="t t">PatchTypeEnum</a>.<a href="FileHeader.cs.html#81170846404eaa33" class="i field">UNIFIED</a>
+					&amp;&amp; !<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#85b378e00f7e92b2" class="i method">hasMetaDataChanges</a>())
+			{
+				<span class="c">// Hmm, an empty patch? If there is no metadata here we</span>
+				<span class="c">// really have a binary patch that we didn&#39;t notice above.</span>
+				<span class="c">//</span>
+				<span class="r38 r">fh</span>.<a href="FileHeader.cs.html#a643f74d3d93f5f8" class="i property">PatchType</a> = <a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="FileHeader.cs.html#0ac606b35f6e6063" class="t t">PatchTypeEnum</a>.<a href="FileHeader.cs.html#f0ff432b6f5c0353" class="i field">BINARY</a>;
+			}
+
+			<b>return</b> <span class="r39 r">c</span>;
+		}
+
+		<b>private int</b> <a id="86aae88403e8fb82" href="../R/86aae88403e8fb82.html" target="n" data-glyph="76,1" class="i method">ParseGitBinary</a>(<a href="FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a> <span id="r44 rd" class="r44 r">fh</span>, <b>int</b> <span id="r45 rd" class="r45 r">c</span>, <b>int</b> <span id="r46 rd" class="r46 r">end</span>)
+		{
+			<a href="BinaryHunk.cs.html#49a8be315be41caa" class="k">var</a> <span id="r47 rd" class="r47 r">postImage</span> = <b>new</b> <a href="BinaryHunk.cs.html#a1ce7e3efca553c2" class="t constructor">BinaryHunk</a>(<span class="r44 r">fh</span>, <span class="r45 r">c</span>);
+			<b>int</b> <span id="r48 rd" class="r48 r">nEnd</span> = <span class="r47 r">postImage</span>.<a href="BinaryHunk.cs.html#c3950cabf9399d0c" class="i method">parseHunk</a>(<span class="r45 r">c</span>, <span class="r46 r">end</span>);
+			<b>if</b> (<span class="r48 r">nEnd</span> &lt; 0)
+			{
+				<span class="c">// Not a binary hunk.</span>
+				<span class="c">//</span>
+				<a href="#3350102bbebb910e" class="i method">error</a>(<span class="r44 r">fh</span>.<a href="FileHeader.cs.html#fc52a48e75a69e9b" class="i property">Buffer</a>, <span class="r45 r">c</span>, <span class="s">&quot;Missing forward-image in GIT binary patch&quot;</span>);
+				<b>return</b> <span class="r45 r">c</span>;
+			}
+			<span class="r45 r">c</span> = <span class="r48 r">nEnd</span>;
+			<span class="r47 r">postImage</span>.<a href="BinaryHunk.cs.html#f52df6a1cfa54113" class="i field">endOffset</a> = <span class="r45 r">c</span>;
+			<span class="r44 r">fh</span>.<a href="FileHeader.cs.html#b88b0afd7aae1e33" class="i property">ForwardBinaryHunk</a> = <span class="r47 r">postImage</span>;
+
+			<a href="BinaryHunk.cs.html#49a8be315be41caa" class="k">var</a> <span id="r49 rd" class="r49 r">preImage</span> = <b>new</b> <a href="BinaryHunk.cs.html#a1ce7e3efca553c2" class="t constructor">BinaryHunk</a>(<span class="r44 r">fh</span>, <span class="r45 r">c</span>);
+			<b>int</b> <span id="r50 rd" class="r50 r">oEnd</span> = <span class="r49 r">preImage</span>.<a href="BinaryHunk.cs.html#c3950cabf9399d0c" class="i method">parseHunk</a>(<span class="r45 r">c</span>, <span class="r46 r">end</span>);
+			<b>if</b> (<span class="r50 r">oEnd</span> &gt;= 0)
+			{
+				<span class="r45 r">c</span> = <span class="r50 r">oEnd</span>;
+				<span class="r49 r">preImage</span>.<a href="BinaryHunk.cs.html#f52df6a1cfa54113" class="i field">endOffset</a> = <span class="r45 r">c</span>;
+				<span class="r44 r">fh</span>.<a href="FileHeader.cs.html#cf458d486e878351" class="i property">ReverseBinaryHunk</a> = <span class="r49 r">preImage</span>;
+			}
+
+			<b>return</b> <span class="r45 r">c</span>;
+		}
+
+		<b>private static bool</b> <a id="d8ed2fd8422b9b88" href="../R/d8ed2fd8422b9b88.html" target="n" data-glyph="76,1" class="i method">MatchAny</a>(<b>byte</b>[] <span id="r51 rd" class="r51 r">buf</span>, <b>int</b> <span id="r52 rd" class="r52 r">c</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>byte</b>[]&gt; <span id="r53 rd" class="r53 r">srcs</span>)
+		{
+			<b>foreach</b> (<b>byte</b>[] <span id="r54 rd" class="r54 r">s</span> <b>in</b> <span class="r53 r">srcs</span>)
+			{
+				<b>if</b> (<a href="../Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="../Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r51 r">buf</span>, <span class="r52 r">c</span>, <span class="r54 r">s</span>) &gt;= 0)
+				{
+					<b>return true</b>;
+				}
+			}
+			<b>return false</b>;
+		}
+	}
+}</pre></td></tr></table></div></body></html>

@@ -1,0 +1,478 @@
+﻿<!DOCTYPE html>
+<html><head><title>SimilarityRenameDetector.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(469);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/SimilarityRenameDetector.cs" target="_top">NGit.Diff\SimilarityRenameDetector.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<b>internal class</b> <a id="4c702d7248fc2b98" href="../R/4c702d7248fc2b98.html" target="n" data-glyph="2,0" class="t t">SimilarityRenameDetector</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Number of bits we need to express an index into src or dst list.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of bits we need to express an index into src or dst list.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This must be 28, giving us a limit of 2^28 entries in either list, which</span>
+		<span class="c">///</span><span class="c"> is an insane limit of 536,870,912 file names being considered in a single</span>
+		<span class="c">///</span><span class="c"> rename pass. The other 8 bits are used to store the score, while staying</span>
+		<span class="c">///</span><span class="c"> under 127 so the long doesn&#39;t go negative.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private const int</b> <a id="cd71dfd091656f4d" href="../R/cd71dfd091656f4d.html" target="n" data-glyph="10,1" class="i field">BITS_PER_INDEX</a> = 28;
+
+		<b>private const int</b> <a id="d45c480094bc1acd" href="../R/d45c480094bc1acd.html" target="n" data-glyph="10,1" class="i field">INDEX_MASK</a> = (1 &lt;&lt; <a href="#cd71dfd091656f4d" class="i field">BITS_PER_INDEX</a>) - 1;
+
+		<b>private const int</b> <a id="5ce144b36101fbb3" href="../R/5ce144b36101fbb3.html" target="n" data-glyph="10,1" class="i field">SCORE_SHIFT</a> = 2 * <a href="#cd71dfd091656f4d" class="i field">BITS_PER_INDEX</a>;
+
+		<b>private</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#be15a30e291f823d" class="t t">Pair</a> <a id="e85bd8b6eaec79b9" href="../R/e85bd8b6eaec79b9.html" target="n" data-glyph="46,1" class="i field">reader</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">All sources to consider for copies or renames.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> All sources to consider for copies or renames.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A source is typically a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i">ChangeType</span>.<span class="i">DELETE</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ChangeType.DELETE</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> change, but could be</span>
+		<span class="c">///</span><span class="c"> another type when trying to perform copy detection concurrently with</span>
+		<span class="c">///</span><span class="c"> rename detection.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="74b26f2b3886beee" href="../R/74b26f2b3886beee.html" target="n" data-glyph="46,1" class="i field">srcs</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">All destinations to consider looking for a rename.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> All destinations to consider looking for a rename.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A destination is typically an</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i">ChangeType</span>.<span class="i">ADD</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ChangeType.ADD</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , as the name has</span>
+		<span class="c">///</span><span class="c"> just come into existence, and we want to discover where its initial</span>
+		<span class="c">///</span><span class="c"> content came from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="c65274661b5ea545" href="../R/c65274661b5ea545.html" target="n" data-glyph="46,1" class="i field">dsts</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Matrix of all examined file pairs, and their scores.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Matrix of all examined file pairs, and their scores.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The upper 8 bits of each long stores the score, but the score is bounded</span>
+		<span class="c">///</span><span class="c"> to be in the range (0, 128] so that the highest bit is never set, and all</span>
+		<span class="c">///</span><span class="c"> entries are therefore positive.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> List indexes to an element of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#74b26f2b3886beee" class="i field">srcs</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">srcs</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> and</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c65274661b5ea545" class="i field">dsts</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">dsts</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> are encoded</span>
+		<span class="c">///</span><span class="c"> as the lower two groups of 28 bits, respectively, but the encoding is</span>
+		<span class="c">///</span><span class="c"> inverted, so that 0 is expressed as</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(1 </span><span class="c">&amp;lt;</span><span class="c">&amp;lt;</span><span class="c"> 28) - 1</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . This sorts</span>
+		<span class="c">///</span><span class="c"> lower list indices later in the matrix, giving precedence to files whose</span>
+		<span class="c">///</span><span class="c"> names sort earlier in the tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private long</b>[] <a id="8b7b823598cf422a" href="../R/8b7b823598cf422a.html" target="n" data-glyph="46,1" class="i field">matrix</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Score a pair must exceed to be considered a rename.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Score a pair must exceed to be considered a rename.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="90f6413bf6312bc5" href="../R/90f6413bf6312bc5.html" target="n" data-glyph="46,1" class="i field">renameScore</a> = 60;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set if any</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i">TableFullException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">TableFullException</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> occurs.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="4d88ced12182ca61" href="../R/4d88ced12182ca61.html" target="n" data-glyph="46,1" class="i field">tableOverflow</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="a5a51a2e6f691288" href="../R/a5a51a2e6f691288.html" target="n" data-glyph="46,1" class="i field">@out</a>;
+
+		<b>internal</b> <a id="208827c1cb3169cd" href="../R/208827c1cb3169cd.html" target="n" data-glyph="74,1" class="i constructor">SimilarityRenameDetector</a>(<a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#be15a30e291f823d" class="t t">Pair</a> <span id="r0 rd" class="r0 r">reader</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r1 rd" class="r1 r">srcs</span>
+			, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r2 rd" class="r2 r">dsts</span>)
+		{
+			<a href="#4c702d7248fc2b98" class="k">this</a>.<a href="#e85bd8b6eaec79b9" class="i field">reader</a> = <span class="r0 r">reader</span>;
+			<a href="#4c702d7248fc2b98" class="k">this</a>.<a href="#74b26f2b3886beee" class="i field">srcs</a> = <span class="r1 r">srcs</span>;
+			<a href="#4c702d7248fc2b98" class="k">this</a>.<a href="#c65274661b5ea545" class="i field">dsts</a> = <span class="r2 r">dsts</span>;
+		}
+
+		<b>internal virtual void</b> <a id="82b3f76384483baa" href="../R/82b3f76384483baa.html" target="n" data-glyph="74,1" class="i method">SetRenameScore</a>(<b>int</b> <span id="r3 rd" class="r3 r">score</span>)
+		{
+			<a href="#90f6413bf6312bc5" class="i field">renameScore</a> = <span class="r3 r">score</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="91390ff49e7244b6" href="../R/91390ff49e7244b6.html" target="n" data-glyph="74,1" class="i method">Compute</a>(<a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r4 rd" class="r4 r">pm</span>)
+		{
+			<b>if</b> (<span class="r4 r">pm</span> == <b>null</b>)
+			{
+				<span class="r4 r">pm</span> = <a href="../NGit/NullProgressMonitor.cs.html#24f629da18a030c0" class="t t">NullProgressMonitor</a>.<a href="../NGit/NullProgressMonitor.cs.html#ab1a6c4ba41f9af4" class="i field">INSTANCE</a>;
+			}
+			<span class="r4 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#9ded11639c8cb012" class="i field">renamesFindingByContent</a>, 2 * <a href="#74b26f2b3886beee" class="i field">srcs</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> * <a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+			<span class="c">//</span>
+			<b>int</b> <span id="r5 rd" class="r5 r">mNext</span> = <a href="#173afb38301f9b00" class="i method">BuildMatrix</a>(<span class="r4 r">pm</span>);
+			<a href="#a5a51a2e6f691288" class="i field">@out</a> = <b>new</b> <a href="/Sharpen/A.html#50b9c0ebb7a18de8" class="t constructor">AList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt;(<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r5 r">mNext</span>, <a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>));
+			<span class="c">// Match rename pairs on a first come, first serve basis until</span>
+			<span class="c">// we have looked at everything that is above our minimum score.</span>
+			<span class="c">//</span>
+			<b>for</b> (--<span class="r5 r">mNext</span>; <span class="r5 r">mNext</span> &gt;= 0; <span class="r5 r">mNext</span>--)
+			{
+				<b>long</b> <span id="r6 rd" class="r6 r">ent</span> = <a href="#8b7b823598cf422a" class="i field">matrix</a>[<span class="r5 r">mNext</span>];
+				<b>int</b> <span id="r7 rd" class="r7 r">sIdx</span> = <a href="#78f116265cfcd969" class="i method">SrcFile</a>(<span class="r6 r">ent</span>);
+				<b>int</b> <span id="r8 rd" class="r8 r">dIdx</span> = <a href="#5e18d7087d908257" class="i method">DstFile</a>(<span class="r6 r">ent</span>);
+				<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r9 rd" class="r9 r">s</span> = <a href="#74b26f2b3886beee" class="i field">srcs</a><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r7 r">sIdx</span>];
+				<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r10 rd" class="r10 r">d</span> = <a href="#c65274661b5ea545" class="i field">dsts</a><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r8 r">dIdx</span>];
+				<b>if</b> (<span class="r10 r">d</span> == <b>null</b>)
+				{
+					<span class="r4 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+					<b>continue</b>;
+				}
+				<span class="c">// was already matched earlier</span>
+				<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a> <span id="r11 rd" class="r11 r">type</span>;
+				<b>if</b> (<span class="r9 r">s</span>.<a href="DiffEntry.cs.html#0f2a7f8f62ece815" class="i field">changeType</a> == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#e4a021b81ce9499a" class="i field">DELETE</a>)
+				{
+					<span class="c">// First use of this source file. Tag it as a rename so we</span>
+					<span class="c">// later know it is already been used as a rename, other</span>
+					<span class="c">// matches (if any) will claim themselves as copies instead.</span>
+					<span class="c">//</span>
+					<span class="r9 r">s</span>.<a href="DiffEntry.cs.html#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a>;
+					<span class="r11 r">type</span> = <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a>;
+				}
+				<b>else</b>
+				{
+					<span class="r11 r">type</span> = <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#92f05c1e04cf35a9" class="i field">COPY</a>;
+				}
+				<a href="#a5a51a2e6f691288" class="i field">@out</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#9009f72169493076" class="i method">Pair</a>(<span class="r11 r">type</span>, <span class="r9 r">s</span>, <span class="r10 r">d</span>, <a href="#f15cba25dd2a120e" class="i method">Score</a>(<span class="r6 r">ent</span>)));
+				<a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="/Sharpen/A.html#e773c5f26d009cd6" class="i method">Set</a>(<span class="r8 r">dIdx</span>, <b>null</b>);
+				<span class="c">// Claim the destination was matched.</span>
+				<span class="r4 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+			}
+			<a href="#74b26f2b3886beee" class="i field">srcs</a> = <a href="#b0ff184b4283d3bb" class="i method">CompactSrcList</a>(<a href="#74b26f2b3886beee" class="i field">srcs</a>);
+			<a href="#c65274661b5ea545" class="i field">dsts</a> = <a href="#2c2e127f94b4b044" class="i method">CompactDstList</a>(<a href="#c65274661b5ea545" class="i field">dsts</a>);
+			<span class="r4 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+		}
+
+		<b>internal virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="6e5b6465034bcac5" href="../R/6e5b6465034bcac5.html" target="n" data-glyph="74,1" class="i method">GetMatches</a>()
+		{
+			<b>return</b> <a href="#a5a51a2e6f691288" class="i field">@out</a>;
+		}
+
+		<b>internal virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="84164e25ff103eac" href="../R/84164e25ff103eac.html" target="n" data-glyph="74,1" class="i method">GetLeftOverSources</a>()
+		{
+			<b>return</b> <a href="#74b26f2b3886beee" class="i field">srcs</a>;
+		}
+
+		<b>internal virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="ea2d065a061f585e" href="../R/ea2d065a061f585e.html" target="n" data-glyph="74,1" class="i method">GetLeftOverDestinations</a>()
+		{
+			<b>return</b> <a href="#c65274661b5ea545" class="i field">dsts</a>;
+		}
+
+		<b>internal virtual bool</b> <a id="a5e33f5a614a9674" href="../R/a5e33f5a614a9674.html" target="n" data-glyph="74,1" class="i method">IsTableOverflow</a>()
+		{
+			<b>return</b> <a href="#4d88ced12182ca61" class="i field">tableOverflow</a>;
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="b0ff184b4283d3bb" href="../R/b0ff184b4283d3bb.html" target="n" data-glyph="76,1" class="i method">CompactSrcList</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r12 rd" class="r12 r">@in</span>)
+		{
+			<a href="/Sharpen/A.html#f20351a5b7e2b027" class="t t">AList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r13 rd" class="r13 r">r</span> = <b>new</b> <a href="/Sharpen/A.html#50b9c0ebb7a18de8" class="t constructor">AList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt;(<span class="r12 r">@in</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+			<b>foreach</b> (<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r14 rd" class="r14 r">e</span> <b>in</b> <span class="r12 r">@in</span>)
+			{
+				<b>if</b> (<span class="r14 r">e</span>.<a href="DiffEntry.cs.html#0f2a7f8f62ece815" class="i field">changeType</a> == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#e4a021b81ce9499a" class="i field">DELETE</a>)
+				{
+					<span class="r13 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r14 r">e</span>);
+				}
+			}
+			<b>return</b> <span class="r13 r">r</span>;
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="2c2e127f94b4b044" href="../R/2c2e127f94b4b044.html" target="n" data-glyph="76,1" class="i method">CompactDstList</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r15 rd" class="r15 r">@in</span>)
+		{
+			<a href="/Sharpen/A.html#f20351a5b7e2b027" class="t t">AList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r16 rd" class="r16 r">r</span> = <b>new</b> <a href="/Sharpen/A.html#50b9c0ebb7a18de8" class="t constructor">AList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt;(<span class="r15 r">@in</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+			<b>foreach</b> (<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r17 rd" class="r17 r">e</span> <b>in</b> <span class="r15 r">@in</span>)
+			{
+				<b>if</b> (<span class="r17 r">e</span> != <b>null</b>)
+				{
+					<span class="r16 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r17 r">e</span>);
+				}
+			}
+			<b>return</b> <span class="r16 r">r</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="173afb38301f9b00" href="../R/173afb38301f9b00.html" target="n" data-glyph="76,1" class="i method">BuildMatrix</a>(<a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r18 rd" class="r18 r">pm</span>)
+		{
+			<span class="c">// Allocate for the worst-case scenario where every pair has a</span>
+			<span class="c">// score that we need to consider. We might not need that many.</span>
+			<span class="c">//</span>
+			<a href="#8b7b823598cf422a" class="i field">matrix</a> = <b>new</b> <b>long</b>[<a href="#74b26f2b3886beee" class="i field">srcs</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> * <a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>];
+			<b>long</b>[] <span id="r19 rd" class="r19 r">srcSizes</span> = <b>new</b> <b>long</b>[<a href="#74b26f2b3886beee" class="i field">srcs</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>];
+			<b>long</b>[] <span id="r20 rd" class="r20 r">dstSizes</span> = <b>new</b> <b>long</b>[<a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>];
+			<a href="/Sharpen/A.html#0f55b8a6202d1236" class="t t">BitSet</a> <span id="r21 rd" class="r21 r">dstTooLarge</span> = <b>null</b>;
+			<span class="c">// Consider each pair of files, if the score is above the minimum</span>
+			<span class="c">// threshold we need record that scoring in the matrix so we can</span>
+			<span class="c">// later find the best matches.</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r22 rd" class="r22 r">mNext</span> = 0;
+			<b>for</b> (<b>int</b> <span id="r23 rd" class="r23 r">srcIdx</span> = 0; <span class="r23 r">srcIdx</span> &lt; <a href="#74b26f2b3886beee" class="i field">srcs</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>; <span class="r23 r">srcIdx</span>++)
+			{
+				<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r24 rd" class="r24 r">srcEnt</span> = <a href="#74b26f2b3886beee" class="i field">srcs</a><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r23 r">srcIdx</span>];
+				<b>if</b> (!<a href="#9b9503167af423cb" class="i method">IsFile</a>(<span class="r24 r">srcEnt</span>.<a href="DiffEntry.cs.html#12896af0c15e848e" class="i field">oldMode</a>))
+				{
+					<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(<a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+					<b>continue</b>;
+				}
+				<a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <span id="r25 rd" class="r25 r">s</span> = <b>null</b>;
+				<b>for</b> (<b>int</b> <span id="r26 rd" class="r26 r">dstIdx</span> = 0; <span class="r26 r">dstIdx</span> &lt; <a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>; <span class="r26 r">dstIdx</span>++)
+				{
+					<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r27 rd" class="r27 r">dstEnt</span> = <a href="#c65274661b5ea545" class="i field">dsts</a><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r26 r">dstIdx</span>];
+					<b>if</b> (!<a href="#9b9503167af423cb" class="i method">IsFile</a>(<span class="r27 r">dstEnt</span>.<a href="DiffEntry.cs.html#b7fb9cbc08befc4d" class="i field">newMode</a>))
+					{
+						<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+						<b>continue</b>;
+					}
+					<b>if</b> (!<a href="RenameDetector.cs.html#0820a1e6b993bdc8" class="t t">RenameDetector</a>.<a href="RenameDetector.cs.html#b573d07e77de23b1" class="i method">SameType</a>(<span class="r24 r">srcEnt</span>.<a href="DiffEntry.cs.html#12896af0c15e848e" class="i field">oldMode</a>, <span class="r27 r">dstEnt</span>.<a href="DiffEntry.cs.html#b7fb9cbc08befc4d" class="i field">newMode</a>))
+					{
+						<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+						<b>continue</b>;
+					}
+					<b>if</b> (<span class="r21 r">dstTooLarge</span> != <b>null</b> &amp;&amp; <span class="r21 r">dstTooLarge</span>.<a href="/Sharpen/A.html#1cb80e43220c29a9" class="i method">Get</a>(<span class="r26 r">dstIdx</span>))
+					{
+						<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+						<b>continue</b>;
+					}
+					<b>long</b> <span id="r28 rd" class="r28 r">srcSize</span> = <span class="r19 r">srcSizes</span>[<span class="r23 r">srcIdx</span>];
+					<b>if</b> (<span class="r28 r">srcSize</span> == 0)
+					{
+						<span class="r28 r">srcSize</span> = <a href="#9aaec0abd6d4eb50" class="i method">Size</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#38f00091a91f0b33" class="i field">OLD</a>, <span class="r24 r">srcEnt</span>) + 1;
+						<span class="r19 r">srcSizes</span>[<span class="r23 r">srcIdx</span>] = <span class="r28 r">srcSize</span>;
+					}
+					<b>long</b> <span id="r29 rd" class="r29 r">dstSize</span> = <span class="r20 r">dstSizes</span>[<span class="r26 r">dstIdx</span>];
+					<b>if</b> (<span class="r29 r">dstSize</span> == 0)
+					{
+						<span class="r29 r">dstSize</span> = <a href="#9aaec0abd6d4eb50" class="i method">Size</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#a60d5923793294e6" class="i field">NEW</a>, <span class="r27 r">dstEnt</span>) + 1;
+						<span class="r20 r">dstSizes</span>[<span class="r26 r">dstIdx</span>] = <span class="r29 r">dstSize</span>;
+					}
+					<b>long</b> <span id="r30 rd" class="r30 r">max</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#c0288bbe62da07cb" class="i method">Max</a>(<span class="r28 r">srcSize</span>, <span class="r29 r">dstSize</span>);
+					<b>long</b> <span id="r31 rd" class="r31 r">min</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<span class="r28 r">srcSize</span>, <span class="r29 r">dstSize</span>);
+					<b>if</b> (<span class="r31 r">min</span> * 100 / <span class="r30 r">max</span> &lt; <a href="#90f6413bf6312bc5" class="i field">renameScore</a>)
+					{
+						<span class="c">// Cannot possibly match, as the file sizes are so different</span>
+						<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+						<b>continue</b>;
+					}
+					<b>if</b> (<span class="r25 r">s</span> == <b>null</b>)
+					{
+						<b>try</b>
+						{
+							<span class="r25 r">s</span> = <a href="#7da77a422e986d04" class="i method">Hash</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#38f00091a91f0b33" class="i field">OLD</a>, <span class="r24 r">srcEnt</span>);
+						}
+						<b>catch</b> (<a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="SimilarityIndex.cs.html#f3b9a597ef03222d" class="t t">TableFullException</a>)
+						{
+							<a href="#4d88ced12182ca61" class="i field">tableOverflow</a> = <b>true</b>;
+							<b>goto</b> <span class="i">SRC_continue</span>;
+						}
+					}
+					<a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <span id="r32 rd" class="r32 r">d</span>;
+					<b>try</b>
+					{
+						<span class="r32 r">d</span> = <a href="#7da77a422e986d04" class="i method">Hash</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#a60d5923793294e6" class="i field">NEW</a>, <span class="r27 r">dstEnt</span>);
+					}
+					<b>catch</b> (<a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="SimilarityIndex.cs.html#f3b9a597ef03222d" class="t t">TableFullException</a>)
+					{
+						<b>if</b> (<span class="r21 r">dstTooLarge</span> == <b>null</b>)
+						{
+							<span class="r21 r">dstTooLarge</span> = <b>new</b> <a href="/Sharpen/A.html#ea1f3cb234d5d1ea" class="t constructor">BitSet</a>(<a href="#c65274661b5ea545" class="i field">dsts</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+						}
+						<span class="r21 r">dstTooLarge</span>.<a href="/Sharpen/A.html#c4b5782530ef6a85" class="i method">Set</a>(<span class="r26 r">dstIdx</span>);
+						<a href="#4d88ced12182ca61" class="i field">tableOverflow</a> = <b>true</b>;
+						<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+						<b>continue</b>;
+					}
+					<b>int</b> <span id="r33 rd" class="r33 r">contentScore</span> = <span class="r25 r">s</span>.<a href="SimilarityIndex.cs.html#e207b961b24fc8b9" class="i method">Score</a>(<span class="r32 r">d</span>, 10000);
+					<span class="c">// nameScore returns a value between 0 and 100, but we want it</span>
+					<span class="c">// to be in the same range as the content score. This allows it</span>
+					<span class="c">// to be dropped into the pretty formula for the final score.</span>
+					<b>int</b> <span id="r34 rd" class="r34 r">nameScore</span> = <a href="#e4cbb6c46eeaa343" class="i method">NameScore</a>(<span class="r24 r">srcEnt</span>.<a href="DiffEntry.cs.html#0b9c4f7911a74c05" class="i field">oldPath</a>, <span class="r27 r">dstEnt</span>.<a href="DiffEntry.cs.html#4a16b475fb9dbec1" class="i field">newPath</a>) * 100;
+					<b>int</b> <span id="r35 rd" class="r35 r">score</span> = (<span class="r33 r">contentScore</span> * 99 + <span class="r34 r">nameScore</span> * 1) / 10000;
+					<b>if</b> (<span class="r35 r">score</span> &lt; <a href="#90f6413bf6312bc5" class="i field">renameScore</a>)
+					{
+						<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+						<b>continue</b>;
+					}
+					<a href="#8b7b823598cf422a" class="i field">matrix</a>[<span class="r22 r">mNext</span>++] = <a href="#64fc05b88fd2d2cc" class="i method">Encode</a>(<span class="r35 r">score</span>, <span class="r23 r">srcIdx</span>, <span class="r26 r">dstIdx</span>);
+					<span class="r18 r">pm</span>.<a href="../NGit/ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+				}
+<span class="i">SRC_continue</span>: ;
+			}
+<span class="i">SRC_break</span>: ;
+			<span class="c">// Sort everything in the range we populated, which might be the</span>
+			<span class="c">// entire matrix, or just a smaller slice if we had some bad low</span>
+			<span class="c">// scoring pairs.</span>
+			<span class="c">//</span>
+			<a href="/Sharpen/A.html#7342d8d23595dd8e" class="t t">Arrays</a>.<a href="/Sharpen/A.html#952ec447dfb14462" class="i method">Sort</a>(<a href="#8b7b823598cf422a" class="i field">matrix</a>, 0, <span class="r22 r">mNext</span>);
+			<b>return</b> <span class="r22 r">mNext</span>;
+		}
+
+		<b>internal static int</b> <a id="e4cbb6c46eeaa343" href="../R/e4cbb6c46eeaa343.html" target="n" data-glyph="74,1" class="i method">NameScore</a>(<b>string</b> <span id="r36 rd" class="r36 r">a</span>, <b>string</b> <span id="r37 rd" class="r37 r">b</span>)
+		{
+			<b>int</b> <span id="r38 rd" class="r38 r">aDirLen</span> = <span class="r36 r">a</span>.<a href="@0@mscorlib/A.html#750750cd39244ac4" class="i method">LastIndexOf</a>(<span class="s">&quot;/&quot;</span>) + 1;
+			<b>int</b> <span id="r39 rd" class="r39 r">bDirLen</span> = <span class="r37 r">b</span>.<a href="@0@mscorlib/A.html#750750cd39244ac4" class="i method">LastIndexOf</a>(<span class="s">&quot;/&quot;</span>) + 1;
+			<b>int</b> <span id="r40 rd" class="r40 r">dirMin</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r38 r">aDirLen</span>, <span class="r39 r">bDirLen</span>);
+			<b>int</b> <span id="r41 rd" class="r41 r">dirMax</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(<span class="r38 r">aDirLen</span>, <span class="r39 r">bDirLen</span>);
+			<b>int</b> <span id="r42 rd" class="r42 r">dirScoreLtr</span>;
+			<b>int</b> <span id="r43 rd" class="r43 r">dirScoreRtl</span>;
+			<b>if</b> (<span class="r41 r">dirMax</span> == 0)
+			{
+				<span class="r42 r">dirScoreLtr</span> = 100;
+				<span class="r43 r">dirScoreRtl</span> = 100;
+			}
+			<b>else</b>
+			{
+				<b>int</b> <span id="r44 rd" class="r44 r">dirSim</span> = 0;
+				<b>for</b> (; <span class="r44 r">dirSim</span> &lt; <span class="r40 r">dirMin</span>; <span class="r44 r">dirSim</span>++)
+				{
+					<b>if</b> (<span class="r36 r">a</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r44 r">dirSim</span>] != <span class="r37 r">b</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r44 r">dirSim</span>])
+					{
+						<b>break</b>;
+					}
+				}
+				<span class="r42 r">dirScoreLtr</span> = (<span class="r44 r">dirSim</span> * 100) / <span class="r41 r">dirMax</span>;
+				<b>if</b> (<span class="r42 r">dirScoreLtr</span> == 100)
+				{
+					<span class="r43 r">dirScoreRtl</span> = 100;
+				}
+				<b>else</b>
+				{
+					<b>for</b> (<span class="r44 r">dirSim</span> = 0; <span class="r44 r">dirSim</span> &lt; <span class="r40 r">dirMin</span>; <span class="r44 r">dirSim</span>++)
+					{
+						<b>if</b> (<span class="r36 r">a</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r38 r">aDirLen</span> - 1 - <span class="r44 r">dirSim</span>] != <span class="r37 r">b</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r39 r">bDirLen</span> - 1 - <span class="r44 r">dirSim</span>])
+						{
+							<b>break</b>;
+						}
+					}
+					<span class="r43 r">dirScoreRtl</span> = (<span class="r44 r">dirSim</span> * 100) / <span class="r41 r">dirMax</span>;
+				}
+			}
+			<b>int</b> <span id="r45 rd" class="r45 r">fileMin</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r36 r">a</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - <span class="r38 r">aDirLen</span>, <span class="r37 r">b</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - <span class="r39 r">bDirLen</span>);
+			<b>int</b> <span id="r46 rd" class="r46 r">fileMax</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(<span class="r36 r">a</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - <span class="r38 r">aDirLen</span>, <span class="r37 r">b</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - <span class="r39 r">bDirLen</span>);
+			<b>int</b> <span id="r47 rd" class="r47 r">fileSim</span> = 0;
+			<b>for</b> (; <span class="r47 r">fileSim</span> &lt; <span class="r45 r">fileMin</span>; <span class="r47 r">fileSim</span>++)
+			{
+				<b>if</b> (<span class="r36 r">a</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r36 r">a</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1 - <span class="r47 r">fileSim</span>] != <span class="r37 r">b</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r37 r">b</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1 - <span class="r47 r">fileSim</span>])
+				{
+					<b>break</b>;
+				}
+			}
+			<b>int</b> <span id="r48 rd" class="r48 r">fileScore</span> = (<span class="r47 r">fileSim</span> * 100) / <span class="r46 r">fileMax</span>;
+			<b>return</b> (((<span class="r42 r">dirScoreLtr</span> + <span class="r43 r">dirScoreRtl</span>) * 25) + (<span class="r48 r">fileScore</span> * 50)) / 100;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="SimilarityIndex.cs.html#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <a id="7da77a422e986d04" href="../R/7da77a422e986d04.html" target="n" data-glyph="76,1" class="i method">Hash</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a> <span id="r49 rd" class="r49 r">side</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r50 rd" class="r50 r">ent</span>)
+		{
+			<a href="SimilarityIndex.cs.html#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <span id="r51 rd" class="r51 r">r</span> = <b>new</b> <a href="SimilarityIndex.cs.html#62d19fb7e80ba732" class="t constructor">SimilarityIndex</a>();
+			<span class="r51 r">r</span>.<a href="SimilarityIndex.cs.html#9ab0433dab15f3ab" class="i method">Hash</a>(<a href="#e85bd8b6eaec79b9" class="i field">reader</a>.<a href="ContentSource.cs.html#e388ef2f5ef92f16" class="i method">Open</a>(<span class="r49 r">side</span>, <span class="r50 r">ent</span>));
+			<span class="r51 r">r</span>.<a href="SimilarityIndex.cs.html#d4ea6a821078aeed" class="i method">Sort</a>();
+			<b>return</b> <span class="r51 r">r</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private long</b> <a id="9aaec0abd6d4eb50" href="../R/9aaec0abd6d4eb50.html" target="n" data-glyph="76,1" class="i method">Size</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a> <span id="r52 rd" class="r52 r">side</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r53 rd" class="r53 r">ent</span>)
+		{
+			<b>return</b> <a href="#e85bd8b6eaec79b9" class="i field">reader</a>.<a href="ContentSource.cs.html#27fe397e860924b8" class="i method">Size</a>(<span class="r52 r">side</span>, <span class="r53 r">ent</span>);
+		}
+
+		<b>private static int</b> <a id="f15cba25dd2a120e" href="../R/f15cba25dd2a120e.html" target="n" data-glyph="76,1" class="i method">Score</a>(<b>long</b> <span id="r54 rd" class="r54 r">value</span>)
+		{
+			<b>return</b> (<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r54 r">value</span>) &gt;&gt; <a href="#5ce144b36101fbb3" class="i field">SCORE_SHIFT</a>));
+		}
+
+		<b>internal static int</b> <a id="78f116265cfcd969" href="../R/78f116265cfcd969.html" target="n" data-glyph="74,1" class="i method">SrcFile</a>(<b>long</b> <span id="r55 rd" class="r55 r">value</span>)
+		{
+			<b>return</b> <a href="#f77a367ce5faf56b" class="i method">DecodeFile</a>(((<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r55 r">value</span>) &gt;&gt; <a href="#cd71dfd091656f4d" class="i field">BITS_PER_INDEX</a>))) &amp; <a href="#d45c480094bc1acd" class="i field">INDEX_MASK</a>);
+		}
+
+		<b>internal static int</b> <a id="5e18d7087d908257" href="../R/5e18d7087d908257.html" target="n" data-glyph="74,1" class="i method">DstFile</a>(<b>long</b> <span id="r56 rd" class="r56 r">value</span>)
+		{
+			<b>return</b> <a href="#f77a367ce5faf56b" class="i method">DecodeFile</a>(((<b>int</b>)<span class="r56 r">value</span>) &amp; <a href="#d45c480094bc1acd" class="i field">INDEX_MASK</a>);
+		}
+
+		<b>internal static long</b> <a id="64fc05b88fd2d2cc" href="../R/64fc05b88fd2d2cc.html" target="n" data-glyph="74,1" class="i method">Encode</a>(<b>int</b> <span id="r57 rd" class="r57 r">score</span>, <b>int</b> <span id="r58 rd" class="r58 r">srcIdx</span>, <b>int</b> <span id="r59 rd" class="r59 r">dstIdx</span>)
+		{
+			<b>return</b> (((<b>long</b>)<span class="r57 r">score</span>) &lt;&lt; <a href="#5ce144b36101fbb3" class="i field">SCORE_SHIFT</a>) | (<a href="#572532a3f43fd8a2" class="i method">EncodeFile</a>(<span class="r58 r">srcIdx</span>) &lt;&lt; <a href="#cd71dfd091656f4d" class="i field">BITS_PER_INDEX</a>) | 
+				<a href="#572532a3f43fd8a2" class="i method">EncodeFile</a>(<span class="r59 r">dstIdx</span>);
+		}
+
+		<span class="c">//</span>
+		<span class="c">//</span>
+		<b>private static long</b> <a id="572532a3f43fd8a2" href="../R/572532a3f43fd8a2.html" target="n" data-glyph="76,1" class="i method">EncodeFile</a>(<b>int</b> <span id="r60 rd" class="r60 r">idx</span>)
+		{
+			<span class="c">// We invert the index so that the first file in the list sorts</span>
+			<span class="c">// later in the table. This permits us to break ties favoring</span>
+			<span class="c">// earlier names over later ones.</span>
+			<span class="c">//</span>
+			<b>return</b> <a href="#d45c480094bc1acd" class="i field">INDEX_MASK</a> - <span class="r60 r">idx</span>;
+		}
+
+		<b>private static int</b> <a id="f77a367ce5faf56b" href="../R/f77a367ce5faf56b.html" target="n" data-glyph="76,1" class="i method">DecodeFile</a>(<b>int</b> <span id="r61 rd" class="r61 r">v</span>)
+		{
+			<b>return</b> <a href="#d45c480094bc1acd" class="i field">INDEX_MASK</a> - <span class="r61 r">v</span>;
+		}
+
+		<b>private static bool</b> <a id="9b9503167af423cb" href="../R/9b9503167af423cb.html" target="n" data-glyph="76,1" class="i method">IsFile</a>(<a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r62 rd" class="r62 r">mode</span>)
+		{
+			<b>return</b> (<span class="r62 r">mode</span>.<a href="../NGit/FileMode.cs.html#5832a2d46a12adec" class="i method">GetBits</a>() &amp; <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#28aa11bb738cb449" class="i field">TYPE_MASK</a>) == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c01d1bb435748237" class="i field">TYPE_FILE</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

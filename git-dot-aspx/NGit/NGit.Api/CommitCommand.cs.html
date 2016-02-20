@@ -1,0 +1,857 @@
+﻿<!DOCTYPE html>
+<html><head><title>CommitCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(848);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/CommitCommand.cs" target="_top">NGit.Api\CommitCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A class used to execute a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">Commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> command. It has setters for all</span>
+	<span class="c">///</span><span class="c"> supported options and arguments of this command and a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e40c4c0200577029" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> method</span>
+	<span class="c">///</span><span class="c"> to finally execute the command.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span>href=&quot;http://www.kernel.org/pub/software/scm/git/docs/git-commit.html&quot;
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about Commit</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="d08844820ce75396" href="../R/d08844820ce75396.html" target="n" data-glyph="0,0" class="t t">CommitCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt;
+	{
+		<b>private</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="b56125e5131de28b" href="../R/b56125e5131de28b.html" target="n" data-glyph="46,1" class="i field">author</a>;
+
+		<b>private</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="f959a7111ec7e29b" href="../R/f959a7111ec7e29b.html" target="n" data-glyph="46,1" class="i field">committer</a>;
+
+		<b>private string</b> <a id="ca83d1b612a2b3cc" href="../R/ca83d1b612a2b3cc.html" target="n" data-glyph="46,1" class="i field">message</a>;
+
+		<b>private bool</b> <a id="0a84edf33bb7102c" href="../R/0a84edf33bb7102c.html" target="n" data-glyph="46,1" class="i field">all</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <a id="d4b4b8477fabf9eb" href="../R/d4b4b8477fabf9eb.html" target="n" data-glyph="46,1" class="i field">only</a> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<b>string</b>&gt;();
+
+		<b>private bool</b>[] <a id="78849b86062d7a49" href="../R/78849b86062d7a49.html" target="n" data-glyph="46,1" class="i field">onlyProcessed</a>;
+
+		<b>private bool</b> <a id="19c2fb94c3f9b206" href="../R/19c2fb94c3f9b206.html" target="n" data-glyph="46,1" class="i field">amend</a>;
+
+		<b>private bool</b> <a id="a88d317f58b2c3d3" href="../R/a88d317f58b2c3d3.html" target="n" data-glyph="46,1" class="i field">insertChangeId</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">parents this commit should have.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> parents this commit should have. The current HEAD will be in this list</span>
+		<span class="c">///</span><span class="c"> and also all commits mentioned in .git/MERGE_HEAD</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt; <a id="b3a5560b059b3f9f" href="../R/b3a5560b059b3f9f.html" target="n" data-glyph="46,1" class="i field">parents</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt;();
+
+		<b>private string</b> <a id="0e40018243241fe7" href="../R/0e40018243241fe7.html" target="n" data-glyph="46,1" class="i field">reflogComment</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="e7cce82c1708fada" href="../R/e7cce82c1708fada.html" target="n" data-glyph="75,1" class="i constructor">CommitCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r0 r">repo</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Executes the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> command with all the options and parameters</span>
+		<span class="c">///</span><span class="c"> collected by the setter methods of this class. Each instance of this</span>
+		<span class="c">///</span><span class="c"> class should only be used for one invocation of the command (means: one</span>
+		<span class="c">///</span><span class="c"> call to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e40c4c0200577029" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> )</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevCommit</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> object representing the successful commit.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoHeadException.cs.html#70bf94d89c4eb110" class="t t">NoHeadException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">when called on a git repo without a HEAD reference</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoMessageException.cs.html#1bb1c0288a90560e" class="t t">NoMessageException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">when called without specifying a commit message</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/UnmergedPathsException.cs.html#095370662d6874b1" class="t t">UnmergedPathsException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">when the current index contained unmerged paths (conflicts)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/ConcurrentRefUpdateException.cs.html#3c820c6954c55f0e" class="t t">ConcurrentRefUpdateException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> when HEAD or branch ref is updated concurrently by someone</span>
+		<span class="c">///</span><span class="c"> else</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#5d7264b257703642" class="t t">WrongRepositoryStateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">when repository is not in the right state for committing</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="e40c4c0200577029" href="../R/e40c4c0200577029.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a> <span id="r1 rd" class="r1 r">state</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>();
+			<b>if</b> (!<span class="r1 r">state</span>.<a href="../NGit/RepositoryState.cs.html#8930e02c3e9a28c6" class="i method">CanCommit</a>())
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#492e06b37585b147" class="t constructor">WrongRepositoryStateException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#c8ccc338b5e0d4ea" class="i field">cannotCommitOnARepoWithState</a>
+					, <span class="r1 r">state</span>.<a href="../NGit/RepositoryState.cs.html#0b85ffaef8cd8c87" class="i method">Name</a>()));
+			}
+			<a href="#9dab1b5c202ec78b" class="i method">ProcessOptions</a>(<span class="r1 r">state</span>);
+			<b>try</b>
+			{
+				<b>if</b> (<a href="#0a84edf33bb7102c" class="i field">all</a> &amp;&amp; !<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#43a291a7908a4137" class="i property">IsBare</a> &amp;&amp; <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a> != <b>null</b>)
+				{
+					<a href="Git.cs.html#18b9e250069d6406" class="t t">Git</a> <span id="r2 rd" class="r2 r">git</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+					<b>try</b>
+					{
+						<span class="r2 r">git</span>.<a href="Git.cs.html#a2b6b29df084dc8e" class="i method">Add</a>().<a href="AddCommand.cs.html#5b52c0ebb9b3e931" class="i method">AddFilepattern</a>(<span class="s">&quot;.&quot;</span>).<a href="AddCommand.cs.html#9a1bd018b32f731f" class="i method">SetUpdate</a>(<b>true</b>).<a href="AddCommand.cs.html#c13f9270b6ef3c32" class="i method">Call</a>();
+					}
+					<b>catch</b> (<a href="../NGit.Api.Errors/NoFilepatternException.cs.html#546790c750197679" class="t t">NoFilepatternException</a> <span id="r3 rd" class="r3 r">e</span>)
+					{
+						<span class="c">// should really not happen</span>
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r3 r">e</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r3 r">e</span>);
+					}
+				}
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r4 rd" class="r4 r">head</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<b>if</b> (<span class="r4 r">head</span> == <b>null</b>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#65a573bc59a8e4d4" class="i field">commitOnRepoWithoutHEADCurrentlyNotSupported</a>
+						);
+				}
+				<span class="c">// determine the current HEAD and the commit it is referring to</span>
+				<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r5 rd" class="r5 r">headId</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a> + <span class="s">&quot;^{commit}&quot;</span>);
+				<b>if</b> (<span class="r5 r">headId</span> != <b>null</b>)
+				{
+					<b>if</b> (<a href="#19c2fb94c3f9b206" class="i field">amend</a>)
+					{
+						<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r6 rd" class="r6 r">previousCommit</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>).<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r5 r">headId</span>);
+						<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>[] <span id="r7 rd" class="r7 r">p</span> = <span class="r6 r">previousCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#e74121c77ffd35f6" class="i property">Parents</a>;
+						<b>for</b> (<b>int</b> <span id="r8 rd" class="r8 r">i</span> = 0; <span class="r8 r">i</span> &lt; <span class="r7 r">p</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r8 r">i</span>++)
+						{
+							<a href="#b3a5560b059b3f9f" class="i field">parents</a>.<a href="/Sharpen/A.html#1ae7ba487b86a391" class="i method">Add</a>(0, <span class="r7 r">p</span>[<span class="r8 r">i</span>].<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>);
+						}
+					}
+					<b>else</b>
+					{
+						<a href="#b3a5560b059b3f9f" class="i field">parents</a>.<a href="/Sharpen/A.html#1ae7ba487b86a391" class="i method">Add</a>(0, <span class="r5 r">headId</span>);
+					}
+				}
+				<span class="c">// lock the index</span>
+				<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r9 rd" class="r9 r">index</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>();
+				<b>try</b>
+				{
+					<b>if</b> (!<a href="#d4b4b8477fabf9eb" class="i field">only</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+					{
+						<span class="r9 r">index</span> = <a href="#1fce7b9f13d4a954" class="i method">CreateTemporaryIndex</a>(<span class="r5 r">headId</span>, <span class="r9 r">index</span>);
+					}
+					<a href="../NGit/ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r10 rd" class="r10 r">odi</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+					<b>try</b>
+					{
+						<span class="c">// Write the index as tree to the object database. This may</span>
+						<span class="c">// fail for example when the index contains unmerged paths</span>
+						<span class="c">// (unresolved conflicts)</span>
+						<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r11 rd" class="r11 r">indexTreeId</span> = <span class="r9 r">index</span>.<a href="../NGit.Dircache/DirCache.cs.html#fa79d579db025572" class="i method">WriteTree</a>(<span class="r10 r">odi</span>);
+						<b>if</b> (<a href="#a88d317f58b2c3d3" class="i field">insertChangeId</a>)
+						{
+							<a href="#104664a9bb096d50" class="i method">InsertChangeId</a>(<span class="r11 r">indexTreeId</span>);
+						}
+						<span class="c">// Create a Commit object, populate it and write it</span>
+						<span class="i n">NGit</span>.<a href="../NGit/CommitBuilder.cs.html#a21e673dc77b7b7f" class="t t">CommitBuilder</a> <span id="r12 rd" class="r12 r">commit</span> = <b>new</b> <span class="i n">NGit</span>.<a href="../NGit/CommitBuilder.cs.html#2f0072265ab41be8" class="t constructor">CommitBuilder</a>();
+						<span class="r12 r">commit</span>.<a href="../NGit/CommitBuilder.cs.html#e9c2e511cf4ebbc2" class="i property">Committer</a> = <a href="#f959a7111ec7e29b" class="i field">committer</a>;
+						<span class="r12 r">commit</span>.<a href="../NGit/CommitBuilder.cs.html#effb414c3f9560ed" class="i property">Author</a> = <a href="#b56125e5131de28b" class="i field">author</a>;
+						<span class="r12 r">commit</span>.<a href="../NGit/CommitBuilder.cs.html#af2184e168db8d44" class="i property">Message</a> = <a href="#ca83d1b612a2b3cc" class="i field">message</a>;
+						<span class="r12 r">commit</span>.<a href="../NGit/CommitBuilder.cs.html#95ab2c03bb25c76f" class="i method">SetParentIds</a>(<a href="#b3a5560b059b3f9f" class="i field">parents</a>);
+						<span class="r12 r">commit</span>.<a href="../NGit/CommitBuilder.cs.html#4071857fdab70715" class="i property">TreeId</a> = <span class="r11 r">indexTreeId</span>;
+						<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r13 rd" class="r13 r">commitId</span> = <span class="r10 r">odi</span>.<a href="../NGit/ObjectInserter.cs.html#36cbe37cd220cf65" class="i method">Insert</a>(<span class="r12 r">commit</span>);
+						<span class="r10 r">odi</span>.<a href="../NGit/ObjectInserter.cs.html#4c38ca2633c7a828" class="i method">Flush</a>();
+						<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r14 rd" class="r14 r">revWalk</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+						<b>try</b>
+						{
+							<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r15 rd" class="r15 r">revCommit</span> = <span class="r14 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r13 r">commitId</span>);
+							<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r16 rd" class="r16 r">ru</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#e507581ff50608bc" class="i method">UpdateRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+							<span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r13 r">commitId</span>);
+							<b>if</b> (<a href="#0e40018243241fe7" class="i field">reflogComment</a> != <b>null</b>)
+							{
+								<span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#05bba7b15544fe2d" class="i method">SetRefLogMessage</a>(<a href="#0e40018243241fe7" class="i field">reflogComment</a>, <b>false</b>);
+							}
+							<b>else</b>
+							{
+								<b>string</b> <span id="r17 rd" class="r17 r">prefix</span> = <a href="#19c2fb94c3f9b206" class="i field">amend</a> ? <span class="s">&quot;commit (amend): &quot;</span> : <span class="s">&quot;commit: &quot;</span>;
+								<span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#05bba7b15544fe2d" class="i method">SetRefLogMessage</a>(<span class="r17 r">prefix</span> + <span class="r15 r">revCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>(), <b>false</b>);
+							}
+							<b>if</b> (<span class="r5 r">headId</span> != <b>null</b>)
+							{
+								<span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#0755d2ab83b340b2" class="i method">SetExpectedOldObjectId</a>(<span class="r5 r">headId</span>);
+							}
+							<b>else</b>
+							{
+								<span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#0755d2ab83b340b2" class="i method">SetExpectedOldObjectId</a>(<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="../NGit/ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>);
+							}
+							<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a> <span id="r18 rd" class="r18 r">rc</span> = <span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#d4cc527448f83ba4" class="i method">ForceUpdate</a>();
+							<b>switch</b> (<span class="r18 r">rc</span>)
+							{
+								<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#896c2eb530d7a9bb" class="i field">NEW</a>:
+								<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+								<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+								{
+									<a href="GitCommand.cs.html#35e336747584c82b" class="i method">SetCallable</a>(<b>false</b>);
+									<b>if</b> (<span class="r1 r">state</span> == <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#494bc0b57cfa5bc6" class="i field">MERGING_RESOLVED</a>)
+									{
+										<span class="c">// Commit was successful. Now delete the files</span>
+										<span class="c">// used for merge commits</span>
+										<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#a69a7bc695e98273" class="i method">WriteMergeCommitMsg</a>(<b>null</b>);
+										<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#921c890dc2e1265d" class="i method">WriteMergeHeads</a>(<b>null</b>);
+									}
+									<b>else</b>
+									{
+										<b>if</b> (<span class="r1 r">state</span> == <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#ef0c3e7e491712d7" class="i field">CHERRY_PICKING_RESOLVED</a>)
+										{
+											<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#a69a7bc695e98273" class="i method">WriteMergeCommitMsg</a>(<b>null</b>);
+											<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#c1f9cc2d1e3d64cb" class="i method">WriteCherryPickHead</a>(<b>null</b>);
+										}
+									}
+									<b>return</b> <span class="r15 r">revCommit</span>;
+								}
+
+								<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#565fa79e7f9bdb40" class="i field">REJECTED</a>:
+								<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#b7f458761c28cf3d" class="i field">LOCK_FAILURE</a>:
+								{
+									<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/ConcurrentRefUpdateException.cs.html#99fd5318493de13c" class="t constructor">ConcurrentRefUpdateException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#33e38ac62fbfb89f" class="i field">couldNotLockHEAD</a>, <span class="r16 r">ru</span>.<a href="../NGit/RefUpdate.cs.html#89e50033d10f7def" class="i method">GetRef</a>
+										(), <span class="r18 r">rc</span>);
+								}
+
+								<b>default</b>:
+								{
+									<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#95abc848fee2820c" class="i field">updatingRefFailed</a>
+										, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>, <span class="r13 r">commitId</span>.<a href="../NGit/AnyObjectId.cs.html#4841cd162dad708b" class="i method">ToString</a>(), <span class="r18 r">rc</span>));
+								}
+							}
+						}
+						<b>finally</b>
+						{
+							<span class="r14 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+						}
+					}
+					<b>finally</b>
+					{
+						<span class="r10 r">odi</span>.<a href="../NGit/ObjectInserter.cs.html#6c4af6fea6d6eb44" class="i method">Release</a>();
+					}
+				}
+				<b>finally</b>
+				{
+					<span class="r9 r">index</span>.<a href="../NGit.Dircache/DirCache.cs.html#93697cefeab6d366" class="i method">Unlock</a>();
+				}
+			}
+			<b>catch</b> (<a href="../NGit.Errors/UnmergedPathException.cs.html#5386255eb045fac8" class="t t">UnmergedPathException</a> <span id="r19 rd" class="r19 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/UnmergedPathsException.cs.html#66260736ed676480" class="t constructor">UnmergedPathsException</a>(<span class="r19 r">e</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r20 rd" class="r20 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#d6211b0fdbd806c8" class="i field">exceptionCaughtDuringExecutionOfCommitCommand</a>
+					, <span class="r20 r">e</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="104664a9bb096d50" href="../R/104664a9bb096d50.html" target="n" data-glyph="76,1" class="i method">InsertChangeId</a>(<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r21 rd" class="r21 r">treeId</span>)
+		{
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r22 rd" class="r22 r">firstParentId</span> = <b>null</b>;
+			<b>if</b> (!<a href="#b3a5560b059b3f9f" class="i field">parents</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+			{
+				<span class="r22 r">firstParentId</span> = <a href="#b3a5560b059b3f9f" class="i field">parents</a>[0];
+			}
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r23 rd" class="r23 r">changeId</span> = <a href="../NGit.Util/ChangeIdUtil.cs.html#d8240958e0d99da3" class="t t">ChangeIdUtil</a>.<a href="../NGit.Util/ChangeIdUtil.cs.html#7610bf9ab06774ea" class="i method">ComputeChangeId</a>(<span class="r21 r">treeId</span>, <span class="r22 r">firstParentId</span>, <a href="#b56125e5131de28b" class="i field">author</a>, <a href="#f959a7111ec7e29b" class="i field">committer</a>
+				, <a href="#ca83d1b612a2b3cc" class="i field">message</a>);
+			<a href="#ca83d1b612a2b3cc" class="i field">message</a> = <a href="../NGit.Util/ChangeIdUtil.cs.html#d8240958e0d99da3" class="t t">ChangeIdUtil</a>.<a href="../NGit.Util/ChangeIdUtil.cs.html#678dc954d154a0e0" class="i method">InsertId</a>(<a href="#ca83d1b612a2b3cc" class="i field">message</a>, <span class="r23 r">changeId</span>);
+			<b>if</b> (<span class="r23 r">changeId</span> != <b>null</b>)
+			{
+				<a href="#ca83d1b612a2b3cc" class="i field">message</a> = <a href="#ca83d1b612a2b3cc" class="i field">message</a>.<a href="/Sharpen/A.html#ff896b32bd2fb5ed" class="i method">ReplaceAll</a>(<span class="s">&quot;\nChange-Id: I&quot;</span> + <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="../NGit/ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>.<a href="../NGit/AnyObjectId.cs.html#4e9c38ea87ec4f33" class="i method">GetName</a>() + <span class="s">&quot;\n&quot;</span>, 
+					<span class="s">&quot;\nChange-Id: I&quot;</span> + <span class="r23 r">changeId</span>.<a href="../NGit/AnyObjectId.cs.html#4e9c38ea87ec4f33" class="i method">GetName</a>() + <span class="s">&quot;\n&quot;</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <a id="1fce7b9f13d4a954" href="../R/1fce7b9f13d4a954.html" target="n" data-glyph="76,1" class="i method">CreateTemporaryIndex</a>(<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r24 rd" class="r24 r">headId</span>, <a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r25 rd" class="r25 r">index</span>)
+		{
+			<a href="../NGit/ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r26 rd" class="r26 r">inserter</span> = <b>null</b>;
+			<span class="c">// get DirCacheEditor to modify the index if required</span>
+			<a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a> <span id="r27 rd" class="r27 r">dcEditor</span> = <span class="r25 r">index</span>.<a href="../NGit.Dircache/DirCache.cs.html#bc3e720b591f7011" class="i method">Editor</a>();
+			<span class="c">// get DirCacheBuilder for newly created in-core index to build a</span>
+			<span class="c">// temporary index for this commit</span>
+			<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r28 rd" class="r28 r">inCoreIndex</span> = <a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a>.<a href="../NGit.Dircache/DirCache.cs.html#a0f8b9d546656a02" class="i method">NewInCore</a>();
+			<a href="../NGit.Dircache/DirCacheBuilder.cs.html#e3f5bf3a79977857" class="t t">DirCacheBuilder</a> <span id="r29 rd" class="r29 r">dcBuilder</span> = <span class="r28 r">inCoreIndex</span>.<a href="../NGit.Dircache/DirCache.cs.html#77287325bfe763ea" class="i method">Builder</a>();
+			<a href="#78849b86062d7a49" class="i field">onlyProcessed</a> = <b>new</b> <b>bool</b>[<a href="#d4b4b8477fabf9eb" class="i field">only</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>];
+			<b>bool</b> <span id="r30 rd" class="r30 r">emptyCommit</span> = <b>true</b>;
+			<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r31 rd" class="r31 r">treeWalk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#a3ef4fc16aa4c2b5" class="t constructor">TreeWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<b>int</b> <span id="r32 rd" class="r32 r">dcIdx</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#8bfe310b8b94624c" class="t constructor">DirCacheIterator</a>(<span class="r25 r">index</span>));
+			<b>int</b> <span id="r33 rd" class="r33 r">fIdx</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Treewalk/FileTreeIterator.cs.html#b46cb8801d309325" class="t constructor">FileTreeIterator</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>));
+			<b>int</b> <span id="r34 rd" class="r34 r">hIdx</span> = -1;
+			<b>if</b> (<span class="r24 r">headId</span> != <b>null</b>)
+			{
+				<span class="r34 r">hIdx</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#60bae0462baed659" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>).<a href="../NGit.Revwalk/RevWalk.cs.html#8e6c53ca5bb2bfc4" class="i method">ParseTree</a>(<span class="r24 r">headId</span>));
+			}
+			<span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+			<b>while</b> (<span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<b>string</b> <span id="r35 rd" class="r35 r">path</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>;
+				<span class="c">// check if current entry&#39;s path matches a specified path</span>
+				<b>int</b> <span id="r36 rd" class="r36 r">pos</span> = <a href="#2acf3332b3250c99" class="i method">LookupOnly</a>(<span class="r35 r">path</span>);
+				<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r37 rd" class="r37 r">hTree</span> = <b>null</b>;
+				<b>if</b> (<span class="r34 r">hIdx</span> != -1)
+				{
+					<span class="r37 r">hTree</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a>&gt;(<span class="r34 r">hIdx</span>);
+				}
+				<b>if</b> (<span class="r36 r">pos</span> &gt;= 0)
+				{
+					<span class="c">// include entry in commit</span>
+					<a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a> <span id="r38 rd" class="r38 r">dcTree</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a>&gt;(<span class="r32 r">dcIdx</span>);
+					<a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a> <span id="r39 rd" class="r39 r">fTree</span> = <span class="r31 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a>&gt;(<span class="r33 r">fIdx</span>);
+					<span class="c">// check if entry refers to a tracked file</span>
+					<b>bool</b> <span id="r40 rd" class="r40 r">tracked</span> = <span class="r38 r">dcTree</span> != <b>null</b> || <span class="r37 r">hTree</span> != <b>null</b>;
+					<b>if</b> (!<span class="r40 r">tracked</span>)
+					{
+						<b>break</b>;
+					}
+					<b>if</b> (<span class="r39 r">fTree</span> != <b>null</b>)
+					{
+						<span class="c">// create a new DirCacheEntry with data retrieved from disk</span>
+						<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r41 rd" class="r41 r">dcEntry</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheEntry.cs.html#1f85e539e49fc131" class="t constructor">DirCacheEntry</a>(<span class="r35 r">path</span>);
+						<b>long</b> <span id="r42 rd" class="r42 r">entryLength</span> = <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#091c53974861272d" class="i method">GetEntryLength</a>();
+						<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#656978b572dc279a" class="i method">SetLength</a>(<span class="r42 r">entryLength</span>);
+						<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#f0bd7533a75c2ae5" class="i property">LastModified</a> = <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#3eb5e4e094989509" class="i method">GetEntryLastModified</a>();
+						<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#d64ac705edad125d" class="i property">FileMode</a> = <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#97c9db879ec4c3a4" class="i method">GetIndexFileMode</a>(<span class="r38 r">dcTree</span>);
+						<b>bool</b> <span id="r43 rd" class="r43 r">objectExists</span> = (<span class="r38 r">dcTree</span> != <b>null</b> &amp;&amp; <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#29981bbb9e6bf35f" class="i method">IdEqual</a>(<span class="r38 r">dcTree</span>)) || (<span class="r37 r">hTree</span> != <b>null</b> &amp;&amp;
+							 <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#29981bbb9e6bf35f" class="i method">IdEqual</a>(<span class="r37 r">hTree</span>));
+						<b>if</b> (<span class="r43 r">objectExists</span>)
+						{
+							<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>);
+						}
+						<b>else</b>
+						{
+							<b>if</b> (<a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a>.<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#d64ac705edad125d" class="i property">FileMode</a>))
+							{
+								<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>);
+							}
+							<b>else</b>
+							{
+								<span class="c">// insert object</span>
+								<b>if</b> (<span class="r26 r">inserter</span> == <b>null</b>)
+								{
+									<span class="r26 r">inserter</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eabc65c069acaa26" class="i method">NewObjectInserter</a>();
+								}
+								<b>long</b> <span id="r44 rd" class="r44 r">contentLength</span> = <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#9625f8a5883ab2be" class="i method">GetEntryContentLength</a>();
+								<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r45 rd" class="r45 r">inputStream</span> = <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#2c615e03b3256b3d" class="i method">OpenEntryStream</a>();
+								<b>try</b>
+								{
+									<span class="r41 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<span class="r26 r">inserter</span>.<a href="../NGit/ObjectInserter.cs.html#fb2dcf0d4b0844fa" class="i method">Insert</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>, <span class="r44 r">contentLength</span>, <span class="r45 r">inputStream</span>
+										));
+								}
+								<b>finally</b>
+								{
+									<span class="r45 r">inputStream</span>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+								}
+							}
+						}
+						<span class="c">// update index</span>
+						<span class="r27 r">dcEditor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#21a67cfbbba09c6d" class="i method">Add</a>(<b>new</b> <a href="#cd951c509867c162" class="t constructor">_PathEdit_369</a>(<span class="r41 r">dcEntry</span>, <span class="r35 r">path</span>));
+						<span class="c">// add to temporary in-core index</span>
+						<span class="r29 r">dcBuilder</span>.<a href="../NGit.Dircache/DirCacheBuilder.cs.html#5ec3789c01fe5f74" class="i method">Add</a>(<span class="r41 r">dcEntry</span>);
+						<b>if</b> (<span class="r30 r">emptyCommit</span> &amp;&amp; (<span class="r37 r">hTree</span> == <b>null</b> || !<span class="r37 r">hTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#29981bbb9e6bf35f" class="i method">IdEqual</a>(<span class="r39 r">fTree</span>) || <span class="r37 r">hTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#d0acd791c7674d13" class="i property">EntryRawMode</a> 
+							!= <span class="r39 r">fTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#d0acd791c7674d13" class="i property">EntryRawMode</a>))
+						{
+							<span class="c">// this is a change</span>
+							<span class="r30 r">emptyCommit</span> = <b>false</b>;
+						}
+					}
+					<b>else</b>
+					{
+						<span class="c">// if no file exists on disk, remove entry from index and</span>
+						<span class="c">// don&#39;t add it to temporary in-core index</span>
+						<span class="r27 r">dcEditor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#21a67cfbbba09c6d" class="i method">Add</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#c64bacb9f5f974aa" class="t constructor">DeletePath</a>(<span class="r35 r">path</span>));
+						<b>if</b> (<span class="r30 r">emptyCommit</span> &amp;&amp; <span class="r37 r">hTree</span> != <b>null</b>)
+						{
+							<span class="c">// this is a change</span>
+							<span class="r30 r">emptyCommit</span> = <b>false</b>;
+						}
+					}
+					<span class="c">// keep track of processed path</span>
+					<a href="#78849b86062d7a49" class="i field">onlyProcessed</a>[<span class="r36 r">pos</span>] = <b>true</b>;
+				}
+				<b>else</b>
+				{
+					<span class="c">// add entries from HEAD for all other paths</span>
+					<b>if</b> (<span class="r37 r">hTree</span> != <b>null</b>)
+					{
+						<span class="c">// create a new DirCacheEntry with data retrieved from HEAD</span>
+						<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r46 rd" class="r46 r">dcEntry</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheEntry.cs.html#1f85e539e49fc131" class="t constructor">DirCacheEntry</a>(<span class="r35 r">path</span>);
+						<span class="r46 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<span class="r37 r">hTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>);
+						<span class="r46 r">dcEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#d64ac705edad125d" class="i property">FileMode</a> = <span class="r37 r">hTree</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#5f740308b516a2ae" class="i property">EntryFileMode</a>;
+						<span class="c">// add to temporary in-core index</span>
+						<span class="r29 r">dcBuilder</span>.<a href="../NGit.Dircache/DirCacheBuilder.cs.html#5ec3789c01fe5f74" class="i method">Add</a>(<span class="r46 r">dcEntry</span>);
+					}
+				}
+			}
+			<span class="c">// there must be no unprocessed paths left at this point; otherwise an</span>
+			<span class="c">// untracked or unknown path has been specified</span>
+			<b>for</b> (<b>int</b> <span id="r47 rd" class="r47 r">i</span> = 0; <span class="r47 r">i</span> &lt; <a href="#78849b86062d7a49" class="i field">onlyProcessed</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r47 r">i</span>++)
+			{
+				<b>if</b> (!<a href="#78849b86062d7a49" class="i field">onlyProcessed</a>[<span class="r47 r">i</span>])
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#eb9f452bc20e0d95" class="i field">entryNotFoundByPath</a>
+						, <a href="#d4b4b8477fabf9eb" class="i field">only</a><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r47 r">i</span>]));
+				}
+			}
+			<span class="c">// there must be at least one change</span>
+			<b>if</b> (<span class="r30 r">emptyCommit</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#2dff9ba0a863569e" class="i field">emptyCommit</a>);
+			}
+			<span class="c">// update index</span>
+			<span class="r27 r">dcEditor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#539b9ab91fdde821" class="i method">Commit</a>();
+			<span class="c">// finish temporary in-core index used for this commit</span>
+			<span class="r29 r">dcBuilder</span>.<a href="../NGit.Dircache/DirCacheBuilder.cs.html#53065d1c017efad0" class="i method">Finish</a>();
+			<b>return</b> <span class="r28 r">inCoreIndex</span>;
+		}
+
+		<b>private sealed class</b> <a id="e70cc69944c4a0a7" href="../R/e70cc69944c4a0a7.html" target="n" data-glyph="4,1" class="t t">_PathEdit_369</a> : <a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#f871798ba8839c56" class="t t">PathEdit</a>
+		{
+			<b>public</b> <a id="cd951c509867c162" href="../R/cd951c509867c162.html" target="n" data-glyph="72,2" class="i constructor">_PathEdit_369</a>(<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r48 rd" class="r48 r">dcEntry</span>, <b>string</b> <span id="r49 rd" class="r49 r">baseArg1</span>) : <a href="../NGit.Dircache/DirCacheEditor.cs.html#ccd803fd5aad55a2" class="k">base</a>(<span class="r49 r">baseArg1</span>)
+			{
+				<a href="#e70cc69944c4a0a7" class="k">this</a>.<a href="#eaad5b7adca26028" class="i field">dcEntry</a> = <span class="r48 r">dcEntry</span>;
+			}
+
+			<b>public override void</b> <a id="04b006dd7e5243b7" href="../R/04b006dd7e5243b7.html" target="n" data-glyph="72,2" class="i method">Apply</a>(<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r50 rd" class="r50 r">ent</span>)
+			{
+				<span class="r50 r">ent</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#0feb3a69664afd1a" class="i method">CopyMetaData</a>(<a href="#eaad5b7adca26028" class="i field">dcEntry</a>);
+			}
+
+			<b>private readonly</b> <a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <a id="eaad5b7adca26028" href="../R/eaad5b7adca26028.html" target="n" data-glyph="46,2" class="i field">dcEntry</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Look an entry&#39;s path up in the list of paths specified by the --only/ -o</span>
+		<span class="c">///</span><span class="c"> option</span>
+		<span class="c">///</span><span class="c"> In case the complete (file) path (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Look an entry&#39;s path up in the list of paths specified by the --only/ -o</span>
+		<span class="c">///</span><span class="c"> option</span>
+		<span class="c">///</span><span class="c"> In case the complete (file) path (e.g. &quot;d1/d2/f1&quot;) cannot be found in</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">only</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">, lookup is also tried with (parent) directory paths</span>
+		<span class="c">///</span><span class="c"> (e.g. &quot;d1/d2&quot; and &quot;d1&quot;).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r51 r">pathString</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">entry&#39;s path</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the item&#39;s index in </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">only</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">; -1 if no item matches</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="2acf3332b3250c99" href="../R/2acf3332b3250c99.html" target="n" data-glyph="76,1" class="i method">LookupOnly</a>(<b>string</b> <span id="r51 rd" class="r51 r">pathString</span>)
+		{
+			<b>int</b> <span id="r52 rd" class="r52 r">i</span> = 0;
+			<b>foreach</b> (<b>string</b> <span id="r53 rd" class="r53 r">o</span> <b>in</b> <a href="#d4b4b8477fabf9eb" class="i field">only</a>)
+			{
+				<b>string</b> <span id="r54 rd" class="r54 r">p</span> = <span class="r51 r">pathString</span>;
+				<b>while</b> (<b>true</b>)
+				{
+					<b>if</b> (<span class="r54 r">p</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r53 r">o</span>))
+					{
+						<b>return</b> <span class="r52 r">i</span>;
+					}
+					<b>int</b> <span id="r55 rd" class="r55 r">l</span> = <span class="r54 r">p</span>.<a href="@0@mscorlib/A.html#750750cd39244ac4" class="i method">LastIndexOf</a>(<span class="s">&quot;/&quot;</span>);
+					<b>if</b> (<span class="r55 r">l</span> &lt; 1)
+					{
+						<b>break</b>;
+					}
+					<span class="r54 r">p</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r54 r">p</span>, 0, <span class="r55 r">l</span>);
+				}
+				<span class="r52 r">i</span>++;
+			}
+			<b>return</b> -1;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Sets default values for not explicitly specified options.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sets default values for not explicitly specified options. Then validates</span>
+		<span class="c">///</span><span class="c"> that all required data has been provided.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r56 r">state</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the state of the repository we are working on</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoMessageException.cs.html#1bb1c0288a90560e" class="t t">NoMessageException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">if the commit message has not been specified</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="9dab1b5c202ec78b" href="../R/9dab1b5c202ec78b.html" target="n" data-glyph="76,1" class="i method">ProcessOptions</a>(<a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a> <span id="r56 rd" class="r56 r">state</span>)
+		{
+			<b>if</b> (<a href="#f959a7111ec7e29b" class="i field">committer</a> == <b>null</b>)
+			{
+				<a href="#f959a7111ec7e29b" class="i field">committer</a> = <b>new</b> <a href="../NGit/PersonIdent.cs.html#46244566b24c4ed2" class="t constructor">PersonIdent</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			}
+			<b>if</b> (<a href="#b56125e5131de28b" class="i field">author</a> == <b>null</b>)
+			{
+				<a href="#b56125e5131de28b" class="i field">author</a> = <a href="#f959a7111ec7e29b" class="i field">committer</a>;
+			}
+			<span class="c">// when doing a merge commit parse MERGE_HEAD and MERGE_MSG files</span>
+			<b>if</b> (<span class="r56 r">state</span> == <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#494bc0b57cfa5bc6" class="i field">MERGING_RESOLVED</a>)
+			{
+				<b>try</b>
+				{
+					<a href="#b3a5560b059b3f9f" class="i field">parents</a> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#d91746a915aec38f" class="i method">ReadMergeHeads</a>();
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r57 rd" class="r57 r">e</span>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#5c7ac21a4d3ff0a9" class="i field">exceptionOccurredDuringReadingOfGIT_DIR</a>
+						, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#f407d948c31d785b" class="i field">MERGE_HEAD</a>, <span class="r57 r">e</span>), <span class="r57 r">e</span>);
+				}
+				<b>if</b> (<a href="#ca83d1b612a2b3cc" class="i field">message</a> == <b>null</b>)
+				{
+					<b>try</b>
+					{
+						<a href="#ca83d1b612a2b3cc" class="i field">message</a> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#c8350a3ef16a0b9a" class="i method">ReadMergeCommitMsg</a>();
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r58 rd" class="r58 r">e</span>)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#5c7ac21a4d3ff0a9" class="i field">exceptionOccurredDuringReadingOfGIT_DIR</a>
+							, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#394b1cc198c7de64" class="i field">MERGE_MSG</a>, <span class="r58 r">e</span>), <span class="r58 r">e</span>);
+					}
+				}
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<span class="r56 r">state</span> == <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#d964a81e36d8cb7a" class="i field">SAFE</a> &amp;&amp; <a href="#ca83d1b612a2b3cc" class="i field">message</a> == <b>null</b>)
+				{
+					<b>try</b>
+					{
+						<a href="#ca83d1b612a2b3cc" class="i field">message</a> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#73817c2a24f782cf" class="i method">ReadSquashCommitMsg</a>();
+						<b>if</b> (<a href="#ca83d1b612a2b3cc" class="i field">message</a> != <b>null</b>)
+						{
+							<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#f15bdebce3a25520" class="i method">WriteSquashCommitMsg</a>(<b>null</b>);
+						}
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r59 rd" class="r59 r">e</span>)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#5c7ac21a4d3ff0a9" class="i field">exceptionOccurredDuringReadingOfGIT_DIR</a>
+							, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#394b1cc198c7de64" class="i field">MERGE_MSG</a>, <span class="r59 r">e</span>), <span class="r59 r">e</span>);
+					}
+				}
+			}
+			<b>if</b> (<a href="#ca83d1b612a2b3cc" class="i field">message</a> == <b>null</b>)
+			{
+				<span class="c">// as long as we don&#39;t support -C option we have to have</span>
+				<span class="c">// an explicit message</span>
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoMessageException.cs.html#bedfd2556ab60c92" class="t constructor">NoMessageException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#9d6338658219fb3d" class="i field">commitMessageNotSpecified</a>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r60 r">message</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the commit message used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="ac81c562a4b857d0" href="../R/ac81c562a4b857d0.html" target="n" data-glyph="72,1" class="i method">SetMessage</a>(<b>string</b> <span id="r60 rd" class="r60 r">message</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#ca83d1b612a2b3cc" class="i field">message</a> = <span class="r60 r">message</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the commit message used for the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="9c07a17ec8edfb71" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetMessage</a>()
+		{
+			<b>return</b> <a href="#ca83d1b612a2b3cc" class="i field">message</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sets the committer for this</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If no committer is explicitly</span>
+		<span class="c">///</span><span class="c"> specified because this method is never called or called with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> value then the committer will be deduced from config info in repository,</span>
+		<span class="c">///</span><span class="c"> with current time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r61 r">committer</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the committer used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="3778d620e110c032" href="../R/3778d620e110c032.html" target="n" data-glyph="72,1" class="i method">SetCommitter</a>(<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r61 rd" class="r61 r">committer</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#f959a7111ec7e29b" class="i field">committer</a> = <span class="r61 r">committer</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sets the committer for this</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If no committer is explicitly</span>
+		<span class="c">///</span><span class="c"> specified because this method is never called or called with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> value then the committer will be deduced from config info in repository,</span>
+		<span class="c">///</span><span class="c"> with current time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r62 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the name of the committer used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r63 r">email</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the email of the committer used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="c5b37109925bc57a" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetCommitter</a>(<b>string</b> <span id="r62 rd" class="r62 r">name</span>, <b>string</b> <span id="r63 rd" class="r63 r">email</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>return</b> <a href="#3778d620e110c032" class="i method">SetCommitter</a>(<b>new</b> <a href="../NGit/PersonIdent.cs.html#52b029e459616543" class="t constructor">PersonIdent</a>(<span class="r62 r">name</span>, <span class="r63 r">email</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the committer used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If no committer was</span>
+		<span class="c">///</span><span class="c"> specified</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is returned and the default</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.PersonIdent</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> of this repo is used during execution of the</span>
+		<span class="c">///</span><span class="c"> command</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="23abe3077c13ded1" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetCommitter</a>()
+		{
+			<b>return</b> <a href="#f959a7111ec7e29b" class="i field">committer</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sets the author for this</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If no author is explicitly</span>
+		<span class="c">///</span><span class="c"> specified because this method is never called or called with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> value then the author will be set to the committer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r64 r">author</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the author used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="3f837586aa967755" href="../R/3f837586aa967755.html" target="n" data-glyph="72,1" class="i method">SetAuthor</a>(<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r64 rd" class="r64 r">author</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#b56125e5131de28b" class="i field">author</a> = <span class="r64 r">author</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sets the author for this</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If no author is explicitly</span>
+		<span class="c">///</span><span class="c"> specified because this method is never called or called with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> value then the author will be set to the committer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r65 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the name of the author used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r66 r">email</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the email of the author used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="931d70e87d962cb4" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetAuthor</a>(<b>string</b> <span id="r65 rd" class="r65 r">name</span>, <b>string</b> <span id="r66 rd" class="r66 r">email</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>return</b> <a href="#3f837586aa967755" class="i method">SetAuthor</a>(<b>new</b> <a href="../NGit/PersonIdent.cs.html#52b029e459616543" class="t constructor">PersonIdent</a>(<span class="r65 r">name</span>, <span class="r66 r">email</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the author used for the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">commit</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If no author was</span>
+		<span class="c">///</span><span class="c"> specified</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is returned and the default</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.PersonIdent</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> of this repo is used during execution of the</span>
+		<span class="c">///</span><span class="c"> command</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="ca275c3c4ecaeac9" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetAuthor</a>()
+		{
+			<b>return</b> <a href="#b56125e5131de28b" class="i field">author</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If set to true the Commit command automatically stages files that have</span>
+		<span class="c">///</span><span class="c"> been modified and deleted, but new files not known by the repository are</span>
+		<span class="c">///</span><span class="c"> not affected.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If set to true the Commit command automatically stages files that have</span>
+		<span class="c">///</span><span class="c"> been modified and deleted, but new files not known by the repository are</span>
+		<span class="c">///</span><span class="c"> not affected. This corresponds to the parameter -a on the command line.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r67 r">all</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/JGitInternalException.cs.html#d0350a945a011036" class="t t">JGitInternalException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">in case of an illegal combination of arguments/ options</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="f20899901926eaa1" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetAll</a>(<b>bool</b> <span id="r67 rd" class="r67 r">all</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>if</b> (!<a href="#d4b4b8477fabf9eb" class="i field">only</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#41897b9666efed82" class="i field">illegalCombinationOfArguments</a>
+					, <span class="s">&quot;--all&quot;</span>, <span class="s">&quot;--only&quot;</span>));
+			}
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#0a84edf33bb7102c" class="i field">all</a> = <span class="r67 r">all</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Used to amend the tip of the current branch.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Used to amend the tip of the current branch. If set to true, the previous</span>
+		<span class="c">///</span><span class="c"> commit will be amended. This is equivalent to --amend on the command</span>
+		<span class="c">///</span><span class="c"> line.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r68 r">amend</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="b1ba47acc9a4ac5d" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetAmend</a>(<b>bool</b> <span id="r68 rd" class="r68 r">amend</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#19c2fb94c3f9b206" class="i field">amend</a> = <span class="r68 r">amend</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Commit dedicated path only</span>
+		<span class="c">///</span><span class="c"> This method can be called several times to add multiple paths.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Commit dedicated path only</span>
+		<span class="c">///</span><span class="c"> This method can be called several times to add multiple paths. Full file</span>
+		<span class="c">///</span><span class="c"> paths are supported as well as directory paths; in the latter case this</span>
+		<span class="c">///</span><span class="c"> commits all files/ directories below the specified path.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r69 r">only</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">path to commit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="f77cdb68cf232fd7" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetOnly</a>(<b>string</b> <span id="r69 rd" class="r69 r">only</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>if</b> (<a href="#0a84edf33bb7102c" class="i field">all</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#41897b9666efed82" class="i field">illegalCombinationOfArguments</a>
+					, <span class="s">&quot;--only&quot;</span>, <span class="s">&quot;--all&quot;</span>));
+			}
+			<b>string</b> <span id="r70 rd" class="r70 r">o</span> = <span class="r69 r">only</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<span class="s">&quot;/&quot;</span>) ? <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r69 r">only</span>, 0, <span class="r69 r">only</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 
+				1) : <span class="r69 r">only</span>;
+			<span class="c">// ignore duplicates</span>
+			<b>if</b> (!<a href="#d08844820ce75396" class="k">this</a>.<a href="#d4b4b8477fabf9eb" class="i field">only</a>.<a href="@0@mscorlib/A.html#8f74065d140cfe04" class="i method">Contains</a>(<span class="r70 r">o</span>))
+			{
+				<a href="#d08844820ce75396" class="k">this</a>.<a href="#d4b4b8477fabf9eb" class="i field">only</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r70 r">o</span>);
+			}
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If set to true a change id will be inserted into the commit message</span>
+		<span class="c">///</span><span class="c"> An existing change id is not replaced.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If set to true a change id will be inserted into the commit message</span>
+		<span class="c">///</span><span class="c"> An existing change id is not replaced. An initial change id (I000...)</span>
+		<span class="c">///</span><span class="c"> will be replaced by the change id.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r71 r">insertChangeId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="252aa3835afa70aa" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetInsertChangeId</a>(<b>bool</b> <span id="r71 rd" class="r71 r">insertChangeId</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#a88d317f58b2c3d3" class="i field">insertChangeId</a> = <span class="r71 r">insertChangeId</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Override the message written to the reflog</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r72 r">reflogComment</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#d08844820ce75396" class="t t">CommitCommand</a> <a id="c4055e781a96b985" href="../R/c4055e781a96b985.html" target="n" data-glyph="72,1" class="i method">SetReflogComment</a>(<b>string</b> <span id="r72 rd" class="r72 r">reflogComment</span>)
+		{
+			<a href="#d08844820ce75396" class="k">this</a>.<a href="#0e40018243241fe7" class="i field">reflogComment</a> = <span class="r72 r">reflogComment</span>;
+			<b>return</b> <a href="#d08844820ce75396" class="k">this</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

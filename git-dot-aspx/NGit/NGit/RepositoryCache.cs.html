@@ -1,0 +1,522 @@
+﻿<!DOCTYPE html>
+<html><head><title>RepositoryCache.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(513);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/RepositoryCache.cs" target="_top">NGit\RepositoryCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Storage</span>.<span class="i n">File</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Cache of active</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Repository</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> instances.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="4c01ab3afc432af9" href="../R/4c01ab3afc432af9.html" target="n" data-glyph="0,0" class="t t">RepositoryCache</a>
+	{
+		<b>private static readonly</b> <span class="i n">NGit</span>.<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a> <a id="7e6147170c08427f" href="../R/7e6147170c08427f.html" target="n" data-glyph="46,1" class="i field">cache</a> = <b>new</b> <span class="i n">NGit</span>.<a href="#1bfdf9659c722995" class="t constructor">RepositoryCache</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Open an existing repository, reusing a cached instance if possible.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Open an existing repository, reusing a cached instance if possible.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When done with the repository, the caller must call</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Repository.Close()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to decrement the repository&#39;s usage counter.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">location</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> where the local repository is. Typically a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#ed0a654b22d9b660" class="t t">FileKey</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileKey</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the repository instance requested; caller must close when done.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the repository could not be read (likely its core.version</span>
+		<span class="c">///</span><span class="c"> property is not supported).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/RepositoryNotFoundException.cs.html#2c6e6f96d347ce78" class="t t">RepositoryNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">there is no repository at the given location.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="8cf3673ba17d1e1e" href="../R/8cf3673ba17d1e1e.html" target="n" data-glyph="72,1" class="i method">Open</a>(<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a> <span id="r0 rd" class="r0 r">location</span>)
+		{
+			<b>return</b> <a href="#eb6eb22aff49bf68" class="i method">Open</a>(<span class="r0 r">location</span>, <b>true</b>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Open a repository, reusing a cached instance if possible.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Open a repository, reusing a cached instance if possible.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When done with the repository, the caller must call</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Repository.Close()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to decrement the repository&#39;s usage counter.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">location</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> where the local repository is. Typically a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#ed0a654b22d9b660" class="t t">FileKey</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileKey</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">mustExist</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If true, and the repository is not found, throws</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">RepositoryNotFoundException</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . If false, a repository instance</span>
+		<span class="c">///</span><span class="c"> is created and registered anyway.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the repository instance requested; caller must close when done.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the repository could not be read (likely its core.version</span>
+		<span class="c">///</span><span class="c"> property is not supported).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/RepositoryNotFoundException.cs.html#2c6e6f96d347ce78" class="t t">RepositoryNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> There is no repository at the given location, only thrown if</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">mustExist</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is true.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="eb6eb22aff49bf68" href="../R/eb6eb22aff49bf68.html" target="n" data-glyph="72,1" class="i method">Open</a>(<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a> <span id="r1 rd" class="r1 r">location</span>, <b>bool</b> <span id="r2 rd" class="r2 r">mustExist</span>)
+		{
+			<b>return</b> <a href="#7e6147170c08427f" class="i field">cache</a>.<a href="#12f054e06ceb4cd6" class="i method">OpenRepository</a>(<span class="r1 r">location</span>, <span class="r2 r">mustExist</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Register one repository into the cache.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Register one repository into the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> During registration the cache automatically increments the usage counter,</span>
+		<span class="c">///</span><span class="c"> permitting it to retain the reference. A</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#ed0a654b22d9b660" class="t t">FileKey</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileKey</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> for the</span>
+		<span class="c">///</span><span class="c"> repository&#39;s</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="Repository.cs.html#1cdf65c5d26abd34" class="i property">Directory</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Repository.Directory()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is used to index the</span>
+		<span class="c">///</span><span class="c"> repository in the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If another repository already is registered in the cache at this</span>
+		<span class="c">///</span><span class="c"> location, the other instance is closed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">repository to register.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public static void</b> <a id="b909699e97254f53" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Register</a>(<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r3 rd" class="r3 r">db</span>)
+		{
+			<b>if</b> (<span class="r3 r">db</span>.<a href="Repository.cs.html#1cdf65c5d26abd34" class="i property">Directory</a> != <b>null</b>)
+			{
+				<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a> <span id="r4 rd" class="r4 r">key</span> = <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a>.<a href="#ab6071647f8fb293" class="i method">Exact</a>(<span class="r3 r">db</span>.<a href="Repository.cs.html#1cdf65c5d26abd34" class="i property">Directory</a>, <span class="r3 r">db</span>.<a href="Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>
+					);
+				<a href="#7e6147170c08427f" class="i field">cache</a>.<a href="#3ae9141ea10693b5" class="i method">RegisterRepository</a>(<span class="r4 r">key</span>, <span class="r3 r">db</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Remove a repository from the cache.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Remove a repository from the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Removes a repository from the cache, if it is still registered here,</span>
+		<span class="c">///</span><span class="c"> permitting it to close.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">repository to unregister.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public static void</b> <a id="7c744f485b32dfbd" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Close</a>(<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r5 rd" class="r5 r">db</span>)
+		{
+			<b>if</b> (<span class="r5 r">db</span>.<a href="Repository.cs.html#1cdf65c5d26abd34" class="i property">Directory</a> != <b>null</b>)
+			{
+				<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a> <span id="r6 rd" class="r6 r">key</span> = <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a>.<a href="#ab6071647f8fb293" class="i method">Exact</a>(<span class="r5 r">db</span>.<a href="Repository.cs.html#1cdf65c5d26abd34" class="i property">Directory</a>, <span class="r5 r">db</span>.<a href="Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>
+					);
+				<a href="#7e6147170c08427f" class="i field">cache</a>.<a href="#dcfe2e558d35dcc9" class="i method">UnregisterRepository</a>(<span class="r6 r">key</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Unregister all repositories from the cache.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Unregister all repositories from the cache.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public static void</b> <a id="e1d86a219bfb8f92" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Clear</a>()
+		{
+			<a href="#7e6147170c08427f" class="i field">cache</a>.<a href="#ce6e30ed9c4f0733" class="i method">ClearAll</a>();
+		}
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#ffbc61744bcb9ac4" class="t t">ConcurrentHashMap</a>&lt;<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a>, <a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt;&gt; <a id="e72d62879e49b72b" href="../R/e72d62879e49b72b.html" target="n" data-glyph="46,1" class="i field">cacheMap</a>;
+
+		<b>private readonly</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#e1eeca3060896362" class="t t">Lock</a>[] <a id="802c4ef7ef3b65f9" href="../R/802c4ef7ef3b65f9.html" target="n" data-glyph="46,1" class="i field">openLocks</a>;
+
+		<b>public</b> <a id="1bfdf9659c722995" href="../R/1bfdf9659c722995.html" target="n" data-glyph="72,1" class="i constructor">RepositoryCache</a>()
+		{
+			<a href="#e72d62879e49b72b" class="i field">cacheMap</a> = <b>new</b> <a href="/Sharpen/A.html#676963cf7ac3daa2" class="t constructor">ConcurrentHashMap</a>&lt;<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a>, <a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt;&gt;();
+			<a href="#802c4ef7ef3b65f9" class="i field">openLocks</a> = <b>new</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#e1eeca3060896362" class="t t">Lock</a>[4];
+			<b>for</b> (<b>int</b> <span id="r7 rd" class="r7 r">i</span> = 0; <span class="r7 r">i</span> &lt; <a href="#802c4ef7ef3b65f9" class="i field">openLocks</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r7 r">i</span>++)
+			{
+				<a href="#802c4ef7ef3b65f9" class="i field">openLocks</a>[<span class="r7 r">i</span>] = <b>new</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#e1eeca3060896362" class="t constructor">Lock</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="12f054e06ceb4cd6" href="../R/12f054e06ceb4cd6.html" target="n" data-glyph="76,1" class="i method">OpenRepository</a>(<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a> <span id="r8 rd" class="r8 r">location</span>, <b>bool</b> <span id="r9 rd" class="r9 r">mustExist</span>)
+		{
+			<a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt; <span id="r10 rd" class="r10 r">@ref</span> = <a href="#e72d62879e49b72b" class="i field">cacheMap</a>.<a href="/Sharpen/A.html#34c37c58512fcfe0" class="i method">Get</a>(<span class="r8 r">location</span>);
+			<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r11 rd" class="r11 r">db</span> = <span class="r10 r">@ref</span> != <b>null</b> ? <span class="r10 r">@ref</span>.<a href="/Sharpen/A.html#78116b6591d601fd" class="i method">Get</a>() : <b>null</b>;
+			<b>if</b> (<span class="r11 r">db</span> == <b>null</b>)
+			{
+				<b>lock</b> (<a href="#d598419cde66b466" class="i method">LockFor</a>(<span class="r8 r">location</span>))
+				{
+					<span class="r10 r">@ref</span> = <a href="#e72d62879e49b72b" class="i field">cacheMap</a>.<a href="/Sharpen/A.html#34c37c58512fcfe0" class="i method">Get</a>(<span class="r8 r">location</span>);
+					<span class="r11 r">db</span> = <span class="r10 r">@ref</span> != <b>null</b> ? <span class="r10 r">@ref</span>.<a href="/Sharpen/A.html#78116b6591d601fd" class="i method">Get</a>() : <b>null</b>;
+					<b>if</b> (<span class="r11 r">db</span> == <b>null</b>)
+					{
+						<span class="r11 r">db</span> = <span class="r8 r">location</span>.<a href="#bbf20212aea4f339" class="i method">Open</a>(<span class="r9 r">mustExist</span>);
+						<span class="r10 r">@ref</span> = <b>new</b> <a href="/Sharpen/A.html#9963e22c968a06d0" class="t constructor">SoftReference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt;(<span class="r11 r">db</span>);
+						<a href="#e72d62879e49b72b" class="i field">cacheMap</a>.<a href="/Sharpen/A.html#5db616293d74227d" class="i method">Put</a>(<span class="r8 r">location</span>, <span class="r10 r">@ref</span>);
+					}
+				}
+			}
+			<span class="r11 r">db</span>.<a href="Repository.cs.html#b03629e20822cca7" class="i method">IncrementOpen</a>();
+			<b>return</b> <span class="r11 r">db</span>;
+		}
+
+		<b>private void</b> <a id="3ae9141ea10693b5" href="../R/3ae9141ea10693b5.html" target="n" data-glyph="76,1" class="i method">RegisterRepository</a>(<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a> <span id="r12 rd" class="r12 r">location</span>, <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r13 rd" class="r13 r">db</span>)
+		{
+			<span class="r13 r">db</span>.<a href="Repository.cs.html#b03629e20822cca7" class="i method">IncrementOpen</a>();
+			<a href="/Sharpen/A.html#245fc89d113110f3" class="t t">SoftReference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt; <span id="r14 rd" class="r14 r">newRef</span> = <b>new</b> <a href="/Sharpen/A.html#9963e22c968a06d0" class="t constructor">SoftReference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt;(<span class="r13 r">db</span>);
+			<a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt; <span id="r15 rd" class="r15 r">oldRef</span> = <a href="#e72d62879e49b72b" class="i field">cacheMap</a>.<a href="/Sharpen/A.html#5db616293d74227d" class="i method">Put</a>(<span class="r12 r">location</span>, <span class="r14 r">newRef</span>);
+			<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r16 rd" class="r16 r">oldDb</span> = <span class="r15 r">oldRef</span> != <b>null</b> ? <span class="r15 r">oldRef</span>.<a href="/Sharpen/A.html#78116b6591d601fd" class="i method">Get</a>() : <b>null</b>;
+			<b>if</b> (<span class="r16 r">oldDb</span> != <b>null</b>)
+			{
+				<span class="r16 r">oldDb</span>.<a href="Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>();
+			}
+		}
+
+		<b>private void</b> <a id="dcfe2e558d35dcc9" href="../R/dcfe2e558d35dcc9.html" target="n" data-glyph="76,1" class="i method">UnregisterRepository</a>(<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a> <span id="r17 rd" class="r17 r">location</span>)
+		{
+			<a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt; <span id="r18 rd" class="r18 r">oldRef</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#a0d455a8d8645bff" class="i method">Remove</a>(<a href="#e72d62879e49b72b" class="i field">cacheMap</a>, <span class="r17 r">location</span>);
+			<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r19 rd" class="r19 r">oldDb</span> = <span class="r18 r">oldRef</span> != <b>null</b> ? <span class="r18 r">oldRef</span>.<a href="/Sharpen/A.html#78116b6591d601fd" class="i method">Get</a>() : <b>null</b>;
+			<b>if</b> (<span class="r19 r">oldDb</span> != <b>null</b>)
+			{
+				<span class="r19 r">oldDb</span>.<a href="Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>();
+			}
+		}
+
+		<b>private void</b> <a id="ce6e30ed9c4f0733" href="../R/ce6e30ed9c4f0733.html" target="n" data-glyph="76,1" class="i method">ClearAll</a>()
+		{
+			<b>for</b> (<b>int</b> <span id="r20 rd" class="r20 r">stage</span> = 0; <span class="r20 r">stage</span> &lt; 2; <span class="r20 r">stage</span>++)
+			{
+				<b>for</b> (<a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a>, <a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt;&gt;&gt; <span id="r21 rd" class="r21 r">i</span> = <a href="#e72d62879e49b72b" class="i field">cacheMap</a>
+					.<a href="/Sharpen/A.html#fc8f2c921d103340" class="i method">EntrySet</a>().<a href="/Sharpen/A.html#9e9a9722119e4290" class="i method">Iterator</a>(); <span class="r21 r">i</span>.<a href="/Sharpen/A.html#01d1ed1ee196fb09" class="i method">HasNext</a>(); )
+				{
+					<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a>, <a href="/Sharpen/A.html#dff5ce46feed2b93" class="t t">Reference</a>&lt;<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>&gt;&gt; <span id="r22 rd" class="r22 r">e</span> = <span class="r21 r">i</span>.<a href="/Sharpen/A.html#6360c9000cc5a921" class="i method">Next</a>();
+					<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r23 rd" class="r23 r">db</span> = <span class="r22 r">e</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a>.<a href="/Sharpen/A.html#78116b6591d601fd" class="i method">Get</a>();
+					<b>if</b> (<span class="r23 r">db</span> != <b>null</b>)
+					{
+						<span class="r23 r">db</span>.<a href="Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>();
+					}
+					<span class="r21 r">i</span>.<a href="/Sharpen/A.html#454f0949119cfce5" class="i method">Remove</a>();
+				}
+			}
+		}
+
+		<b>private</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#e1eeca3060896362" class="t t">Lock</a> <a id="d598419cde66b466" href="../R/d598419cde66b466.html" target="n" data-glyph="76,1" class="i method">LockFor</a>(<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a> <span id="r24 rd" class="r24 r">location</span>)
+		{
+			<b>return</b> <a href="#802c4ef7ef3b65f9" class="i field">openLocks</a>[((<b>int</b>)(((<b>uint</b>)<span class="r24 r">location</span>.<a href="@0@mscorlib/A.html#4de9cf234d0d8b16" class="i method">GetHashCode</a>()) &gt;&gt; 1)) % <a href="#802c4ef7ef3b65f9" class="i field">openLocks</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>];
+		}
+
+		<b>private class</b> <a id="e1eeca3060896362" href="../R/e1eeca3060896362.html" target="n" data-glyph="4,1" class="t t"><span id="939dd6084c419526">Lock</span></a>
+		{
+			<span class="c">// Used only for its monitor.</span>
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Abstract hash key for</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RepositoryCache</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> entries.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A Key instance should be lightweight, and implement hashCode() and</span>
+		<span class="c">///</span><span class="c"> equals() such that two Key instances are equal if they represent the same</span>
+		<span class="c">///</span><span class="c"> Repository location.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public interface</b> <a id="f9ae1e38878e96ce" href="../R/f9ae1e38878e96ce.html" target="n" data-glyph="48,1" class="t t">Key</a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Called by</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#8cf3673ba17d1e1e" class="i method">Open</a>(<a href="#f9ae1e38878e96ce" class="t t">Key</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RepositoryCache.Open(Key)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> if it doesn&#39;t exist yet.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> If a repository does not exist yet in the cache, the cache will call</span>
+			<span class="c">///</span><span class="c"> this method to acquire a handle to it.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">mustExist</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> true if the repository must exist in order to be opened;</span>
+			<span class="c">///</span><span class="c"> false if a new non-existent repository is permitted to be</span>
+			<span class="c">///</span><span class="c"> created (the caller is responsible for calling create).</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the new repository instance.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the repository could not be read (likely its core.version</span>
+			<span class="c">///</span><span class="c"> property is not supported).</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/RepositoryNotFoundException.cs.html#2c6e6f96d347ce78" class="t t">RepositoryNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> There is no repository at the given location, only thrown</span>
+			<span class="c">///</span><span class="c"> if</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">mustExist</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> is true.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="bbf20212aea4f339" href="../R/bbf20212aea4f339.html" target="n" data-glyph="72,2" class="i method">Open</a>(<b>bool</b> <span id="r25 rd" class="r25 r">mustExist</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Location of a Repository, using the standard java.io.File API.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Location of a Repository, using the standard java.io.File API.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public class</b> <a id="ed0a654b22d9b660" href="../R/ed0a654b22d9b660.html" target="n" data-glyph="0,1" class="t t">FileKey</a> : <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#f9ae1e38878e96ce" class="t t">Key</a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain a pointer to an exact location on disk.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Obtain a pointer to an exact location on disk.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> No guessing is performed, the given location is exactly the GIT_DIR</span>
+			<span class="c">///</span><span class="c"> directory of the repository.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r26 r">directory</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">location where the repository database is.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the file system abstraction which will be necessary to</span>
+			<span class="c">///</span><span class="c"> perform certain file system operations.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a key for the given directory.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a23ce2fabb5678e6" class="i method">Lenient</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a>, <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Lenient(Sharpen.FilePath, NGit.Util.FS)</span>
+			<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+			<b>public static</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a> <a id="ab6071647f8fb293" href="../R/ab6071647f8fb293.html" target="n" data-glyph="72,2" class="i method">Exact</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r26 rd" class="r26 r">directory</span>, <a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a> <span id="r27 rd" class="r27 r">fs</span>)
+			{
+				<b>return</b> <b>new</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#650c57dd8388b862" class="t constructor">FileKey</a>(<span class="r26 r">directory</span>, <span class="r27 r">fs</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain a pointer to a location on disk.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Obtain a pointer to a location on disk.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> The method performs some basic guessing to locate the repository.</span>
+			<span class="c">///</span><span class="c"> Searched paths are:</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ol</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> // assume exact match</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> + &quot;/.git&quot; // assume working directory</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> + &quot;.git&quot; // assume bare</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ol</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">directory</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">location where the repository database might be.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the file system abstraction which will be necessary to</span>
+			<span class="c">///</span><span class="c"> perform certain file system operations.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a key for the given directory.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#ab6071647f8fb293" class="i method">Exact</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a>, <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Exact(Sharpen.FilePath, NGit.Util.FS)</span>
+			<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+			<b>public static</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a> <a id="a23ce2fabb5678e6" href="../R/a23ce2fabb5678e6.html" target="n" data-glyph="72,2" class="i method">Lenient</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r28 rd" class="r28 r">directory</span>, <a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a> <span id="r29 rd" class="r29 r">fs</span>)
+			{
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r30 rd" class="r30 r">gitdir</span> = <a href="#2f25a16b64722a5b" class="i method">Resolve</a>(<span class="r28 r">directory</span>, <span class="r29 r">fs</span>);
+				<b>return</b> <b>new</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#650c57dd8388b862" class="t constructor">FileKey</a>(<span class="r30 r">gitdir</span> != <b>null</b> ? <span class="r30 r">gitdir</span> : <span class="r28 r">directory</span>, <span class="r29 r">fs</span>);
+			}
+
+			<b>private readonly</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="528c38495fb83c1a" href="../R/528c38495fb83c1a.html" target="n" data-glyph="46,2" class="i field">path</a>;
+
+			<b>private readonly</b> <a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a> <a id="0071d548031222c4" href="../R/0071d548031222c4.html" target="n" data-glyph="46,2" class="i field">fs</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r31 r">directory</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">exact location of the repository.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the file system abstraction which will be necessary to</span>
+			<span class="c">///</span><span class="c"> perform certain file system operations.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<b>protected internal</b> <a id="650c57dd8388b862" href="../R/650c57dd8388b862.html" target="n" data-glyph="75,2" class="i constructor">FileKey</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r31 rd" class="r31 r">directory</span>, <a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a> <span id="r32 rd" class="r32 r">fs</span>)
+			{
+				<a href="#528c38495fb83c1a" class="i field">path</a> = <a href="#5de2eec98fb2a84c" class="i method">Canonical</a>(<span class="r31 r">directory</span>);
+				<a href="#ed0a654b22d9b660" class="k">this</a>.<a href="#0071d548031222c4" class="i field">fs</a> = <span class="r32 r">fs</span>;
+			}
+
+			<b>private static</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="5de2eec98fb2a84c" href="../R/5de2eec98fb2a84c.html" target="n" data-glyph="76,2" class="i method">Canonical</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r33 rd" class="r33 r">path</span>)
+			{
+				<b>try</b>
+				{
+					<b>return</b> <span class="r33 r">path</span>.<a href="/Sharpen/A.html#3fc8d446a5d665ee" class="i method">GetCanonicalFile</a>();
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+					<b>return</b> <span class="r33 r">path</span>.<a href="/Sharpen/A.html#3f118afc82cb62ec" class="i method">GetAbsoluteFile</a>();
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">location supplied to the constructor.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="cfcdd6d74d5ec5a4" href="../R/cfcdd6d74d5ec5a4.html" target="n" data-glyph="72,2" class="i method">GetFile</a>()
+			{
+				<b>return</b> <a href="#528c38495fb83c1a" class="i field">path</a>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public virtual</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="d2670107975cd690" href="../R/d2670107975cd690.html" target="n" data-glyph="72,2" class="i method">Open</a>(<b>bool</b> <span id="r34 rd" class="r34 r">mustExist</span>)
+			{
+				<b>if</b> (<span class="r34 r">mustExist</span> &amp;&amp; !<a href="#e70d40c0cce3c114" class="i method">IsGitRepository</a>(<a href="#528c38495fb83c1a" class="i field">path</a>, <a href="#0071d548031222c4" class="i field">fs</a>))
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Errors/RepositoryNotFoundException.cs.html#cc87bc7de224058e" class="t constructor">RepositoryNotFoundException</a>(<a href="#528c38495fb83c1a" class="i field">path</a>);
+				}
+				<b>return</b> <b>new</b> <a href="../NGit.Storage.File/FileRepository.cs.html#b779f9c1c5e9b3ff" class="t constructor">FileRepository</a>(<a href="#528c38495fb83c1a" class="i field">path</a>);
+			}
+
+			<b>public override int</b> <a id="4aeee8f46d0c0ec0" href="../R/4aeee8f46d0c0ec0.html" target="n" data-glyph="72,2" class="i method">GetHashCode</a>()
+			{
+				<b>return</b> <a href="#528c38495fb83c1a" class="i field">path</a>.<a href="/Sharpen/A.html#2988a65fa9009f82" class="i method">GetHashCode</a>();
+			}
+
+			<b>public override bool</b> <a id="6fe0e4078ff28759" href="../R/6fe0e4078ff28759.html" target="n" data-glyph="72,2" class="i method">Equals</a>(<b>object</b> <span id="r35 rd" class="r35 r">o</span>)
+			{
+				<b>return</b> <span class="r35 r">o</span> <b>is</b> <a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a> &amp;&amp; <a href="#528c38495fb83c1a" class="i field">path</a>.<a href="/Sharpen/A.html#0bd517fb56e82236" class="i method">Equals</a>(((<a href="#4c01ab3afc432af9" class="t t">RepositoryCache</a>.<a href="#ed0a654b22d9b660" class="t t">FileKey</a>)<span class="r35 r">o</span>).<a href="#528c38495fb83c1a" class="i field">path</a>
+					);
+			}
+
+			<b>public override string</b> <a id="24ac2ae56ae6eb0c" href="../R/24ac2ae56ae6eb0c.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+			{
+				<b>return</b> <a href="#528c38495fb83c1a" class="i field">path</a>.<a href="/Sharpen/A.html#b24829b17a2098a5" class="i method">ToString</a>();
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Guess if a directory contains a Git repository.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Guess if a directory contains a Git repository.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> This method guesses by looking for the existence of some key files</span>
+			<span class="c">///</span><span class="c"> and directories.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">dir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the location of the directory to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the file system abstraction which will be necessary to</span>
+			<span class="c">///</span><span class="c"> perform certain file system operations.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> true if the directory &quot;looks like&quot; a Git repository; false if</span>
+			<span class="c">///</span><span class="c"> it doesn&#39;t look enough like a Git directory to really be a</span>
+			<span class="c">///</span><span class="c"> Git directory.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public static bool</b> <a id="e70d40c0cce3c114" href="../R/e70d40c0cce3c114.html" target="n" data-glyph="72,2" class="i method">IsGitRepository</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r36 rd" class="r36 r">dir</span>, <a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a> <span id="r37 rd" class="r37 r">fs</span>)
+			{
+				<b>return</b> <span class="r37 r">fs</span>.<a href="../NGit.Util/FS.cs.html#b8ce90801a68215d" class="i method">Resolve</a>(<span class="r36 r">dir</span>, <span class="s">&quot;objects&quot;</span>).<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>() &amp;&amp; <span class="r37 r">fs</span>.<a href="../NGit.Util/FS.cs.html#b8ce90801a68215d" class="i method">Resolve</a>(<span class="r36 r">dir</span>, <span class="s">&quot;refs&quot;</span>).<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>() &amp;&amp;
+					 <a href="#05f3b453c54becba" class="i method">IsValidHead</a>(<b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r36 r">dir</span>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			}
+
+			<b>private static bool</b> <a id="05f3b453c54becba" href="../R/05f3b453c54becba.html" target="n" data-glyph="76,2" class="i method">IsValidHead</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r38 rd" class="r38 r">head</span>)
+			{
+				<b>string</b> <span id="r39 rd" class="r39 r">@ref</span> = <a href="#f0d41bdcec3cefc3" class="i method">ReadFirstLine</a>(<span class="r38 r">head</span>);
+				<b>return</b> <span class="r39 r">@ref</span> != <b>null</b> &amp;&amp; (<span class="r39 r">@ref</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;ref: refs/&quot;</span>) || <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#1fc2e11d56f5b570" class="i method">IsId</a>(<span class="r39 r">@ref</span>));
+			}
+
+			<b>private static string</b> <a id="f0d41bdcec3cefc3" href="../R/f0d41bdcec3cefc3.html" target="n" data-glyph="76,2" class="i method">ReadFirstLine</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r40 rd" class="r40 r">head</span>)
+			{
+				<b>try</b>
+				{
+					<b>byte</b>[] <span id="r41 rd" class="r41 r">buf</span> = <a href="../NGit.Util/IOUtil.cs.html#d5aa4ac4db64211b" class="t t">IOUtil</a>.<a href="../NGit.Util/IOUtil.cs.html#5bec0ea603a1cfb5" class="i method">ReadFully</a>(<span class="r40 r">head</span>, 4096);
+					<b>int</b> <span id="r42 rd" class="r42 r">n</span> = <span class="r41 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+					<b>if</b> (<span class="r42 r">n</span> == 0)
+					{
+						<b>return null</b>;
+					}
+					<b>if</b> (<span class="r41 r">buf</span>[<span class="r42 r">n</span> - 1] == <span class="s">&#39;\n&#39;</span>)
+					{
+						<span class="r42 r">n</span>--;
+					}
+					<b>return</b> <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#c23f18f826e9513e" class="i method">Decode</a>(<span class="r41 r">buf</span>, 0, <span class="r42 r">n</span>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+					<b>return null</b>;
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Guess the proper path for a Git repository.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Guess the proper path for a Git repository.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> The method performs some basic guessing to locate the repository.</span>
+			<span class="c">///</span><span class="c"> Searched paths are:</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ol</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> // assume exact match</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> + &quot;/.git&quot; // assume working directory</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> + &quot;.git&quot; // assume bare</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ol</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">directory</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">location to guess from. Several permutations are tried.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">fs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the file system abstraction which will be necessary to</span>
+			<span class="c">///</span><span class="c"> perform certain file system operations.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> the actual directory location if a better match is found;</span>
+			<span class="c">///</span><span class="c"> null if there is no suitable match.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>public static</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="2f25a16b64722a5b" href="../R/2f25a16b64722a5b.html" target="n" data-glyph="72,2" class="i method">Resolve</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r43 rd" class="r43 r">directory</span>, <a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a> <span id="r44 rd" class="r44 r">fs</span>)
+			{
+				<b>if</b> (<a href="#e70d40c0cce3c114" class="i method">IsGitRepository</a>(<span class="r43 r">directory</span>, <span class="r44 r">fs</span>))
+				{
+					<b>return</b> <span class="r43 r">directory</span>;
+				}
+				<b>if</b> (<a href="#e70d40c0cce3c114" class="i method">IsGitRepository</a>(<b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r43 r">directory</span>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#0f9ca86089a06f67" class="i field">DOT_GIT</a>), <span class="r44 r">fs</span>))
+				{
+					<b>return</b> <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r43 r">directory</span>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#0f9ca86089a06f67" class="i field">DOT_GIT</a>);
+				}
+				<b>string</b> <span id="r45 rd" class="r45 r">name</span> = <span class="r43 r">directory</span>.<a href="/Sharpen/A.html#59f06790a106d675" class="i method">GetName</a>();
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r46 rd" class="r46 r">parent</span> = <span class="r43 r">directory</span>.<a href="/Sharpen/A.html#d153b2ad89f3d146" class="i method">GetParentFile</a>();
+				<b>if</b> (<a href="#e70d40c0cce3c114" class="i method">IsGitRepository</a>(<b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r46 r">parent</span>, <span class="r45 r">name</span> + <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#f0c777ffdb409cc6" class="i field">DOT_GIT_EXT</a>), <span class="r44 r">fs</span>))
+				{
+					<b>return</b> <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r46 r">parent</span>, <span class="r45 r">name</span> + <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#f0c777ffdb409cc6" class="i field">DOT_GIT_EXT</a>);
+				}
+				<b>return null</b>;
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

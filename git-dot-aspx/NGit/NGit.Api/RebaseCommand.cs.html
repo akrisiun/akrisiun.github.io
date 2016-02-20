@@ -1,0 +1,1208 @@
+﻿<!DOCTYPE html>
+<html><head><title>RebaseCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(1199);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/RebaseCommand.cs" target="_top">NGit.Api\RebaseCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A class used to execute a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">Rebase</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> command. It has setters for all</span>
+	<span class="c">///</span><span class="c"> supported options and arguments of this command and a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a3332ce6916adda7" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> method</span>
+	<span class="c">///</span><span class="c"> to finally execute the command. Each instance of this class should only be</span>
+	<span class="c">///</span><span class="c"> used for one invocation of the command (means: one call to</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a3332ce6916adda7" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> )</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span>href=&quot;http://www.kernel.org/pub/software/scm/git/docs/git-rebase.html&quot;
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about Rebase</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="abe0fad2b11fb1ba" href="../R/abe0fad2b11fb1ba.html" target="n" data-glyph="0,0" class="t t">RebaseCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>&gt;
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The name of the &quot;rebase-merge&quot; folder</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public static readonly string</b> <a id="1addcc6b3ac1baa0" href="../R/1addcc6b3ac1baa0.html" target="n" data-glyph="42,1" class="i field">REBASE_MERGE</a> = <span class="s">&quot;rebase-merge&quot;</span>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The name of the &quot;stopped-sha&quot; file</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public static readonly string</b> <a id="27fac9b7e0d98b42" href="../R/27fac9b7e0d98b42.html" target="n" data-glyph="42,1" class="i field">STOPPED_SHA</a> = <span class="s">&quot;stopped-sha&quot;</span>;
+
+		<b>private static readonly string</b> <a id="1c39e75f2986e938" href="../R/1c39e75f2986e938.html" target="n" data-glyph="46,1" class="i field">AUTHOR_SCRIPT</a> = <span class="s">&quot;author-script&quot;</span>;
+
+		<b>private static readonly string</b> <a id="b7655019efcde90a" href="../R/b7655019efcde90a.html" target="n" data-glyph="46,1" class="i field">DONE</a> = <span class="s">&quot;done&quot;</span>;
+
+		<b>private static readonly string</b> <a id="18f46140f137c7a8" href="../R/18f46140f137c7a8.html" target="n" data-glyph="46,1" class="i field">GIT_AUTHOR_DATE</a> = <span class="s">&quot;GIT_AUTHOR_DATE&quot;</span>;
+
+		<b>private static readonly string</b> <a id="93086aee62c512b5" href="../R/93086aee62c512b5.html" target="n" data-glyph="46,1" class="i field">GIT_AUTHOR_EMAIL</a> = <span class="s">&quot;GIT_AUTHOR_EMAIL&quot;</span>;
+
+		<b>private static readonly string</b> <a id="cad197b3d8449d8f" href="../R/cad197b3d8449d8f.html" target="n" data-glyph="46,1" class="i field">GIT_AUTHOR_NAME</a> = <span class="s">&quot;GIT_AUTHOR_NAME&quot;</span>;
+
+		<b>private static readonly string</b> <a id="5ffd6ba6ad9e7ae9" href="../R/5ffd6ba6ad9e7ae9.html" target="n" data-glyph="46,1" class="i field">GIT_REBASE_TODO</a> = <span class="s">&quot;git-rebase-todo&quot;</span>;
+
+		<b>private static readonly string</b> <a id="90a1eeed027ecbb1" href="../R/90a1eeed027ecbb1.html" target="n" data-glyph="46,1" class="i field">HEAD_NAME</a> = <span class="s">&quot;head-name&quot;</span>;
+
+		<b>private static readonly string</b> <a id="d23a9869966bcefa" href="../R/d23a9869966bcefa.html" target="n" data-glyph="46,1" class="i field">INTERACTIVE</a> = <span class="s">&quot;interactive&quot;</span>;
+
+		<b>private static readonly string</b> <a id="c7ad4f916222138e" href="../R/c7ad4f916222138e.html" target="n" data-glyph="46,1" class="i field">MESSAGE</a> = <span class="s">&quot;message&quot;</span>;
+
+		<b>private static readonly string</b> <a id="9591e203f3e143c1" href="../R/9591e203f3e143c1.html" target="n" data-glyph="46,1" class="i field">ONTO</a> = <span class="s">&quot;onto&quot;</span>;
+
+		<b>private static readonly string</b> <a id="e8bda0ebb69ab292" href="../R/e8bda0ebb69ab292.html" target="n" data-glyph="46,1" class="i field">PATCH</a> = <span class="s">&quot;patch&quot;</span>;
+
+		<b>private static readonly string</b> <a id="d37ee13aa8e6dca8" href="../R/d37ee13aa8e6dca8.html" target="n" data-glyph="46,1" class="i field">REBASE_HEAD</a> = <span class="s">&quot;head&quot;</span>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The available operations</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public enum</b> <a id="835168bfe4ab94cc" href="../R/835168bfe4ab94cc.html" target="n" data-glyph="18,1" class="t t"><span id="b5f0a3cdac418f30">Operation</span></a>
+		{
+			<a id="4f5c53bd2fd13b4b" href="../R/4f5c53bd2fd13b4b.html" target="n" data-glyph="24,2" class="i field">BEGIN</a>,
+			<a id="fcf1d12dc1d54833" href="../R/fcf1d12dc1d54833.html" target="n" data-glyph="24,2" class="i field">CONTINUE</a>,
+			<a id="e9b04370dc453786" href="../R/e9b04370dc453786.html" target="n" data-glyph="24,2" class="i field">SKIP</a>,
+			<a id="37609f5914d6c681" href="../R/37609f5914d6c681.html" target="n" data-glyph="24,2" class="i field">ABORT</a>
+		}
+
+		<b>private</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a> <a id="5793dde69cb9b680" href="../R/5793dde69cb9b680.html" target="n" data-glyph="46,1" class="i field">operation</a> = <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#4f5c53bd2fd13b4b" class="i field">BEGIN</a>;
+
+		<b>private</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="8c5f129f06ab859b" href="../R/8c5f129f06ab859b.html" target="n" data-glyph="46,1" class="i field">upstreamCommit</a>;
+
+		<b>private</b> <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <a id="e500adf408e713ff" href="../R/e500adf408e713ff.html" target="n" data-glyph="46,1" class="i field">monitor</a> = <a href="../NGit/NullProgressMonitor.cs.html#24f629da18a030c0" class="t t">NullProgressMonitor</a>.<a href="../NGit/NullProgressMonitor.cs.html#ab1a6c4ba41f9af4" class="i field">INSTANCE</a>;
+
+		<b>private readonly</b> <a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <a id="eb99a346505dd41a" href="../R/eb99a346505dd41a.html" target="n" data-glyph="46,1" class="i field">walk</a>;
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="67741e4cf3ca257a" href="../R/67741e4cf3ca257a.html" target="n" data-glyph="46,1" class="i field">rebaseDir</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="cfdbb9acdb6df3e7" href="../R/cfdbb9acdb6df3e7.html" target="n" data-glyph="75,1" class="i constructor">RebaseCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r0 r">repo</span>)
+		{
+			<a href="#eb99a346505dd41a" class="i field">walk</a> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<span class="r0 r">repo</span>);
+			<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r0 r">repo</span>.<a href="../NGit/Repository.cs.html#1cdf65c5d26abd34" class="i property">Directory</a>, <a href="#1addcc6b3ac1baa0" class="i field">REBASE_MERGE</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Executes the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">Rebase</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> command with all the options and parameters</span>
+		<span class="c">///</span><span class="c"> collected by the setter methods of this class. Each instance of this</span>
+		<span class="c">///</span><span class="c"> class should only be used for one invocation of the command. Don&#39;t call</span>
+		<span class="c">///</span><span class="c"> this method twice on an instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">an object describing the result of this command</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.GitAPIException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#5d7264b257703642" class="t t">WrongRepositoryStateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.WrongRepositoryStateException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoHeadException.cs.html#70bf94d89c4eb110" class="t t">NoHeadException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.NoHeadException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/RefNotFoundException.cs.html#89222350eff5aa34" class="t t">RefNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.RefNotFoundException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a> <a id="a3332ce6916adda7" href="../R/a3332ce6916adda7.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r1 rd" class="r1 r">newHead</span> = <b>null</b>;
+			<b>bool</b> <span id="r2 rd" class="r2 r">lastStepWasForward</span> = <b>false</b>;
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#9aab74dec7a943e2" class="i method">CheckParameters</a>();
+			<b>try</b>
+			{
+				<b>switch</b> (<a href="#5793dde69cb9b680" class="i field">operation</a>)
+				{
+					<b>case</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#37609f5914d6c681" class="i field">ABORT</a>:
+					{
+						<b>try</b>
+						{
+							<b>return</b> <a href="#b216c2ba4c432336" class="i method">Abort</a>(<a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#c6b21ef8d24e40c2" class="i field">ABORTED_RESULT</a>);
+						}
+						<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r3 rd" class="r3 r">ioe</span>)
+						{
+							<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r3 r">ioe</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r3 r">ioe</span>);
+						}
+						<b>goto case</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#e9b04370dc453786" class="i field">SKIP</a>;
+					}
+
+					<b>case</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#e9b04370dc453786" class="i field">SKIP</a>:
+					<b>case</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#fcf1d12dc1d54833" class="i field">CONTINUE</a>:
+					{
+						<span class="c">// fall through</span>
+						<b>string</b> <span id="r4 rd" class="r4 r">upstreamCommitName</span> = <a href="#b407eab154313c92" class="i method">ReadFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#9591e203f3e143c1" class="i field">ONTO</a>);
+						<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<span class="r4 r">upstreamCommitName</span>));
+						<b>break</b>;
+					}
+
+					<b>case</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#4f5c53bd2fd13b4b" class="i field">BEGIN</a>:
+					{
+						<a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a> <span id="r5 rd" class="r5 r">res</span> = <a href="#78a85fca198f0d6b" class="i method">InitFilesAndRewind</a>();
+						<b>if</b> (<span class="r5 r">res</span> != <b>null</b>)
+						{
+							<b>return</b> <span class="r5 r">res</span>;
+						}
+					<b>break</b>;
+					}
+				}
+				<b>if</b> (<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#02d53f65c9e87b6b" class="i method">IsCancelled</a>())
+				{
+					<b>return</b> <a href="#b216c2ba4c432336" class="i method">Abort</a>(<a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#c6b21ef8d24e40c2" class="i field">ABORTED_RESULT</a>);
+				}
+				<b>if</b> (<a href="#5793dde69cb9b680" class="i field">operation</a> == <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#fcf1d12dc1d54833" class="i field">CONTINUE</a>)
+				{
+					<span class="r1 r">newHead</span> = <a href="#d8cccf77c635bbaf" class="i method">ContinueRebase</a>();
+					<b>if</b> (<span class="r1 r">newHead</span> == <b>null</b>)
+					{
+						<span class="c">// continueRebase() returns null only if no commit was</span>
+						<span class="c">// neccessary. This means that no changes where left over</span>
+						<span class="c">// after resolving all conflicts. In this case, cgit stops</span>
+						<span class="c">// and displays a nice message to the user, telling him to</span>
+						<span class="c">// either do changes or skip the commit instead of continue.</span>
+						<b>return</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#f4ed11f7274f686f" class="i field">NOTHING_TO_COMMIT_RESULT</a>;
+					}
+				}
+				<b>if</b> (<a href="#5793dde69cb9b680" class="i field">operation</a> == <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#e9b04370dc453786" class="i field">SKIP</a>)
+				{
+					<span class="r1 r">newHead</span> = <a href="#648369659f975ff1" class="i method">CheckoutCurrentHead</a>();
+				}
+				<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r6 rd" class="r6 r">or</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3a94c2b862584307" class="i method">NewObjectReader</a>();
+				<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#98522ac2f245a384" class="t t">Step</a>&gt; <span id="r7 rd" class="r7 r">steps</span> = <a href="#6bd4f967217870dc" class="i method">LoadSteps</a>();
+				<b>foreach</b> (<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#98522ac2f245a384" class="t t">Step</a> <span id="r8 rd" class="r8 r">step</span> <b>in</b> <span class="r7 r">steps</span>)
+				{
+					<a href="#cea1180be93891e3" class="i method">PopSteps</a>(1);
+					<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt; <span id="r9 rd" class="r9 r">ids</span> = <span class="r6 r">or</span>.<a href="../NGit/ObjectReader.cs.html#6eb31bdf0fbc8145" class="i method">Resolve</a>(<span class="r8 r">step</span>.<a href="#7fbe1800fd43273e" class="i field">commit</a>);
+					<b>if</b> (<span class="r9 r">ids</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> != 1)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<span class="s">&quot;Could not resolve uniquely the abbreviated object ID&quot;</span>
+							);
+					}
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r10 rd" class="r10 r">commitToPick</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r9 r">ids</span>.<a href="/Sharpen/A.html#9e9a9722119e4290" class="i method">Iterator</a>().<a href="/Sharpen/A.html#6360c9000cc5a921" class="i method">Next</a>());
+					<b>if</b> (<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#02d53f65c9e87b6b" class="i method">IsCancelled</a>())
+					{
+						<b>return</b> <b>new</b> <a href="RebaseResult.cs.html#76fd0fe8d6e4b1e2" class="t constructor">RebaseResult</a>(<span class="r10 r">commitToPick</span>);
+					}
+					<b>try</b>
+					{
+						<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#00855f32c0ee0d6f" class="i field">applyingCommit</a>, <span class="r10 r">commitToPick</span>
+							.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>()), <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>.<a href="../NGit/ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>);
+						<span class="c">// if the first parent of commitToPick is the current HEAD,</span>
+						<span class="c">// we do a fast-forward instead of cherry-pick to avoid</span>
+						<span class="c">// unnecessary object rewriting</span>
+						<span class="r1 r">newHead</span> = <a href="#74f1eb842260a18c" class="i method">TryFastForward</a>(<span class="r10 r">commitToPick</span>);
+						<span class="r2 r">lastStepWasForward</span> = <span class="r1 r">newHead</span> != <b>null</b>;
+						<b>if</b> (!<span class="r2 r">lastStepWasForward</span>)
+						{
+							<span class="c">// TODO if the content of this commit is already merged</span>
+							<span class="c">// here we should skip this step in order to avoid</span>
+							<span class="c">// confusing pseudo-changed</span>
+							<a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a> <span id="r11 rd" class="r11 r">cherryPickResult</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>).<a href="Git.cs.html#cdf97e84a849feea" class="i method">CherryPick</a>().<a href="CherryPickCommand.cs.html#7e8381d8b656b5cc" class="i method">Include</a>(<span class="r10 r">commitToPick</span>
+								).<a href="CherryPickCommand.cs.html#88381233fa845081" class="i method">Call</a>();
+							<b>switch</b> (<span class="r11 r">cherryPickResult</span>.<a href="CherryPickResult.cs.html#d972b94967a25cfa" class="i method">GetStatus</a>())
+							{
+								<b>case</b> <a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a>.<a href="CherryPickResult.cs.html#53d90ce1325a7728" class="t t">CherryPickStatus</a>.<a href="CherryPickResult.cs.html#c41735452977032a" class="i field">FAILED</a>:
+								{
+									<b>if</b> (<a href="#5793dde69cb9b680" class="i field">operation</a> == <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#4f5c53bd2fd13b4b" class="i field">BEGIN</a>)
+									{
+										<b>return</b> <a href="#b216c2ba4c432336" class="i method">Abort</a>(<b>new</b> <a href="RebaseResult.cs.html#0a929accc9050f3b" class="t constructor">RebaseResult</a>(<span class="r11 r">cherryPickResult</span>.<a href="CherryPickResult.cs.html#0ae12cb3388005e1" class="i method">GetFailingPaths</a>()));
+									}
+									<b>else</b>
+									{
+										<b>return</b> <a href="#9db52923dd4bdf2e" class="i method">Stop</a>(<span class="r10 r">commitToPick</span>);
+									}
+									<b>goto case</b> <a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a>.<a href="CherryPickResult.cs.html#53d90ce1325a7728" class="t t">CherryPickStatus</a>.<a href="CherryPickResult.cs.html#bb3be0c3c702500a" class="i field">CONFLICTING</a>;
+								}
+
+								<b>case</b> <a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a>.<a href="CherryPickResult.cs.html#53d90ce1325a7728" class="t t">CherryPickStatus</a>.<a href="CherryPickResult.cs.html#bb3be0c3c702500a" class="i field">CONFLICTING</a>:
+								{
+									<b>return</b> <a href="#9db52923dd4bdf2e" class="i method">Stop</a>(<span class="r10 r">commitToPick</span>);
+								}
+
+								<b>case</b> <a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a>.<a href="CherryPickResult.cs.html#53d90ce1325a7728" class="t t">CherryPickStatus</a>.<a href="CherryPickResult.cs.html#6053d485875cb4d6" class="i field">OK</a>:
+								{
+									<span class="r1 r">newHead</span> = <span class="r11 r">cherryPickResult</span>.<a href="CherryPickResult.cs.html#868aa4bc64d1c68b" class="i method">GetNewHead</a>();
+									<b>break</b>;
+								}
+							}
+						}
+					}
+					<b>finally</b>
+					{
+						<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+					}
+				}
+				<b>if</b> (<span class="r1 r">newHead</span> != <b>null</b>)
+				{
+					<b>string</b> <span id="r12 rd" class="r12 r">headName</span> = <a href="#b407eab154313c92" class="i method">ReadFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#90a1eeed027ecbb1" class="i field">HEAD_NAME</a>);
+					<a href="#ac444da909e1eb5e" class="i method">UpdateHead</a>(<span class="r12 r">headName</span>, <span class="r1 r">newHead</span>);
+					<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#5d45cc3b4ddbc04e" class="i method">Delete</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#27f6d919ef27f98b" class="i field">RECURSIVE</a>);
+					<b>if</b> (<span class="r2 r">lastStepWasForward</span>)
+					{
+						<b>return</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#484e0d0462705a18" class="i field">FAST_FORWARD_RESULT</a>;
+					}
+					<b>return</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#1025f7afe207f24d" class="i field">OK_RESULT</a>;
+				}
+				<b>return</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#484e0d0462705a18" class="i field">FAST_FORWARD_RESULT</a>;
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r13 rd" class="r13 r">ioe</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r13 r">ioe</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r13 r">ioe</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="ac444da909e1eb5e" href="../R/ac444da909e1eb5e.html" target="n" data-glyph="76,1" class="i method">UpdateHead</a>(<b>string</b> <span id="r14 rd" class="r14 r">headName</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r15 rd" class="r15 r">newHead</span>)
+		{
+			<span class="c">// point the previous head (if any) to the new commit</span>
+			<b>if</b> (<span class="r14 r">headName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#ec4c59db33b2098e" class="i field">R_REFS</a>))
+			{
+				<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r16 rd" class="r16 r">rup</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#e507581ff50608bc" class="i method">UpdateRef</a>(<span class="r14 r">headName</span>);
+				<span class="r16 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r15 r">newHead</span>);
+				<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a> <span id="r17 rd" class="r17 r">res</span> = <span class="r16 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#d4cc527448f83ba4" class="i method">ForceUpdate</a>();
+				<b>switch</b> (<span class="r17 r">res</span>)
+				{
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#279b180136195c74" class="i field">NO_CHANGE</a>:
+					{
+						<b>break</b>;
+					}
+
+					<b>default</b>:
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<span class="s">&quot;Updating HEAD failed&quot;</span>);
+					}
+				}
+				<span class="r16 r">rup</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#e507581ff50608bc" class="i method">UpdateRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<span class="r17 r">res</span> = <span class="r16 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#fc49aa0d08627943" class="i method">Link</a>(<span class="r14 r">headName</span>);
+				<b>switch</b> (<span class="r17 r">res</span>)
+				{
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#279b180136195c74" class="i field">NO_CHANGE</a>:
+					{
+						<b>break</b>;
+					}
+
+					<b>default</b>:
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<span class="s">&quot;Updating HEAD failed&quot;</span>);
+					}
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoHeadException.cs.html#70bf94d89c4eb110" class="t t">NoHeadException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="648369659f975ff1" href="../R/648369659f975ff1.html" target="n" data-glyph="76,1" class="i method">CheckoutCurrentHead</a>()
+		{
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r18 rd" class="r18 r">headTree</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a> + <span class="s">&quot;^{tree}&quot;</span>);
+			<b>if</b> (<span class="r18 r">headTree</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#8f5c0a169b3a2839" class="i field">cannotRebaseWithoutCurrentHead</a>);
+			}
+			<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r19 rd" class="r19 r">dc</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>();
+			<b>try</b>
+			{
+				<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a> <span id="r20 rd" class="r20 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#013905e974ce8f34" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r19 r">dc</span>, <span class="r18 r">headTree</span>);
+				<span class="r20 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#c98b11bb8e5d0b91" class="i method">SetFailOnConflict</a>(<b>false</b>);
+				<b>bool</b> <span id="r21 rd" class="r21 r">needsDeleteFiles</span> = <span class="r20 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#e56f2429d666ea70" class="i method">Checkout</a>();
+				<b>if</b> (<span class="r21 r">needsDeleteFiles</span>)
+				{
+					<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <span id="r22 rd" class="r22 r">fileList</span> = <span class="r20 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#a7f5eb6f06fb90cc" class="i method">GetToBeDeleted</a>();
+					<b>foreach</b> (<b>string</b> <span id="r23 rd" class="r23 r">filePath</span> <b>in</b> <span class="r22 r">fileList</span>)
+					{
+						<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r24 rd" class="r24 r">fileToDelete</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>, <span class="r23 r">filePath</span>);
+						<b>if</b> (<span class="r24 r">fileToDelete</span>.<a href="/Sharpen/A.html#7ae60f912b76f65a" class="i method">Exists</a>())
+						{
+							<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#5d45cc3b4ddbc04e" class="i method">Delete</a>(<span class="r24 r">fileToDelete</span>, <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#27f6d919ef27f98b" class="i field">RECURSIVE</a> | <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#d0b76c2ee601fdce" class="i field">RETRY</a>);
+						}
+					}
+				}
+			}
+			<b>finally</b>
+			{
+				<span class="r19 r">dc</span>.<a href="../NGit.Dircache/DirCache.cs.html#93697cefeab6d366" class="i method">Unlock</a>();
+			}
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r25 rd" class="r25 r">rw</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r26 rd" class="r26 r">commit</span> = <span class="r25 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			<span class="r25 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			<b>return</b> <span class="r26 r">commit</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the commit if we had to do a commit, otherwise null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.GitAPIException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="d8cccf77c635bbaf" href="../R/d8cccf77c635bbaf.html" target="n" data-glyph="76,1" class="i method">ContinueRebase</a>()
+		{
+			<span class="c">// if there are still conflicts, we throw a specific Exception</span>
+			<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r27 rd" class="r27 r">dc</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#f2ac93d271828141" class="i method">ReadDirCache</a>();
+			<b>bool</b> <span id="r28 rd" class="r28 r">hasUnmergedPaths</span> = <span class="r27 r">dc</span>.<a href="../NGit.Dircache/DirCache.cs.html#b653aa2bc09285cc" class="i method">HasUnmergedPaths</a>();
+			<b>if</b> (<span class="r28 r">hasUnmergedPaths</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/UnmergedPathsException.cs.html#9acbebeb096895c6" class="t constructor">UnmergedPathsException</a>();
+			}
+			<span class="c">// determine whether we need to commit</span>
+			<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r29 rd" class="r29 r">treeWalk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#a3ef4fc16aa4c2b5" class="t constructor">TreeWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#8374b8406d09f7d4" class="i method">Reset</a>();
+			<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+			<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#8bfe310b8b94624c" class="t constructor">DirCacheIterator</a>(<span class="r27 r">dc</span>));
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r30 rd" class="r30 r">id</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a> + <span class="s">&quot;^{tree}&quot;</span>);
+			<b>if</b> (<span class="r30 r">id</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#8f5c0a169b3a2839" class="i field">cannotRebaseWithoutCurrentHead</a>);
+			}
+			<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#60bae0462baed659" class="i method">AddTree</a>(<span class="r30 r">id</span>);
+			<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>.<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#0797802ba9a37bc5" class="i field">ANY_DIFF</a>;
+			<b>bool</b> <span id="r31 rd" class="r31 r">needsCommit</span> = <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>();
+			<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#1b296f1621d6151d" class="i method">Release</a>();
+			<b>if</b> (<span class="r31 r">needsCommit</span>)
+			{
+				<a href="CommitCommand.cs.html#d08844820ce75396" class="t t">CommitCommand</a> <span id="r32 rd" class="r32 r">commit</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>).<a href="Git.cs.html#58eeb297ac383ce3" class="i method">Commit</a>();
+				<span class="r32 r">commit</span>.<a href="CommitCommand.cs.html#ac81c562a4b857d0" class="i method">SetMessage</a>(<a href="#b407eab154313c92" class="i method">ReadFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#c7ad4f916222138e" class="i field">MESSAGE</a>));
+				<span class="r32 r">commit</span>.<a href="CommitCommand.cs.html#3f837586aa967755" class="i method">SetAuthor</a>(<a href="#90e4a5a9b2e92cd3" class="i method">ParseAuthor</a>());
+				<b>return</b> <span class="r32 r">commit</span>.<a href="CommitCommand.cs.html#e40c4c0200577029" class="i method">Call</a>();
+			}
+			<b>return null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="90e4a5a9b2e92cd3" href="../R/90e4a5a9b2e92cd3.html" target="n" data-glyph="76,1" class="i method">ParseAuthor</a>()
+		{
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r33 rd" class="r33 r">authorScriptFile</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#1c39e75f2986e938" class="i field">AUTHOR_SCRIPT</a>);
+			<b>byte</b>[] <span id="r34 rd" class="r34 r">raw</span>;
+			<b>try</b>
+			{
+				<span class="r34 r">raw</span> = <a href="../NGit.Util/IOUtil.cs.html#d5aa4ac4db64211b" class="t t">IOUtil</a>.<a href="../NGit.Util/IOUtil.cs.html#cc1b739e85e7e2a4" class="i method">ReadFully</a>(<span class="r33 r">authorScriptFile</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a>)
+			{
+				<b>return null</b>;
+			}
+			<b>return</b> <a href="#4af4775414781553" class="i method">ParseAuthor</a>(<span class="r34 r">raw</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a> <a id="9db52923dd4bdf2e" href="../R/9db52923dd4bdf2e.html" target="n" data-glyph="76,1" class="i method">Stop</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r35 rd" class="r35 r">commitToPick</span>)
+		{
+			<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r36 rd" class="r36 r">author</span> = <span class="r35 r">commitToPick</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#23355c5fbe8beb9d" class="i method">GetAuthorIdent</a>();
+			<b>string</b> <span id="r37 rd" class="r37 r">authorScript</span> = <a href="#24d25c1ba9cab304" class="i method">ToAuthorScript</a>(<span class="r36 r">author</span>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#1c39e75f2986e938" class="i field">AUTHOR_SCRIPT</a>, <span class="r37 r">authorScript</span>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#c7ad4f916222138e" class="i field">MESSAGE</a>, <span class="r35 r">commitToPick</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#3c04ab11a4046cf0" class="i method">GetFullMessage</a>());
+			<a href="/Sharpen/A.html#36a042d26bd3cc9b" class="t t">ByteArrayOutputStream</a> <span id="r38 rd" class="r38 r">bos</span> = <b>new</b> <a href="/Sharpen/A.html#78868e8453b93d65" class="t constructor">ByteArrayOutputStream</a>();
+			<a href="../NGit.Diff/DiffFormatter.cs.html#0a3fb36519ef5a5f" class="t t">DiffFormatter</a> <span id="r39 rd" class="r39 r">df</span> = <b>new</b> <a href="../NGit.Diff/DiffFormatter.cs.html#21c506671ef36958" class="t constructor">DiffFormatter</a>(<span class="r38 r">bos</span>);
+			<span class="r39 r">df</span>.<a href="../NGit.Diff/DiffFormatter.cs.html#06bdd864707525e3" class="i method">SetRepository</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<span class="r39 r">df</span>.<a href="../NGit.Diff/DiffFormatter.cs.html#9fe3f7b3d41cb5c4" class="i method">Format</a>(<span class="r35 r">commitToPick</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#f8123aa92e7623eb" class="i method">GetParent</a>(0), <span class="r35 r">commitToPick</span>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#e8bda0ebb69ab292" class="i field">PATCH</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#6a8522c8955180d6" class="i method">GetStringForBytes</a>(<span class="r38 r">bos</span>.<a href="/Sharpen/A.html#ba0ad7260cea63e1" class="i method">ToByteArray</a>(), 
+				<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#b225eb73030e13b2" class="i field">CHARACTER_ENCODING</a>));
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#27fac9b7e0d98b42" class="i field">STOPPED_SHA</a>, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3a94c2b862584307" class="i method">NewObjectReader</a>().<a href="../NGit/ObjectReader.cs.html#f90bf4377f0672e8" class="i method">Abbreviate</a>(<span class="r35 r">commitToPick</span>
+				).<a href="../NGit/AbbreviatedObjectId.cs.html#08495489e12b34fc" class="i property">Name</a>);
+			<span class="c">// Remove cherry pick state file created by CherryPickCommand, it&#39;s not</span>
+			<span class="c">// needed for rebase</span>
+			<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#c1f9cc2d1e3d64cb" class="i method">WriteCherryPickHead</a>(<b>null</b>);
+			<b>return</b> <b>new</b> <a href="RebaseResult.cs.html#76fd0fe8d6e4b1e2" class="t constructor">RebaseResult</a>(<span class="r35 r">commitToPick</span>);
+		}
+
+		<b>internal virtual string</b> <a id="24d25c1ba9cab304" href="../R/24d25c1ba9cab304.html" target="n" data-glyph="74,1" class="i method">ToAuthorScript</a>(<a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r40 rd" class="r40 r">author</span>)
+		{
+			<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r41 rd" class="r41 r">sb</span> = <b>new</b> <a href="@0@mscorlib/A.html#ec674e2123a44860" class="t constructor">StringBuilder</a>(100);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#cad197b3d8449d8f" class="i field">GIT_AUTHOR_NAME</a>);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;=&#39;&quot;</span>);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r40 r">author</span>.<a href="../NGit/PersonIdent.cs.html#463555550c325175" class="i method">GetName</a>());
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;&#39;\n&quot;</span>);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#93086aee62c512b5" class="i field">GIT_AUTHOR_EMAIL</a>);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;=&#39;&quot;</span>);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r40 r">author</span>.<a href="../NGit/PersonIdent.cs.html#1d5d315fd41767eb" class="i method">GetEmailAddress</a>());
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;&#39;\n&quot;</span>);
+			<span class="c">// the command line uses the &quot;external String&quot;</span>
+			<span class="c">// representation for date and timezone</span>
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#18f46140f137c7a8" class="i field">GIT_AUTHOR_DATE</a>);
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;=&#39;&quot;</span>);
+			<b>string</b> <span id="r42 rd" class="r42 r">externalString</span> = <span class="r40 r">author</span>.<a href="../NGit/PersonIdent.cs.html#024a45de46a77c60" class="i method">ToExternalString</a>();
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#b77d80ab77ebce19" class="i method">Substring</a>(<span class="r42 r">externalString</span>, <span class="r42 r">externalString</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;&gt;&#39;</span>
+				) + 2));
+			<span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;&#39;\n&quot;</span>);
+			<b>return</b> <span class="r41 r">sb</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Removes the number of lines given in the parameter from the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">git-rebase-todo</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> file but preserves comments and other lines</span>
+		<span class="c">///</span><span class="c"> that can not be parsed as steps</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">numSteps</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="cea1180be93891e3" href="../R/cea1180be93891e3.html" target="n" data-glyph="76,1" class="i method">PopSteps</a>(<b>int</b> <span id="r43 rd" class="r43 r">numSteps</span>)
+		{
+			<b>if</b> (<span class="r43 r">numSteps</span> == 0)
+			{
+				<b>return</b>;
+			}
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <span id="r44 rd" class="r44 r">todoLines</span> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<b>string</b>&gt;();
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <span id="r45 rd" class="r45 r">poppedLines</span> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<b>string</b>&gt;();
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r46 rd" class="r46 r">todoFile</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#5ffd6ba6ad9e7ae9" class="i field">GIT_REBASE_TODO</a>);
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r47 rd" class="r47 r">doneFile</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#b7655019efcde90a" class="i field">DONE</a>);
+			<a href="/Sharpen/A.html#e5177d0fd62bf8bb" class="t t">BufferedReader</a> <span id="r48 rd" class="r48 r">br</span> = <b>new</b> <a href="/Sharpen/A.html#2f578b441a063c14" class="t constructor">BufferedReader</a>(<b>new</b> <a href="/Sharpen/A.html#037c02dda71caedf" class="t constructor">InputStreamReader</a>(<b>new</b> <a href="/Sharpen/A.html#fbe94cc94976c1b1" class="t constructor">FileInputStream</a>(
+				<span class="r46 r">todoFile</span>), <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#b225eb73030e13b2" class="i field">CHARACTER_ENCODING</a>));
+			<b>try</b>
+			{
+				<span class="c">// check if the line starts with a action tag (pick, skip...)</span>
+				<b>while</b> (<span class="r45 r">poppedLines</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &lt; <span class="r43 r">numSteps</span>)
+				{
+					<b>string</b> <span id="r49 rd" class="r49 r">popCandidate</span> = <span class="r48 r">br</span>.<a href="@0@mscorlib/A.html#a4ada5f765646068" class="i method">ReadLine</a>();
+					<b>if</b> (<span class="r49 r">popCandidate</span> == <b>null</b>)
+					{
+						<b>break</b>;
+					}
+					<b>if</b> (<span class="r49 r">popCandidate</span>[0] == <span class="s">&#39;#&#39;</span>)
+					{
+						<b>continue</b>;
+					}
+					<b>int</b> <span id="r50 rd" class="r50 r">spaceIndex</span> = <span class="r49 r">popCandidate</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39; &#39;</span>);
+					<b>bool</b> <span id="r51 rd" class="r51 r">pop</span> = <b>false</b>;
+					<b>if</b> (<span class="r50 r">spaceIndex</span> &gt;= 0)
+					{
+						<b>string</b> <span id="r52 rd" class="r52 r">actionToken</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r49 r">popCandidate</span>, 0, <span class="r50 r">spaceIndex</span>);
+						<span class="r51 r">pop</span> = <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a>.<a href="#fea0753432bad55e" class="i method">Parse</a>(<span class="r52 r">actionToken</span>) != <b>null</b>;
+					}
+					<b>if</b> (<span class="r51 r">pop</span>)
+					{
+						<span class="r45 r">poppedLines</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r49 r">popCandidate</span>);
+					}
+					<b>else</b>
+					{
+						<span class="r44 r">todoLines</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r49 r">popCandidate</span>);
+					}
+				}
+				<b>string</b> <span id="r53 rd" class="r53 r">readLine</span> = <span class="r48 r">br</span>.<a href="@0@mscorlib/A.html#a4ada5f765646068" class="i method">ReadLine</a>();
+				<b>while</b> (<span class="r53 r">readLine</span> != <b>null</b>)
+				{
+					<span class="r44 r">todoLines</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r53 r">readLine</span>);
+					<span class="r53 r">readLine</span> = <span class="r48 r">br</span>.<a href="@0@mscorlib/A.html#a4ada5f765646068" class="i method">ReadLine</a>();
+				}
+			}
+			<b>finally</b>
+			{
+				<span class="r48 r">br</span>.<a href="@0@mscorlib/A.html#e1f86f6ba12a9bac" class="i method">Close</a>();
+			}
+			<a href="/Sharpen/A.html#20003b51174b318e" class="t t">BufferedWriter</a> <span id="r54 rd" class="r54 r">todoWriter</span> = <b>new</b> <a href="/Sharpen/A.html#3cdb22ac262bc909" class="t constructor">BufferedWriter</a>(<b>new</b> <a href="/Sharpen/A.html#3c540f001f0235b6" class="t constructor">OutputStreamWriter</a>(<b>new</b> <a href="/Sharpen/A.html#60d0d5bbf527518d" class="t constructor">FileOutputStream</a>
+				(<span class="r46 r">todoFile</span>), <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#b225eb73030e13b2" class="i field">CHARACTER_ENCODING</a>));
+			<b>try</b>
+			{
+				<b>foreach</b> (<b>string</b> <span id="r55 rd" class="r55 r">writeLine</span> <b>in</b> <span class="r44 r">todoLines</span>)
+				{
+					<span class="r54 r">todoWriter</span>.<a href="/Sharpen/A.html#48b2fa929d7e1b65" class="i method">Write</a>(<span class="r55 r">writeLine</span>);
+					<span class="r54 r">todoWriter</span>.<a href="/Sharpen/A.html#d15796a089f9732f" class="i method">NewLine</a>();
+				}
+			}
+			<b>finally</b>
+			{
+				<span class="r54 r">todoWriter</span>.<a href="/Sharpen/A.html#9590bbebe4cf68af" class="i method">Close</a>();
+			}
+			<b>if</b> (<span class="r45 r">poppedLines</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &gt; 0)
+			{
+				<span class="c">// append here</span>
+				<a href="/Sharpen/A.html#20003b51174b318e" class="t t">BufferedWriter</a> <span id="r56 rd" class="r56 r">doneWriter</span> = <b>new</b> <a href="/Sharpen/A.html#3cdb22ac262bc909" class="t constructor">BufferedWriter</a>(<b>new</b> <a href="/Sharpen/A.html#3c540f001f0235b6" class="t constructor">OutputStreamWriter</a>(<b>new</b> <a href="/Sharpen/A.html#c94aebf742d064d4" class="t constructor">FileOutputStream</a>
+					(<span class="r47 r">doneFile</span>, <b>true</b>), <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#b225eb73030e13b2" class="i field">CHARACTER_ENCODING</a>));
+				<b>try</b>
+				{
+					<b>foreach</b> (<b>string</b> <span id="r57 rd" class="r57 r">writeLine</span> <b>in</b> <span class="r45 r">poppedLines</span>)
+					{
+						<span class="r56 r">doneWriter</span>.<a href="/Sharpen/A.html#48b2fa929d7e1b65" class="i method">Write</a>(<span class="r57 r">writeLine</span>);
+						<span class="r56 r">doneWriter</span>.<a href="/Sharpen/A.html#d15796a089f9732f" class="i method">NewLine</a>();
+					}
+				}
+				<b>finally</b>
+				{
+					<span class="r56 r">doneWriter</span>.<a href="/Sharpen/A.html#9590bbebe4cf68af" class="i method">Close</a>();
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a> <a id="78a85fca198f0d6b" href="../R/78a85fca198f0d6b.html" target="n" data-glyph="76,1" class="i method">InitFilesAndRewind</a>()
+		{
+			<span class="c">// we need to store everything into files so that we can implement</span>
+			<span class="c">// --skip, --continue, and --abort</span>
+			<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r58 rd" class="r58 r">head</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+			<b>if</b> (<span class="r58 r">head</span> == <b>null</b> || <span class="r58 r">head</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>() == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+					, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			}
+			<b>string</b> <span id="r59 rd" class="r59 r">headName</span>;
+			<b>if</b> (<span class="r58 r">head</span>.<a href="../NGit/Ref.cs.html#298ee9c00de1f373" class="i method">IsSymbolic</a>())
+			{
+				<span class="r59 r">headName</span> = <span class="r58 r">head</span>.<a href="../NGit/Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>().<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>();
+			}
+			<b>else</b>
+			{
+				<span class="r59 r">headName</span> = <span class="s">&quot;detached HEAD&quot;</span>;
+			}
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r60 rd" class="r60 r">headId</span> = <span class="r58 r">head</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+			<b>if</b> (<span class="r60 r">headId</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+					, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			}
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r61 rd" class="r61 r">headCommit</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="r60 r">headId</span>);
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r62 rd" class="r62 r">upstream</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>);
+			<b>if</b> (<a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#a6cf3bbd5155d51a" class="i method">IsMergedInto</a>(<span class="r62 r">upstream</span>, <span class="r61 r">headCommit</span>))
+			{
+				<b>return</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#cde180eb8cf8c2b1" class="i field">UP_TO_DATE_RESULT</a>;
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#a6cf3bbd5155d51a" class="i method">IsMergedInto</a>(<span class="r61 r">headCommit</span>, <span class="r62 r">upstream</span>))
+				{
+					<span class="c">// head is already merged into upstream, fast-foward</span>
+					<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#16ead88d8640b3ec" class="i field">resettingHead</a>, <a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>
+						.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>()), <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>.<a href="../NGit/ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>);
+					<a href="#fa223d1f569eb43d" class="i method">CheckoutCommit</a>(<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>);
+					<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+					<a href="#ac444da909e1eb5e" class="i method">UpdateHead</a>(<span class="r59 r">headName</span>, <a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>);
+					<b>return</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#484e0d0462705a18" class="i field">FAST_FORWARD_RESULT</a>;
+				}
+			}
+			<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#5c416ddcbe22a144" class="i field">obtainingCommitsForCherryPick</a>, <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>.<a href="../NGit/ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>
+				);
+			<span class="c">// determine the commits to be applied</span>
+			<a href="LogCommand.cs.html#f3e36505652ea29a" class="t t">LogCommand</a> <span id="r63 rd" class="r63 r">cmd</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>).<a href="Git.cs.html#a72fac998e94cc0f" class="i method">Log</a>().<a href="LogCommand.cs.html#8fe44b1524026e80" class="i method">AddRange</a>(<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>, <span class="r61 r">headCommit</span>);
+			<a href="/Sharpen/A.html#f5302991756850e2" class="t t">Iterable</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt; <span id="r64 rd" class="r64 r">commitsToUse</span> = <span class="r63 r">cmd</span>.<a href="LogCommand.cs.html#f81841956886aa6b" class="i method">Call</a>();
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt; <span id="r65 rd" class="r65 r">cherryPickList</span> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt;();
+			<b>foreach</b> (<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r66 rd" class="r66 r">commit</span> <b>in</b> <span class="r64 r">commitsToUse</span>)
+			{
+				<b>if</b> (<span class="r66 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#6804a6589a038c04" class="i property">ParentCount</a> != 1)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#066e40bc2de029a3" class="i field">canOnlyCherryPickCommitsWithOneParent</a>
+						, <span class="r66 r">commit</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<span class="r66 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#6804a6589a038c04" class="i property">ParentCount</a>)));
+				}
+				<span class="r65 r">cherryPickList</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r66 r">commit</span>);
+			}
+			<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#649ba1a3051ed88a" class="i method">Reverse</a>(<span class="r65 r">cherryPickList</span>);
+			<span class="c">// create the folder for the meta information</span>
+			<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#275c9125e8e5a479" class="i method">Mkdir</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>);
+			<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#ac3ac339bd902498" class="i method">WriteOrigHead</a>(<span class="r60 r">headId</span>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#d37ee13aa8e6dca8" class="i field">REBASE_HEAD</a>, <span class="r60 r">headId</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#90a1eeed027ecbb1" class="i field">HEAD_NAME</a>, <span class="r59 r">headName</span>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#9591e203f3e143c1" class="i field">ONTO</a>, <a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>);
+			<a href="#c574e80d9b3c9895" class="i method">CreateFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#d23a9869966bcefa" class="i field">INTERACTIVE</a>, <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>);
+			<a href="/Sharpen/A.html#20003b51174b318e" class="t t">BufferedWriter</a> <span id="r67 rd" class="r67 r">fw</span> = <b>new</b> <a href="/Sharpen/A.html#3cdb22ac262bc909" class="t constructor">BufferedWriter</a>(<b>new</b> <a href="/Sharpen/A.html#3c540f001f0235b6" class="t constructor">OutputStreamWriter</a>(<b>new</b> <a href="/Sharpen/A.html#60d0d5bbf527518d" class="t constructor">FileOutputStream</a>
+				(<b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#5ffd6ba6ad9e7ae9" class="i field">GIT_REBASE_TODO</a>)), <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#b225eb73030e13b2" class="i field">CHARACTER_ENCODING</a>));
+			<span class="r67 r">fw</span>.<a href="/Sharpen/A.html#48b2fa929d7e1b65" class="i method">Write</a>(<span class="s">&quot;# Created by EGit: rebasing &quot;</span> + <a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a> + <span class="s">&quot; onto &quot;</span> + <span class="r60 r">headId</span>
+				.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>);
+			<span class="r67 r">fw</span>.<a href="/Sharpen/A.html#d15796a089f9732f" class="i method">NewLine</a>();
+			<b>try</b>
+			{
+				<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r68 rd" class="r68 r">sb</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+				<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r69 rd" class="r69 r">reader</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#67c5e603844b304a" class="i method">GetObjectReader</a>();
+				<b>foreach</b> (<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r70 rd" class="r70 r">commit_1</span> <b>in</b> <span class="r65 r">cherryPickList</span>)
+				{
+					<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> = 0;
+					<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a>.<a href="#2f36816e9b0d9ab0" class="i field">PICK</a>.<a href="#aa1d3aa70b05de06" class="i method">ToToken</a>());
+					<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot; &quot;</span>);
+					<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r69 r">reader</span>.<a href="../NGit/ObjectReader.cs.html#f90bf4377f0672e8" class="i method">Abbreviate</a>(<span class="r70 r">commit_1</span>).<a href="../NGit/AbbreviatedObjectId.cs.html#08495489e12b34fc" class="i property">Name</a>);
+					<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot; &quot;</span>);
+					<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r70 r">commit_1</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>());
+					<span class="r67 r">fw</span>.<a href="/Sharpen/A.html#48b2fa929d7e1b65" class="i method">Write</a>(<span class="r68 r">sb</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>());
+					<span class="r67 r">fw</span>.<a href="/Sharpen/A.html#d15796a089f9732f" class="i method">NewLine</a>();
+				}
+			}
+			<b>finally</b>
+			{
+				<span class="r67 r">fw</span>.<a href="/Sharpen/A.html#9590bbebe4cf68af" class="i method">Close</a>();
+			}
+			<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+			<span class="c">// we rewind to the upstream commit</span>
+			<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#e5413ac41fb71bea" class="i field">rewinding</a>, <a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>
+				()), <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>.<a href="../NGit/ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>);
+			<b>bool</b> <span id="r71 rd" class="r71 r">checkoutOk</span> = <b>false</b>;
+			<b>try</b>
+			{
+				<span class="r71 r">checkoutOk</span> = <a href="#fa223d1f569eb43d" class="i method">CheckoutCommit</a>(<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a>);
+			}
+			<b>finally</b>
+			{
+				<b>if</b> (!<span class="r71 r">checkoutOk</span>)
+				{
+					<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#5d45cc3b4ddbc04e" class="i method">Delete</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#27f6d919ef27f98b" class="i field">RECURSIVE</a>);
+				}
+			}
+			<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+			<b>return null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">checks if we can fast-forward and returns the new head if it is possible</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r72 r">newCommit</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the new head, or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.GitAPIException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="74f1eb842260a18c" href="../R/74f1eb842260a18c.html" target="n" data-glyph="72,1" class="i method">TryFastForward</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r72 rd" class="r72 r">newCommit</span>)
+		{
+			<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r73 rd" class="r73 r">head</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+			<b>if</b> (<span class="r73 r">head</span> == <b>null</b> || <span class="r73 r">head</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>() == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+					, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			}
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r74 rd" class="r74 r">headId</span> = <span class="r73 r">head</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+			<b>if</b> (<span class="r74 r">headId</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+					, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			}
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r75 rd" class="r75 r">headCommit</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="r74 r">headId</span>);
+			<b>if</b> (<a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#a6cf3bbd5155d51a" class="i method">IsMergedInto</a>(<span class="r72 r">newCommit</span>, <span class="r75 r">headCommit</span>))
+			{
+				<b>return</b> <span class="r72 r">newCommit</span>;
+			}
+			<b>string</b> <span id="r76 rd" class="r76 r">headName</span>;
+			<b>if</b> (<span class="r73 r">head</span>.<a href="../NGit/Ref.cs.html#298ee9c00de1f373" class="i method">IsSymbolic</a>())
+			{
+				<span class="r76 r">headName</span> = <span class="r73 r">head</span>.<a href="../NGit/Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>().<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>();
+			}
+			<b>else</b>
+			{
+				<span class="r76 r">headName</span> = <span class="s">&quot;detached HEAD&quot;</span>;
+			}
+			<b>return</b> <a href="#43151383dba296ac" class="i method">TryFastForward</a>(<span class="r76 r">headName</span>, <span class="r75 r">headCommit</span>, <span class="r72 r">newCommit</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="43151383dba296ac" href="../R/43151383dba296ac.html" target="n" data-glyph="76,1" class="i method">TryFastForward</a>(<b>string</b> <span id="r77 rd" class="r77 r">headName</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r78 rd" class="r78 r">oldCommit</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> 
+			<span id="r79 rd" class="r79 r">newCommit</span>)
+		{
+			<b>bool</b> <span id="r80 rd" class="r80 r">tryRebase</span> = <b>false</b>;
+			<b>foreach</b> (<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r81 rd" class="r81 r">parentCommit</span> <b>in</b> <span class="r79 r">newCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#e74121c77ffd35f6" class="i property">Parents</a>)
+			{
+				<b>if</b> (<span class="r81 r">parentCommit</span>.<a href="../NGit/AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<span class="r78 r">oldCommit</span>))
+				{
+					<span class="r80 r">tryRebase</span> = <b>true</b>;
+				}
+			}
+			<b>if</b> (!<span class="r80 r">tryRebase</span>)
+			{
+				<b>return null</b>;
+			}
+			<a href="CheckoutCommand.cs.html#11c33b396935f397" class="t t">CheckoutCommand</a> <span id="r82 rd" class="r82 r">co</span> = <b>new</b> <a href="CheckoutCommand.cs.html#4dee88d8447e4c70" class="t constructor">CheckoutCommand</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<b>try</b>
+			{
+				<span class="r82 r">co</span>.<a href="CheckoutCommand.cs.html#cc24f28fb914e935" class="i method">SetName</a>(<span class="r79 r">newCommit</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>).<a href="CheckoutCommand.cs.html#d7f053ed663b1d4c" class="i method">Call</a>();
+				<b>if</b> (<span class="r77 r">headName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#51f9cfd1933180d7" class="i field">R_HEADS</a>))
+				{
+					<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r83 rd" class="r83 r">rup</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#e507581ff50608bc" class="i method">UpdateRef</a>(<span class="r77 r">headName</span>);
+					<span class="r83 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#0755d2ab83b340b2" class="i method">SetExpectedOldObjectId</a>(<span class="r78 r">oldCommit</span>);
+					<span class="r83 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r79 r">newCommit</span>);
+					<span class="r83 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#05bba7b15544fe2d" class="i method">SetRefLogMessage</a>(<span class="s">&quot;Fast-foward from &quot;</span> + <span class="r78 r">oldCommit</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a> + <span class="s">&quot; to &quot;</span> + <span class="r79 r">newCommit</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>
+						, <b>false</b>);
+					<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a> <span id="r84 rd" class="r84 r">res</span> = <span class="r83 r">rup</span>.<a href="../NGit/RefUpdate.cs.html#5c4a3bfa2cd5386a" class="i method">Update</a>(<a href="#eb99a346505dd41a" class="i field">walk</a>);
+					<b>switch</b> (<span class="r84 r">res</span>)
+					{
+						<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+						<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#279b180136195c74" class="i field">NO_CHANGE</a>:
+						<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+						{
+							<b>break</b>;
+						}
+
+						<b>default</b>:
+						{
+							<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Could not fast-forward&quot;</span>);
+						}
+					}
+				}
+				<b>return</b> <span class="r79 r">newCommit</span>;
+			}
+			<b>catch</b> (<a href="../NGit.Api.Errors/RefAlreadyExistsException.cs.html#8a530c6fdc704aca" class="t t">RefAlreadyExistsException</a> <span id="r85 rd" class="r85 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r85 r">e</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r85 r">e</span>);
+			}
+			<b>catch</b> (<a href="../NGit.Api.Errors/RefNotFoundException.cs.html#89222350eff5aa34" class="t t">RefNotFoundException</a> <span id="r86 rd" class="r86 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r86 r">e</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r86 r">e</span>);
+			}
+			<b>catch</b> (<a href="../NGit.Api.Errors/InvalidRefNameException.cs.html#cbd70b74b9e3fa11" class="t t">InvalidRefNameException</a> <span id="r87 rd" class="r87 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r87 r">e</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r87 r">e</span>);
+			}
+			<b>catch</b> (<span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/CheckoutConflictException.cs.html#ad9a155229ae5cd4" class="t t">CheckoutConflictException</a> <span id="r88 rd" class="r88 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r88 r">e</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r88 r">e</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#5d7264b257703642" class="t t">WrongRepositoryStateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="9aab74dec7a943e2" href="../R/9aab74dec7a943e2.html" target="n" data-glyph="76,1" class="i method">CheckParameters</a>()
+		{
+			<a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a> <span id="r89 rd" class="r89 r">s</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>();
+			<b>if</b> (<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#5793dde69cb9b680" class="i field">operation</a> != <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a>.<a href="#4f5c53bd2fd13b4b" class="i field">BEGIN</a>)
+			{
+				<span class="c">// these operations are only possible while in a rebasing state</span>
+				<b>if</b> (<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>() != <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#e97eb76417ac0512" class="i field">REBASING_INTERACTIVE</a>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#492e06b37585b147" class="t constructor">WrongRepositoryStateException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#6bf2c038a06639fb" class="i field">wrongRepositoryState</a>
+						, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>().<a href="../NGit/RepositoryState.cs.html#0b85ffaef8cd8c87" class="i method">Name</a>()));
+				}
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<span class="r89 r">s</span> == <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#d964a81e36d8cb7a" class="i field">SAFE</a>)
+				{
+					<b>if</b> (<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a> == <b>null</b>)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#247ca149610f7b34" class="i field">missingRequiredParameter</a>
+							, <span class="s">&quot;upstream&quot;</span>));
+					}
+					<b>return</b>;
+				}
+				<b>else</b>
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#492e06b37585b147" class="t constructor">WrongRepositoryStateException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#6bf2c038a06639fb" class="i field">wrongRepositoryState</a>
+						, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>().<a href="../NGit/RepositoryState.cs.html#0b85ffaef8cd8c87" class="i method">Name</a>()));
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="c574e80d9b3c9895" href="../R/c574e80d9b3c9895.html" target="n" data-glyph="76,1" class="i method">CreateFile</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r90 rd" class="r90 r">parentDir</span>, <b>string</b> <span id="r91 rd" class="r91 r">name</span>, <b>string</b> <span id="r92 rd" class="r92 r">content</span>)
+		{
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r93 rd" class="r93 r">file</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r90 r">parentDir</span>, <span class="r91 r">name</span>);
+			<a href="/Sharpen/A.html#593039b4e998beb4" class="t t">FileOutputStream</a> <span id="r94 rd" class="r94 r">fos</span> = <b>new</b> <a href="/Sharpen/A.html#60d0d5bbf527518d" class="t constructor">FileOutputStream</a>(<span class="r93 r">file</span>);
+			<b>try</b>
+			{
+				<span class="r94 r">fos</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#6b7bb2933a237699" class="i method">GetBytesForString</a>(<span class="r92 r">content</span>, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#b225eb73030e13b2" class="i field">CHARACTER_ENCODING</a>
+					));
+				<span class="r94 r">fos</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r94 r">fos</span>.<a href="/Sharpen/A.html#6788f268a20b51ce" class="i method">Close</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a> <a id="b216c2ba4c432336" href="../R/b216c2ba4c432336.html" target="n" data-glyph="76,1" class="i method">Abort</a>(<a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a> <span id="r95 rd" class="r95 r">result</span>)
+		{
+			<b>try</b>
+			{
+				<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r96 rd" class="r96 r">origHead</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#77ce524b8943bc52" class="i method">ReadOrigHead</a>();
+				<b>string</b> <span id="r97 rd" class="r97 r">commitId</span> = <span class="r96 r">origHead</span> != <b>null</b> ? <span class="r96 r">origHead</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a> : <b>null</b>;
+				<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#26a73d873cc2b5a4" class="i field">abortingRebase</a>, <span class="r97 r">commitId</span>), 
+					<a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>.<a href="../NGit/ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>);
+				<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a> <span id="r98 rd" class="r98 r">dco</span>;
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r99 rd" class="r99 r">commit</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<span class="r97 r">commitId</span>));
+				<b>if</b> (<span class="r95 r">result</span>.<a href="RebaseResult.cs.html#3ad796e34eaba93b" class="i method">GetStatus</a>().<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<a href="RebaseResult.cs.html#bbcd4b163c48545c" class="t t">RebaseResult</a>.<a href="RebaseResult.cs.html#7aefbae8ba4bafb8" class="t t">Status</a>.<a href="RebaseResult.cs.html#0b0af2d3f2b0f70e" class="i field">FAILED</a>))
+				{
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r100 rd" class="r100 r">head</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+					<span class="r98 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#726275afb70b49a6" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r100 r">head</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>(), <span class="r99 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+				}
+				<b>else</b>
+				{
+					<span class="r98 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#013905e974ce8f34" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>(), <span class="r99 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+				}
+				<span class="r98 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#c98b11bb8e5d0b91" class="i method">SetFailOnConflict</a>(<b>false</b>);
+				<span class="r98 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#e56f2429d666ea70" class="i method">Checkout</a>();
+				<a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+			}
+			<b>try</b>
+			{
+				<b>string</b> <span id="r101 rd" class="r101 r">headName</span> = <a href="#b407eab154313c92" class="i method">ReadFile</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#90a1eeed027ecbb1" class="i field">HEAD_NAME</a>);
+				<b>if</b> (<span class="r101 r">headName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#ec4c59db33b2098e" class="i field">R_REFS</a>))
+				{
+					<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#16ead88d8640b3ec" class="i field">resettingHead</a>, <span class="r101 r">headName</span>), <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>
+						.<a href="../NGit/ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>);
+					<span class="c">// update the HEAD</span>
+					<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r102 rd" class="r102 r">refUpdate</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#27aa83b646df120f" class="i method">UpdateRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>, <b>false</b>);
+					<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a> <span id="r103 rd" class="r103 r">res</span> = <span class="r102 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#fc49aa0d08627943" class="i method">Link</a>(<span class="r101 r">headName</span>);
+					<b>switch</b> (<span class="r103 r">res</span>)
+					{
+						<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+						<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+						<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#279b180136195c74" class="i field">NO_CHANGE</a>:
+						{
+							<b>break</b>;
+						}
+
+						<b>default</b>:
+						{
+							<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#034efdd24f70bb53" class="i field">abortingRebaseFailed</a>);
+						}
+					}
+				}
+				<span class="c">// cleanup the files</span>
+				<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#5d45cc3b4ddbc04e" class="i method">Delete</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#27f6d919ef27f98b" class="i field">RECURSIVE</a>);
+				<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#c1f9cc2d1e3d64cb" class="i method">WriteCherryPickHead</a>(<b>null</b>);
+				<b>return</b> <span class="r95 r">result</span>;
+			}
+			<b>finally</b>
+			{
+				<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private string</b> <a id="b407eab154313c92" href="../R/b407eab154313c92.html" target="n" data-glyph="76,1" class="i method">ReadFile</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r104 rd" class="r104 r">directory</span>, <b>string</b> <span id="r105 rd" class="r105 r">fileName</span>)
+		{
+			<b>byte</b>[] <span id="r106 rd" class="r106 r">content</span> = <a href="../NGit.Util/IOUtil.cs.html#d5aa4ac4db64211b" class="t t">IOUtil</a>.<a href="../NGit.Util/IOUtil.cs.html#cc1b739e85e7e2a4" class="i method">ReadFully</a>(<b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r104 r">directory</span>, <span class="r105 r">fileName</span>));
+			<span class="c">// strip off the last LF</span>
+			<b>int</b> <span id="r107 rd" class="r107 r">end</span> = <span class="r106 r">content</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+			<b>while</b> (0 &lt; <span class="r107 r">end</span> &amp;&amp; <span class="r106 r">content</span>[<span class="r107 r">end</span> - 1] == <span class="s">&#39;\n&#39;</span>)
+			{
+				<span class="r107 r">end</span>--;
+			}
+			<b>return</b> <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#c23f18f826e9513e" class="i method">Decode</a>(<span class="r106 r">content</span>, 0, <span class="r107 r">end</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="fa223d1f569eb43d" href="../R/fa223d1f569eb43d.html" target="n" data-glyph="76,1" class="i method">CheckoutCommit</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r108 rd" class="r108 r">commit</span>)
+		{
+			<b>try</b>
+			{
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r109 rd" class="r109 r">head</span> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+				<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a> <span id="r110 rd" class="r110 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#726275afb70b49a6" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r109 r">head</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>(), 
+					<span class="r108 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+				<span class="r110 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#c98b11bb8e5d0b91" class="i method">SetFailOnConflict</a>(<b>true</b>);
+				<span class="r110 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#e56f2429d666ea70" class="i method">Checkout</a>();
+				<span class="c">// update the HEAD</span>
+				<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r111 rd" class="r111 r">refUpdate</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#27aa83b646df120f" class="i method">UpdateRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>, <b>true</b>);
+				<span class="r111 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#0755d2ab83b340b2" class="i method">SetExpectedOldObjectId</a>(<span class="r109 r">head</span>);
+				<span class="r111 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r108 r">commit</span>);
+				<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a> <span id="r112 rd" class="r112 r">res</span> = <span class="r111 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#d4cc527448f83ba4" class="i method">ForceUpdate</a>();
+				<b>switch</b> (<span class="r112 r">res</span>)
+				{
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#279b180136195c74" class="i field">NO_CHANGE</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+					{
+						<b>break</b>;
+					}
+
+					<b>default</b>:
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Could not rewind to upstream commit&quot;</span>);
+					}
+				}
+			}
+			<b>finally</b>
+			{
+				<a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+				<a href="#e500adf408e713ff" class="i field">monitor</a>.<a href="../NGit/ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+			}
+			<b>return true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#98522ac2f245a384" class="t t">Step</a>&gt; <a id="6bd4f967217870dc" href="../R/6bd4f967217870dc.html" target="n" data-glyph="74,1" class="i method">LoadSteps</a>()
+		{
+			<b>byte</b>[] <span id="r113 rd" class="r113 r">buf</span> = <a href="../NGit.Util/IOUtil.cs.html#d5aa4ac4db64211b" class="t t">IOUtil</a>.<a href="../NGit.Util/IOUtil.cs.html#cc1b739e85e7e2a4" class="i method">ReadFully</a>(<b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#67741e4cf3ca257a" class="i field">rebaseDir</a>, <a href="#5ffd6ba6ad9e7ae9" class="i field">GIT_REBASE_TODO</a>));
+			<b>int</b> <span id="r114 rd" class="r114 r">ptr</span> = 0;
+			<b>int</b> <span id="r115 rd" class="r115 r">tokenBegin</span> = 0;
+			<a href="/Sharpen/A.html#f20351a5b7e2b027" class="t t">AList</a>&lt;<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#98522ac2f245a384" class="t t">Step</a>&gt; <span id="r116 rd" class="r116 r">r</span> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#98522ac2f245a384" class="t t">Step</a>&gt;();
+			<b>while</b> (<span class="r114 r">ptr</span> &lt; <span class="r113 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<span class="r115 r">tokenBegin</span> = <span class="r114 r">ptr</span>;
+				<span class="r114 r">ptr</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#162ee2e46b60d416" class="i method">NextLF</a>(<span class="r113 r">buf</span>, <span class="r114 r">ptr</span>);
+				<b>int</b> <span id="r117 rd" class="r117 r">nextSpace</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#1532c916b30cbb08" class="i method">Next</a>(<span class="r113 r">buf</span>, <span class="r115 r">tokenBegin</span>, <span class="s">&#39; &#39;</span>);
+				<b>int</b> <span id="r118 rd" class="r118 r">tokenCount</span> = 0;
+				<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#98522ac2f245a384" class="t t">Step</a> <span id="r119 rd" class="r119 r">current</span> = <b>null</b>;
+				<b>while</b> (<span class="r118 r">tokenCount</span> &lt; 3 &amp;&amp; <span class="r117 r">nextSpace</span> &lt; <span class="r114 r">ptr</span>)
+				{
+					<b>switch</b> (<span class="r118 r">tokenCount</span>)
+					{
+						<b>case</b> 0:
+						{
+							<b>string</b> <span id="r120 rd" class="r120 r">actionToken</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#aa1a1eabb973552f" class="i method">GetStringForBytes</a>(<span class="r113 r">buf</span>, <span class="r115 r">tokenBegin</span>, <span class="r117 r">nextSpace</span>
+								 - <span class="r115 r">tokenBegin</span> - 1);
+							<span class="r115 r">tokenBegin</span> = <span class="r117 r">nextSpace</span>;
+							<b>if</b> (<span class="r120 r">actionToken</span>[0] == <span class="s">&#39;#&#39;</span>)
+							{
+								<span class="r118 r">tokenCount</span> = 3;
+								<b>break</b>;
+							}
+							<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a> <span id="r121 rd" class="r121 r">action</span> = <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a>.<a href="#fea0753432bad55e" class="i method">Parse</a>(<span class="r120 r">actionToken</span>);
+							<b>if</b> (<span class="r121 r">action</span> != <b>null</b>)
+							{
+								<span class="r119 r">current</span> = <b>new</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#508f5dab26ed0a0a" class="t constructor">Step</a>(<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a>.<a href="#fea0753432bad55e" class="i method">Parse</a>(<span class="r120 r">actionToken</span>));
+							}
+							<b>break</b>;
+						}
+
+						<b>case</b> 1:
+						{
+							<b>if</b> (<span class="r119 r">current</span> == <b>null</b>)
+							{
+								<b>break</b>;
+							}
+							<span class="r117 r">nextSpace</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#1532c916b30cbb08" class="i method">Next</a>(<span class="r113 r">buf</span>, <span class="r115 r">tokenBegin</span>, <span class="s">&#39; &#39;</span>);
+							<b>string</b> <span id="r122 rd" class="r122 r">commitToken</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#aa1a1eabb973552f" class="i method">GetStringForBytes</a>(<span class="r113 r">buf</span>, <span class="r115 r">tokenBegin</span>, <span class="r117 r">nextSpace</span>
+								 - <span class="r115 r">tokenBegin</span> - 1);
+							<span class="r115 r">tokenBegin</span> = <span class="r117 r">nextSpace</span>;
+							<span class="r119 r">current</span>.<a href="#7fbe1800fd43273e" class="i field">commit</a> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#8f8eb3215216f0f3" class="i method">FromString</a>(<span class="r122 r">commitToken</span>);
+							<b>break</b>;
+						}
+
+						<b>case</b> 2:
+						{
+							<b>if</b> (<span class="r119 r">current</span> == <b>null</b>)
+							{
+								<b>break</b>;
+							}
+							<span class="r117 r">nextSpace</span> = <span class="r114 r">ptr</span>;
+							<b>int</b> <span id="r123 rd" class="r123 r">length</span> = <span class="r114 r">ptr</span> - <span class="r115 r">tokenBegin</span>;
+							<span class="r119 r">current</span>.<a href="#861d1f47a8fdd977" class="i field">shortMessage</a> = <b>new</b> <b>byte</b>[<span class="r123 r">length</span>];
+							<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r113 r">buf</span>, <span class="r115 r">tokenBegin</span>, <span class="r119 r">current</span>.<a href="#861d1f47a8fdd977" class="i field">shortMessage</a>, 0, <span class="r123 r">length</span>);
+							<span class="r116 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r119 r">current</span>);
+							<b>break</b>;
+						}
+					}
+					<span class="r118 r">tokenCount</span>++;
+				}
+			}
+			<b>return</b> <span class="r116 r">r</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r124 r">upstream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the upstream commit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a> <a id="a3b5fe33687caaa8" href="../R/a3b5fe33687caaa8.html" target="n" data-glyph="72,1" class="i method">SetUpstream</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r124 rd" class="r124 r">upstream</span>)
+		{
+			<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a> = <span class="r124 r">upstream</span>;
+			<b>return</b> <a href="#abe0fad2b11fb1ba" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r125 r">upstream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">id of the upstream commit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a> <a id="9c3d19c790522272" href="../R/9c3d19c790522272.html" target="n" data-glyph="72,1" class="i method">SetUpstream</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r125 rd" class="r125 r">upstream</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r125 r">upstream</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r126 rd" class="r126 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#8bbd3b24c2bccc66" class="i field">couldNotReadObjectWhileParsingCommit</a>
+					, <span class="r125 r">upstream</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>), <span class="r126 r">e</span>);
+			}
+			<b>return</b> <a href="#abe0fad2b11fb1ba" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r127 r">upstream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the upstream branch</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/RefNotFoundException.cs.html#89222350eff5aa34" class="t t">RefNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.RefNotFoundException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a> <a id="382d1a9aa839a873" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetUpstream</a>(<b>string</b> <span id="r127 rd" class="r127 r">upstream</span>)
+		{
+			<b>try</b>
+			{
+				<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r128 rd" class="r128 r">upstreamId</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<span class="r127 r">upstream</span>);
+				<b>if</b> (<span class="r128 r">upstreamId</span> == <b>null</b>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+						, <span class="r127 r">upstream</span>));
+				}
+				<a href="#8c5f129f06ab859b" class="i field">upstreamCommit</a> = <a href="#eb99a346505dd41a" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<span class="r127 r">upstream</span>));
+				<b>return</b> <a href="#abe0fad2b11fb1ba" class="k">this</a>;
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r129 rd" class="r129 r">ioe</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r129 r">ioe</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r129 r">ioe</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r130 r">operation</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the operation to perform</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a> <a id="bd91087afcdf0708" href="../R/bd91087afcdf0708.html" target="n" data-glyph="72,1" class="i method">SetOperation</a>(<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#835168bfe4ab94cc" class="t t">Operation</a> <span id="r130 rd" class="r130 r">operation</span>
+			)
+		{
+			<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#5793dde69cb9b680" class="i field">operation</a> = <span class="r130 r">operation</span>;
+			<b>return</b> <a href="#abe0fad2b11fb1ba" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r131 r">monitor</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a progress monitor</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a> <a id="63261b43012116fd" href="../R/63261b43012116fd.html" target="n" data-glyph="72,1" class="i method">SetProgressMonitor</a>(<a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r131 rd" class="r131 r">monitor</span>)
+		{
+			<a href="#abe0fad2b11fb1ba" class="k">this</a>.<a href="#e500adf408e713ff" class="i field">monitor</a> = <span class="r131 r">monitor</span>;
+			<b>return</b> <a href="#abe0fad2b11fb1ba" class="k">this</a>;
+		}
+
+		<b>internal class</b> <a id="f533af8a00bf5649" href="../R/f533af8a00bf5649.html" target="n" data-glyph="2,1" class="t t">Action</a>
+		{
+			<b>public static</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a> <a id="2f36816e9b0d9ab0" href="../R/2f36816e9b0d9ab0.html" target="n" data-glyph="42,2" class="i field">PICK</a> = <b>new</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#8532781965fb90a7" class="t constructor">Action</a>(<span class="s">&quot;pick&quot;</span>);
+
+			<b>public readonly string</b> <a id="14f054103587a782" href="../R/14f054103587a782.html" target="n" data-glyph="42,2" class="i field">token</a>;
+
+			<b>private</b> <a id="8532781965fb90a7" href="../R/8532781965fb90a7.html" target="n" data-glyph="76,2" class="i constructor">Action</a>(<b>string</b> <span id="r132 rd" class="r132 r">token</span>)
+			{
+				<span class="c">// later add SQUASH, EDIT, etc.</span>
+				<a href="#f533af8a00bf5649" class="k">this</a>.<a href="#14f054103587a782" class="i field">token</a> = <span class="r132 r">token</span>;
+			}
+
+			<b>public virtual string</b> <a id="aa1d3aa70b05de06" href="../R/aa1d3aa70b05de06.html" target="n" data-glyph="72,2" class="i method">ToToken</a>()
+			{
+				<b>return</b> <a href="#f533af8a00bf5649" class="k">this</a>.<a href="#14f054103587a782" class="i field">token</a>;
+			}
+
+			<b>public override string</b> <a id="6440bf07b1b4da86" href="../R/6440bf07b1b4da86.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+			{
+				<b>return</b> <span class="s">&quot;Action[&quot;</span> + <a href="#14f054103587a782" class="i field">token</a> + <span class="s">&quot;]&quot;</span>;
+			}
+
+			<b>internal static</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a> <a id="fea0753432bad55e" href="../R/fea0753432bad55e.html" target="n" data-glyph="74,2" class="i method">Parse</a>(<b>string</b> <span id="r133 rd" class="r133 r">token</span>)
+			{
+				<b>if</b> (<span class="r133 r">token</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="s">&quot;pick&quot;</span>) || <span class="r133 r">token</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="s">&quot;p&quot;</span>))
+				{
+					<b>return</b> <a href="#2f36816e9b0d9ab0" class="i field">PICK</a>;
+				}
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#b5ec98f8ced4aafa" class="i field">unsupportedCommand0</a>
+					, <span class="r133 r">token</span>, <a href="#2f36816e9b0d9ab0" class="i field">PICK</a>.<a href="#aa1d3aa70b05de06" class="i method">ToToken</a>()));
+			}
+		}
+
+		<b>internal class</b> <a id="98522ac2f245a384" href="../R/98522ac2f245a384.html" target="n" data-glyph="2,1" class="t t">Step</a>
+		{
+			<b>internal</b> <a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a> <a id="c4333d74fd45d3db" href="../R/c4333d74fd45d3db.html" target="n" data-glyph="44,2" class="i field">action</a>;
+
+			<b>internal</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="7fbe1800fd43273e" href="../R/7fbe1800fd43273e.html" target="n" data-glyph="44,2" class="i field">commit</a>;
+
+			<b>internal byte</b>[] <a id="861d1f47a8fdd977" href="../R/861d1f47a8fdd977.html" target="n" data-glyph="44,2" class="i field">shortMessage</a>;
+
+			<b>internal</b> <a id="508f5dab26ed0a0a" href="../R/508f5dab26ed0a0a.html" target="n" data-glyph="74,2" class="i constructor">Step</a>(<a href="#abe0fad2b11fb1ba" class="t t">RebaseCommand</a>.<a href="#f533af8a00bf5649" class="t t">Action</a> <span id="r134 rd" class="r134 r">action</span>)
+			{
+				<a href="#98522ac2f245a384" class="k">this</a>.<a href="#c4333d74fd45d3db" class="i field">action</a> = <span class="r134 r">action</span>;
+			}
+
+			<b>public override string</b> <a id="6321b6afff6a90c0" href="../R/6321b6afff6a90c0.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+			{
+				<b>return</b> <span class="s">&quot;Step[&quot;</span> + <a href="#c4333d74fd45d3db" class="i field">action</a> + <span class="s">&quot;, &quot;</span> + ((<a href="#7fbe1800fd43273e" class="i field">commit</a> == <b>null</b>) ? <span class="s">&quot;null&quot;</span> : <a href="#7fbe1800fd43273e" class="i field">commit</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#36e4a742b4cc8824" class="i method">ToString</a> ()) + <span class="s">&quot;, &quot;</span> + ((
+					<a href="#861d1f47a8fdd977" class="i field">shortMessage</a> == <b>null</b>) ? <span class="s">&quot;null&quot;</span> : <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#71a8ff65f3985b5e" class="i method">GetStringForBytes</a>(<a href="#861d1f47a8fdd977" class="i field">shortMessage</a>)
+					) + <span class="s">&quot;]&quot;</span>;
+			}
+		}
+
+		<b>internal virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="4af4775414781553" href="../R/4af4775414781553.html" target="n" data-glyph="74,1" class="i method">ParseAuthor</a>(<b>byte</b>[] <span id="r135 rd" class="r135 r">raw</span>)
+		{
+			<b>if</b> (<span class="r135 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0)
+			{
+				<b>return null</b>;
+			}
+			<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>string</b>&gt; <span id="r136 rd" class="r136 r">keyValueMap</span> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <b>string</b>&gt;();
+			<b>for</b> (<b>int</b> <span id="r137 rd" class="r137 r">p</span> = 0; <span class="r137 r">p</span> &lt; <span class="r135 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; )
+			{
+				<b>int</b> <span id="r138 rd" class="r138 r">end</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#162ee2e46b60d416" class="i method">NextLF</a>(<span class="r135 r">raw</span>, <span class="r137 r">p</span>);
+				<b>if</b> (<span class="r138 r">end</span> == <span class="r137 r">p</span>)
+				{
+					<b>break</b>;
+				}
+				<b>int</b> <span id="r139 rd" class="r139 r">equalsIndex</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#1532c916b30cbb08" class="i method">Next</a>(<span class="r135 r">raw</span>, <span class="r137 r">p</span>, <span class="s">&#39;=&#39;</span>);
+				<b>if</b> (<span class="r139 r">equalsIndex</span> == <span class="r138 r">end</span>)
+				{
+					<b>break</b>;
+				}
+				<b>string</b> <span id="r140 rd" class="r140 r">key</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#c23f18f826e9513e" class="i method">Decode</a>(<span class="r135 r">raw</span>, <span class="r137 r">p</span>, <span class="r139 r">equalsIndex</span> - 1);
+				<b>string</b> <span id="r141 rd" class="r141 r">value</span> = <a href="../NGit.Util/RawParseUtils.cs.html#f87abe4d24b03b12" class="t t">RawParseUtils</a>.<a href="../NGit.Util/RawParseUtils.cs.html#c23f18f826e9513e" class="i method">Decode</a>(<span class="r135 r">raw</span>, <span class="r139 r">equalsIndex</span> + 1, <span class="r138 r">end</span> - 2);
+				<span class="r137 r">p</span> = <span class="r138 r">end</span>;
+				<span class="r136 r">keyValueMap</span>.<a href="/Sharpen/A.html#a7c201171ab1d7de" class="i method">Put</a>(<span class="r140 r">key</span>, <span class="r141 r">value</span>);
+			}
+			<b>string</b> <span id="r142 rd" class="r142 r">name</span> = <span class="r136 r">keyValueMap</span>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<a href="#cad197b3d8449d8f" class="i field">GIT_AUTHOR_NAME</a>);
+			<b>string</b> <span id="r143 rd" class="r143 r">email</span> = <span class="r136 r">keyValueMap</span>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<a href="#93086aee62c512b5" class="i field">GIT_AUTHOR_EMAIL</a>);
+			<b>string</b> <span id="r144 rd" class="r144 r">time</span> = <span class="r136 r">keyValueMap</span>.<a href="/Sharpen/A.html#7e18f8a78566330c" class="i method">Get</a>(<a href="#18f46140f137c7a8" class="i field">GIT_AUTHOR_DATE</a>);
+			<span class="c">// the time is saved as &lt;seconds since 1970&gt; &lt;timezone offset&gt;</span>
+			<b>long</b> <span id="r145 rd" class="r145 r">when</span> = <b>long</b>.<a href="@0@mscorlib/A.html#7967a886c106fcce" class="i method">Parse</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r144 r">time</span>, 0, <span class="r144 r">time</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39; &#39;</span>))) * 1000;
+			<b>string</b> <span id="r146 rd" class="r146 r">tzOffsetString</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#b77d80ab77ebce19" class="i method">Substring</a>(<span class="r144 r">time</span>, <span class="r144 r">time</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39; &#39;</span>) + 1);
+			<b>int</b> <span id="r147 rd" class="r147 r">multiplier</span> = -1;
+			<b>if</b> (<span class="r146 r">tzOffsetString</span>[0] == <span class="s">&#39;+&#39;</span>)
+			{
+				<span class="r147 r">multiplier</span> = 1;
+			}
+			<b>int</b> <span id="r148 rd" class="r148 r">hours</span> = <span class="i n">System</span>.<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#069d595792a157df" class="i method">ToInt32</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r146 r">tzOffsetString</span>, 1, 3
+				));
+			<b>int</b> <span id="r149 rd" class="r149 r">minutes</span> = <span class="i n">System</span>.<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#069d595792a157df" class="i method">ToInt32</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r146 r">tzOffsetString</span>, 3, 
+				5));
+			<span class="c">// this is in format (+/-)HHMM (hours and minutes)</span>
+			<span class="c">// we need to convert into minutes</span>
+			<b>int</b> <span id="r150 rd" class="r150 r">tz</span> = (<span class="r148 r">hours</span> * 60 + <span class="r149 r">minutes</span>) * <span class="r147 r">multiplier</span>;
+			<b>if</b> (<span class="r142 r">name</span> != <b>null</b> &amp;&amp; <span class="r143 r">email</span> != <b>null</b>)
+			{
+				<b>return</b> <b>new</b> <a href="../NGit/PersonIdent.cs.html#f88325c4909b2558" class="t constructor">PersonIdent</a>(<span class="r142 r">name</span>, <span class="r143 r">email</span>, <span class="r145 r">when</span>, <span class="r150 r">tz</span>);
+			}
+			<b>return null</b>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

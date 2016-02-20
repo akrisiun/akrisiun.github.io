@@ -1,0 +1,656 @@
+﻿<!DOCTYPE html>
+<html><head><title>ObjectDirectory.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(647);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/ObjectDirectory.cs" target="_top">ObjectDirectory.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2009, Google Inc.
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">ObjectModel</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Transport</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Traditional file system based </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This is the classical object database representation for a Git repository,</span>
+    <span class="c">///</span><span class="c"> where objects are stored loose by hashing them into directories by their</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">, or are stored in compressed containers known as</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">s.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="676d7fa05a339f1d" href="R/676d7fa05a339f1d.html" target="n" data-glyph="0,0" class="t t">ObjectDirectory</a> : <a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a>
+    {
+        <b>private static readonly</b> <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <a id="4a9a0f31c2bc396b" href="R/4a9a0f31c2bc396b.html" target="n" data-glyph="46,1" class="i field">NoPacks</a> = <b>new</b> <a href="#d264b4c376594830" class="t constructor">PackList</a>(-1, -1, <b>new</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[0]);
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="831f4fb579705ad1" href="R/831f4fb579705ad1.html" target="n" data-glyph="46,1" class="i field">_objects</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="0b45da9d4b426a78" href="R/0b45da9d4b426a78.html" target="n" data-glyph="46,1" class="i field">_infoDirectory</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="dc740f81c18c996b" href="R/dc740f81c18c996b.html" target="n" data-glyph="46,1" class="i field">_packDirectory</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="a27a804e42d18410" href="R/a27a804e42d18410.html" target="n" data-glyph="46,1" class="i field">_alternatesFile</a>;
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicReference.cs.html#1e8ba7f5e3f67204" class="t t">AtomicReference</a>&lt;<a href="#2f58e3ee05e3ca33" class="t t">PackList</a>&gt; <a id="0af5fd2b92f9518d" href="R/0af5fd2b92f9518d.html" target="n" data-glyph="46,1" class="i field">_packList</a>;
+
+        <b>private</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a>[] <a id="491b559d283adb4c" href="R/491b559d283adb4c.html" target="n" data-glyph="46,1" class="i field">_alternateObjectDir</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Initialize a reference to an on-disk object directory.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">dir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the location of the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">objects</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> directory.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">alternateObjectDir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a list of alternate object directories</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="e3465b1156bddeab" href="R/e3465b1156bddeab.html" target="n" data-glyph="72,1" class="i constructor">ObjectDirectory</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r0 rd" class="r0 r">dir</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a>[] <span id="r1 rd" class="r1 r">alternateObjectDir</span>)
+        {
+            <a href="#831f4fb579705ad1" class="i field">_objects</a> = <span class="r0 r">dir</span>;
+            <a href="#491b559d283adb4c" class="i field">_alternateObjectDir</a> = <span class="r1 r">alternateObjectDir</span>;
+            <a href="#0b45da9d4b426a78" class="i field">_infoDirectory</a> = <b>new</b> <a href="@0@mscorlib/A.html#683f5ff112df8d3a" class="t constructor">DirectoryInfo</a>(<a href="#831f4fb579705ad1" class="i field">_objects</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;/info&quot;</span>);
+            <a href="#dc740f81c18c996b" class="i field">_packDirectory</a> = <b>new</b> <a href="@0@mscorlib/A.html#683f5ff112df8d3a" class="t constructor">DirectoryInfo</a>(<a href="#831f4fb579705ad1" class="i field">_objects</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;/pack&quot;</span>);
+            <a href="#a27a804e42d18410" class="i field">_alternatesFile</a> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#0b45da9d4b426a78" class="i field">_infoDirectory</a> + <span class="s">&quot;/alternates&quot;</span>);
+            <a href="#0af5fd2b92f9518d" class="i field">_packList</a> = <b>new</b> <a href="Util/JavaHelper/AtomicReference.cs.html#0b8f897610c760f5" class="t constructor">AtomicReference</a>&lt;<a href="#2f58e3ee05e3ca33" class="t t">PackList</a>&gt;(<a href="#4a9a0f31c2bc396b" class="i field">NoPacks</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Gets the location of the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">objects</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> directory.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="6fe9e2d1be36b7a4" href="R/6fe9e2d1be36b7a4.html" target="n" data-glyph="72,1" class="i method">getDirectory</a>()
+        {
+            <b>return</b> <a href="#831f4fb579705ad1" class="i field">_objects</a>;
+        }
+
+        <b>public override bool</b> <a id="9f85ccb917da4ecc" href="R/9f85ccb917da4ecc.html" target="n" data-glyph="72,1" class="i method">exists</a>()
+        {
+            <b>return</b> <a href="#831f4fb579705ad1" class="i field">_objects</a>.<a href="@0@mscorlib/A.html#6f88a05eb9231687" class="i property">Exists</a>;
+        }
+
+        <b>public override void</b> <a id="1954992301f058a6" href="R/1954992301f058a6.html" target="n" data-glyph="72,1" class="i method">create</a>()
+        {
+            <a href="#831f4fb579705ad1" class="i field">_objects</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <a href="#0b45da9d4b426a78" class="i field">_infoDirectory</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <a href="#dc740f81c18c996b" class="i field">_packDirectory</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+        }
+
+        <b>public override void</b> <a id="fddf101ccd766a54" href="R/fddf101ccd766a54.html" target="n" data-glyph="72,1" class="i method">closeSelf</a>()
+        {
+            <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r2 rd" class="r2 r">packs</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="#4a9a0f31c2bc396b" class="i field">NoPacks</a>);
+            <b>foreach</b> (<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r3 rd" class="r3 r">p</span> <b>in</b> <span class="r2 r">packs</span>.<a href="#c264452af9d4db70" class="i field">packs</a>)
+            {
+                <span class="r3 r">p</span>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+            }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+            <a href="@0@mscorlib/A.html#25d9c1e022317a99" class="t t">GC</a>.<a href="@0@mscorlib/A.html#2673f5220a565bf2" class="i method">SuppressFinalize</a>(<a href="#676d7fa05a339f1d" class="k">this</a>); <span class="c">// Disarm lock-release checker</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+        <span class="c">// A debug mode warning if the type has not been disposed properly</span>
+        ~<a id="8d6039ab9ea7dedf" href="R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">ObjectDirectory</a>()
+        {
+            <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a> + <span class="s">&quot; has not been properly disposed {&quot;</span> + <a href="#831f4fb579705ad1" class="i field">_objects</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;}&quot;</span>);
+        }
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Compute the location of a loose object file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Identity of the loose object to map to the directory.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Location of the object, if it were to exist as a loose object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="29e4bdc419b441fb" href="R/29e4bdc419b441fb.html" target="n" data-glyph="72,1" class="i method">fileFor</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r4 rd" class="r4 r">objectId</span>)
+        {
+            <b>if</b> (<span class="r4 r">objectId</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;objectId&quot;</span>);
+
+            <b>return</b> <a href="#5b693814817b7d2a" class="i method">fileFor</a>(<span class="r4 r">objectId</span>.<a href="AnyObjectId.cs.html#90e7a293494044eb" class="i property">Name</a>);
+        }
+
+        <b>private</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="5b693814817b7d2a" href="R/5b693814817b7d2a.html" target="n" data-glyph="76,1" class="i method">fileFor</a>(<b>string</b> <span id="r5 rd" class="r5 r">objectName</span>)
+        {
+            <b>string</b> <span id="r6 rd" class="r6 r">d</span> = <span class="r5 r">objectName</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, 2);
+            <b>string</b> <span id="r7 rd" class="r7 r">f</span> = <span class="r5 r">objectName</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(2);
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#831f4fb579705ad1" class="i field">_objects</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;/&quot;</span> + <span class="r6 r">d</span> + <span class="s">&quot;/&quot;</span> + <span class="r7 r">f</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> unmodifiable collection of all known pack files local to this</span>
+        <span class="c">///</span><span class="c"> directory. Most recent packs are presented first. Packs most</span>
+        <span class="c">///</span><span class="c"> likely to contain more recent objects appear before packs</span>
+        <span class="c">///</span><span class="c"> containing objects referenced by commits further back in the</span>
+        <span class="c">///</span><span class="c"> history of the repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt; <a id="94b88b7586071c1a" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getPacks</a>()
+        {
+            <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <span id="r8 rd" class="r8 r">packs</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>().<a href="#c264452af9d4db70" class="i field">packs</a>;
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#64e45c8a9b38b1c2" class="t constructor">ReadOnlyCollection</a>&lt;<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt;(<span class="r8 r">packs</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add a single existing pack to the list of available pack files.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Path of the pack file to open.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Path of the corresponding index file.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Index file could not be opened, read, or is not recognized as</span>
+        <span class="c">///</span><span class="c"> a Git pack file index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="6c71dbc92d1eec18" href="R/6c71dbc92d1eec18.html" target="n" data-glyph="72,1" class="i method">openPack</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r9 rd" class="r9 r">pack</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r10 rd" class="r10 r">idx</span>)
+        {
+            <b>if</b> (<span class="r9 r">pack</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;pack&quot;</span>);
+            <b>if</b> (<span class="r10 r">idx</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;idx&quot;</span>);
+
+            <b>string</b> <span id="r11 rd" class="r11 r">p</span> = <span class="r9 r">pack</span>.<a href="@0@mscorlib/A.html#f559e2409f4dfe9e" class="i property">Name</a>;
+            <b>string</b> <span id="r12 rd" class="r12 r">i</span> = <span class="r10 r">idx</span>.<a href="@0@mscorlib/A.html#f559e2409f4dfe9e" class="i property">Name</a>;
+
+            <b>if</b> (<span class="r11 r">p</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> != 50 || !<span class="r11 r">p</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;pack-&quot;</span>) || !<span class="r11 r">p</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<a href="Transport/IndexPack.cs.html#5063d99bd2aa14a0" class="t t">IndexPack</a>.<a href="Transport/IndexPack.cs.html#e8f0d38d9291817a" class="i field">PackSuffix</a>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Not a valid pack &quot;</span> + <span class="r9 r">pack</span>);
+            }
+
+            <b>if</b> (<span class="r12 r">i</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> != 49 || !<span class="r12 r">i</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;pack-&quot;</span>) || !<span class="r12 r">i</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<a href="Transport/IndexPack.cs.html#5063d99bd2aa14a0" class="t t">IndexPack</a>.<a href="Transport/IndexPack.cs.html#deb469c756e15c4b" class="i field">IndexSuffix</a>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Not a valid pack &quot;</span> + <span class="r10 r">idx</span>);
+            }
+
+            <b>if</b> (!<span class="r11 r">p</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, 45).<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r12 r">i</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, 45)))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Pack &quot;</span> + <span class="r9 r">pack</span> + <span class="s">&quot;does not match index&quot;</span>);
+            }
+
+            <a href="#12b160620c4af868" class="i method">InsertPack</a>(<b>new</b> <a href="PackFile.cs.html#0beb26714c9e40f5" class="t constructor">PackFile</a>(<span class="r10 r">idx</span>, <span class="r9 r">pack</span>));
+        }
+
+        <b>public override string</b> <a id="005c59ab3b602d2b" href="R/005c59ab3b602d2b.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+        {
+            <b>return</b> <span class="s">&quot;ObjectDirectory[&quot;</span> + <a href="#6fe9e2d1be36b7a4" class="i method">getDirectory</a>() + <span class="s">&quot;]&quot;</span>;
+        }
+
+        <b>public override bool</b> <a id="cea88228a0be9876" href="R/cea88228a0be9876.html" target="n" data-glyph="72,1" class="i method">hasObject1</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r13 rd" class="r13 r">objectId</span>)
+        {
+            <b>foreach</b> (<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r14 rd" class="r14 r">p</span> <b>in</b> <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>().<a href="#c264452af9d4db70" class="i field">packs</a>)
+            {
+                <b>try</b>
+                {
+                    <b>if</b> (<span class="r14 r">p</span>.<a href="PackFile.cs.html#d48e6de66860335f" class="i method">HasObject</a>(<span class="r13 r">objectId</span>))
+                    {
+                        <b>return true</b>;
+                    }
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <span class="c">// The hasObject call should have only touched the index,</span>
+                    <span class="c">// so any failure here indicates the index is unreadable</span>
+                    <span class="c">// by this process, and the pack is likewise not readable.</span>
+                    <span class="c">//</span>
+                    <a href="#431b7328d04e4a87" class="i method">RemovePack</a>(<span class="r14 r">p</span>);
+                    <b>continue</b>;
+                }
+            }
+
+            <b>return false</b>;
+        }
+
+        <b>public override</b> <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <a id="9f07c449bbbb53de" href="R/9f07c449bbbb53de.html" target="n" data-glyph="72,1" class="i method">openObject1</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r15 rd" class="r15 r">curs</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r16 rd" class="r16 r">objectId</span>)
+        {
+            <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r17 rd" class="r17 r">pList</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+
+            <b>while</b> (<b>true</b>)
+            {
+            <span class="i">SEARCH</span>:
+                <b>foreach</b> (<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r18 rd" class="r18 r">p</span> <b>in</b> <span class="r17 r">pList</span>.<a href="#c264452af9d4db70" class="i field">packs</a>)
+                {
+                    <b>try</b>
+                    {
+                        <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r19 rd" class="r19 r">ldr</span> = <span class="r18 r">p</span>.<a href="PackFile.cs.html#809898b3729e38b4" class="i method">Get</a>(<span class="r15 r">curs</span>, <span class="r16 r">objectId</span>);
+                        <b>if</b> (<span class="r19 r">ldr</span> != <b>null</b>)
+                        {
+                            <span class="r19 r">ldr</span>.<a href="PackedObjectLoader.cs.html#2350a4cbc505c3cb" class="i method">Materialize</a>(<span class="r15 r">curs</span>);
+                            <b>return</b> <span class="r19 r">ldr</span>;
+                        }
+                    }
+                    <b>catch</b> (<a href="Exceptions/PackMismatchException.cs.html#d630231995a8dbd3" class="t t">PackMismatchException</a>)
+                    {
+                        <span class="c">// Pack was modified; refresh the entire pack list.</span>
+                        <span class="c">//</span>
+                        <span class="r17 r">pList</span> = <a href="#4bf7bf34774ca805" class="i method">ScanPacks</a>(<span class="r17 r">pList</span>);
+                        <b>goto</b> <span class="i">SEARCH</span>;
+                    }
+                    <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                    {
+                        <span class="c">// Assume the pack is corrupted.</span>
+                        <span class="c">//</span>
+                        <a href="#431b7328d04e4a87" class="i method">RemovePack</a>(<span class="r18 r">p</span>);
+                    }
+                }
+
+                <b>return null</b>;
+            }
+        }
+
+        <b>public override void</b> <a id="7f582f3c4ac3a49d" href="R/7f582f3c4ac3a49d.html" target="n" data-glyph="72,1" class="i method">OpenObjectInAllPacksImplementation</a>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt; <span id="r20 rd" class="r20 r">@out</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r21 rd" class="r21 r">windowCursor</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r22 rd" class="r22 r">objectId</span>)
+        {
+            <b>if</b> (<span class="r20 r">@out</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;out&quot;</span>);
+
+            <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r23 rd" class="r23 r">pList</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <b>while</b> (<b>true</b>)
+            {
+            <span class="i">SEARCH</span>:
+                <b>foreach</b> (<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r24 rd" class="r24 r">p</span> <b>in</b> <span class="r23 r">pList</span>.<a href="#c264452af9d4db70" class="i field">packs</a>)
+                {
+                    <b>try</b>
+                    {
+                        <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r25 rd" class="r25 r">ldr</span> = <span class="r24 r">p</span>.<a href="PackFile.cs.html#809898b3729e38b4" class="i method">Get</a>(<span class="r21 r">windowCursor</span>, <span class="r22 r">objectId</span>);
+                        <b>if</b> (<span class="r25 r">ldr</span> != <b>null</b>)
+                        {
+                            <span class="r20 r">@out</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<span class="r25 r">ldr</span>);
+                        }
+                    }
+                    <b>catch</b> (<a href="Exceptions/PackMismatchException.cs.html#d630231995a8dbd3" class="t t">PackMismatchException</a>)
+                    {
+                        <span class="c">// Pack was modified; refresh the entire pack list.</span>
+                        <span class="c">//</span>
+                        <span class="r23 r">pList</span> = <a href="#4bf7bf34774ca805" class="i method">ScanPacks</a>(<span class="r23 r">pList</span>);
+                        <b>goto</b> <span class="i">SEARCH</span>;
+                    }
+                    <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                    {
+                        <span class="c">// Assume the pack is corrupted.</span>
+                        <span class="c">//</span>
+                        <a href="#431b7328d04e4a87" class="i method">RemovePack</a>(<span class="r24 r">p</span>);
+                    }
+                }
+
+                <b>break</b>;
+            }
+        }
+
+        <b>public override bool</b> <a id="f162335406268dbb" href="R/f162335406268dbb.html" target="n" data-glyph="72,1" class="i method">hasObject2</a>(<b>string</b> <span id="r26 rd" class="r26 r">objectName</span>)
+        {
+            <b>return</b> <a href="#5b693814817b7d2a" class="i method">fileFor</a>(<span class="r26 r">objectName</span>).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>;
+        }
+
+        <b>public override</b> <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <a id="b71c2825bc4a2afe" href="R/b71c2825bc4a2afe.html" target="n" data-glyph="72,1" class="i method">openObject2</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r27 rd" class="r27 r">curs</span>, <b>string</b> <span id="r28 rd" class="r28 r">objectName</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r29 rd" class="r29 r">objectId</span>)
+        {
+            <b>try</b>
+            {
+                <b>return</b> <b>new</b> <a href="UnpackedObjectLoader.cs.html#f07cc8d6e13890c6" class="t constructor">UnpackedObjectLoader</a>(<a href="#5b693814817b7d2a" class="i method">fileFor</a>(<span class="r28 r">objectName</span>), <span class="r29 r">objectId</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a>)
+            {
+                <b>return null</b>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#c89af51ac20d8a84" class="t t">DirectoryNotFoundException</a>)
+            {
+                <b>return null</b>;
+            }
+        }
+
+        <b>public override bool</b> <a id="e3cabf9c9ab7078a" href="R/e3cabf9c9ab7078a.html" target="n" data-glyph="72,1" class="i method">tryAgain1</a>()
+        {
+            <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r30 rd" class="r30 r">old</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <a href="#dc740f81c18c996b" class="i field">_packDirectory</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+            <b>if</b> (<span class="r30 r">old</span>.<a href="#531cbf0f92b09702" class="i method">tryAgain</a>(<a href="#dc740f81c18c996b" class="i field">_packDirectory</a>.<a href="Util/Extensions.cs.html#d9f400d32f67b0a9" class="i method">lastModified</a>()))
+                <b>return</b> <span class="r30 r">old</span> != <a href="#4bf7bf34774ca805" class="i method">ScanPacks</a>(<span class="r30 r">old</span>);
+
+            <b>return false</b>;
+        }
+
+        <b>private void</b> <a id="12b160620c4af868" href="R/12b160620c4af868.html" target="n" data-glyph="76,1" class="i method">InsertPack</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r31 rd" class="r31 r">pf</span>)
+        {
+            <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r32 rd" class="r32 r">o</span>, <span id="r33 rd" class="r33 r">n</span>;
+            <b>do</b>
+            {
+                <span class="r32 r">o</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <span id="r34 rd" class="r34 r">oldList</span> = <span class="r32 r">o</span>.<a href="#c264452af9d4db70" class="i field">packs</a>;
+                <b>var</b> <span id="r35 rd" class="r35 r">newList</span> = <b>new</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[1 + <span class="r34 r">oldList</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>];
+                <span class="r35 r">newList</span>[0] = <span class="r31 r">pf</span>;
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r34 r">oldList</span>, 0, <span class="r35 r">newList</span>, 1, <span class="r34 r">oldList</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                <span class="r33 r">n</span> = <b>new</b> <a href="#d264b4c376594830" class="t constructor">PackList</a>(<span class="r32 r">o</span>.<a href="#9cc5891eecdac7a8" class="i property">lastRead</a>, <span class="r32 r">o</span>.<a href="#231fd8a4ce9b06ef" class="i field">lastModified</a>, <span class="r35 r">newList</span>);
+            } <b>while</b> (!<a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r32 r">o</span>, <span class="r33 r">n</span>));
+        }
+
+        <b>private void</b> <a id="431b7328d04e4a87" href="R/431b7328d04e4a87.html" target="n" data-glyph="76,1" class="i method">RemovePack</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r36 rd" class="r36 r">deadPack</span>)
+        {
+            <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r37 rd" class="r37 r">o</span>, <span id="r38 rd" class="r38 r">n</span>;
+            <b>do</b>
+            {
+                <span class="r37 r">o</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <span id="r39 rd" class="r39 r">oldList</span> = <span class="r37 r">o</span>.<a href="#c264452af9d4db70" class="i field">packs</a>;
+                <b>int</b> <span id="r40 rd" class="r40 r">j</span> = <a href="#4233d9609c30e030" class="i method">indexOf</a>(<span class="r39 r">oldList</span>, <span class="r36 r">deadPack</span>);
+                <b>if</b> (<span class="r40 r">j</span> &lt; 0)
+                    <b>break</b>;
+                <b>var</b> <span id="r41 rd" class="r41 r">newList</span> = <b>new</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[<span class="r39 r">oldList</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1];
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r39 r">oldList</span>, 0, <span class="r41 r">newList</span>, 0, <span class="r40 r">j</span>);
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r39 r">oldList</span>, <span class="r40 r">j</span> + 1, <span class="r41 r">newList</span>, <span class="r40 r">j</span>, <span class="r41 r">newList</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r40 r">j</span>);
+                <span class="r38 r">n</span> = <b>new</b> <a href="#d264b4c376594830" class="t constructor">PackList</a>(<span class="r37 r">o</span>.<a href="#9cc5891eecdac7a8" class="i property">lastRead</a>, <span class="r37 r">o</span>.<a href="#231fd8a4ce9b06ef" class="i field">lastModified</a>, <span class="r41 r">newList</span>);
+            } <b>while</b> (!<a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r37 r">o</span>, <span class="r38 r">n</span>));
+            <span class="r36 r">deadPack</span>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+        }
+
+        <b>private static int</b> <a id="4233d9609c30e030" href="R/4233d9609c30e030.html" target="n" data-glyph="76,1" class="i method">indexOf</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <span id="r42 rd" class="r42 r">list</span>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r43 rd" class="r43 r">pack</span>)
+        {
+            <b>for</b> (<b>int</b> <span id="r44 rd" class="r44 r">i</span> = 0; <span class="r44 r">i</span> &lt; <span class="r42 r">list</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r44 r">i</span>++)
+            {
+                <b>if</b> (<span class="r42 r">list</span>[<span class="r44 r">i</span>] == <span class="r43 r">pack</span>)
+                    <b>return</b> <span class="r44 r">i</span>;
+            }
+            <b>return</b> -1;
+        }
+
+        <b>private</b> <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <a id="4bf7bf34774ca805" href="R/4bf7bf34774ca805.html" target="n" data-glyph="76,1" class="i method">ScanPacks</a>(<a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r45 rd" class="r45 r">original</span>)
+        {
+            <b>lock</b> (<a href="#0af5fd2b92f9518d" class="i field">_packList</a>)
+            {
+                <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r46 rd" class="r46 r">o</span>, <span id="r47 rd" class="r47 r">n</span>;
+                <b>do</b>
+                {
+                    <span class="r46 r">o</span> = <a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                    <b>if</b> (<span class="r46 r">o</span> != <span class="r45 r">original</span>)
+                    {
+                        <span class="c">// Another thread did the scan for us, while we</span>
+                        <span class="c">// were blocked on the monitor above.</span>
+                        <span class="c">//</span>
+                        <b>return</b> <span class="r46 r">o</span>;
+                    }
+                    <span class="r47 r">n</span> = <a href="#b8a8d5be31178168" class="i method">ScanPacksImpl</a>(<span class="r46 r">o</span>);
+                    <b>if</b> (<span class="r47 r">n</span> == <span class="r46 r">o</span>)
+                        <b>return</b> <span class="r47 r">n</span>;
+                } <b>while</b> (!<a href="#0af5fd2b92f9518d" class="i field">_packList</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r46 r">o</span>, <span class="r47 r">n</span>));
+
+                <b>return</b> <span class="r47 r">n</span>;
+            }
+        }
+
+        <b>private</b> <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <a id="b8a8d5be31178168" href="R/b8a8d5be31178168.html" target="n" data-glyph="76,1" class="i method">ScanPacksImpl</a>(<a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r48 rd" class="r48 r">old</span>)
+        {
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt; <span id="r49 rd" class="r49 r">forReuse</span> = <a href="#9773c406424c3170" class="i method">ReuseMap</a>(<span class="r48 r">old</span>);
+            <b>long</b> <span id="r50 rd" class="r50 r">lastRead</span> = <a href="SystemReader.cs.html#36b2c00b32768833" class="t t">SystemReader</a>.<a href="SystemReader.cs.html#8313facd37fc98f9" class="i method">getInstance</a>().<a href="SystemReader.cs.html#98499b3ec8682368" class="i method">getCurrentTime</a>();
+            <b>long</b> <span id="r51 rd" class="r51 r">lastModified</span> = <a href="#dc740f81c18c996b" class="i field">_packDirectory</a>.<a href="Util/Extensions.cs.html#d9f400d32f67b0a9" class="i method">lastModified</a>();
+            <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>&gt; <span id="r52 rd" class="r52 r">names</span> = <a href="#8bb18c180db07a13" class="i method">listPackDirectory</a>();
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r53 rd" class="r53 r">list</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt;(<span class="r52 r">names</span>.<a href="@0@System.Core/A.html#905bec8c22644c82" class="i property">Count</a> &gt;&gt; 2);
+            <b>bool</b> <span id="r54 rd" class="r54 r">foundNew</span> = <b>false</b>;
+            <b>foreach</b> (<b>string</b> <span id="r55 rd" class="r55 r">indexName</span> <b>in</b> <span class="r52 r">names</span>)
+            {
+                <span class="c">// Must match &quot;pack-[0-9a-f]{40}.idx&quot; to be an index.</span>
+                <span class="c">//</span>
+                <b>if</b> (<span class="r55 r">indexName</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> != 49 || !<span class="r55 r">indexName</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<span class="s">&quot;.idx&quot;</span>))
+                    <b>continue</b>;
+                <b>string</b> <span id="r56 rd" class="r56 r">@base</span> = <span class="r55 r">indexName</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, <span class="r55 r">indexName</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 4);
+                <b>string</b> <span id="r57 rd" class="r57 r">packName</span> = <a href="Transport/IndexPack.cs.html#5063d99bd2aa14a0" class="t t">IndexPack</a>.<a href="Transport/IndexPack.cs.html#7d2a661b39a397dc" class="i method">GetPackFileName</a>(<span class="r56 r">@base</span>);
+
+                <b>if</b> (!<span class="r52 r">names</span>.<a href="@0@System.Core/A.html#06d905a0ac76e4f5" class="i method">Contains</a>(<span class="r57 r">packName</span>))
+                {
+                    <span class="c">// Sometimes C Git&#39;s HTTP fetch transport leaves a</span>
+                    <span class="c">// .idx file behind and does not download the .pack.</span>
+                    <span class="c">// We have to skip over such useless indexes.</span>
+                    <span class="c">//</span>
+                    <b>continue</b>;
+                }
+                <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r58 rd" class="r58 r">oldPack</span>;
+                <span class="r49 r">forReuse</span>.<a href="@0@mscorlib/A.html#2e5bc6d8c0f21e67" class="i method">TryGetValue</a>(<span class="r57 r">packName</span>, <b>out</b> <span class="r58 r">oldPack</span>);
+                <span class="r49 r">forReuse</span>.<a href="@0@mscorlib/A.html#a6db5ffdec557169" class="i method">Remove</a>(<span class="r57 r">packName</span>);
+                <b>if</b> (<span class="r58 r">oldPack</span> != <b>null</b>)
+                {
+                    <span class="r53 r">list</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r58 r">oldPack</span>);
+                    <b>continue</b>;
+                }
+
+                <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r59 rd" class="r59 r">packFile</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#dc740f81c18c996b" class="i field">_packDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;/&quot;</span> + <span class="r57 r">packName</span>);
+
+                <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r60 rd" class="r60 r">idxFile</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="#dc740f81c18c996b" class="i field">_packDirectory</a> + <span class="s">&quot;/&quot;</span> + <span class="r55 r">indexName</span>);
+                <span class="r53 r">list</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="PackFile.cs.html#0beb26714c9e40f5" class="t constructor">PackFile</a>(<span class="r60 r">idxFile</span>, <span class="r59 r">packFile</span>));
+                <span class="r54 r">foundNew</span> = <b>true</b>;
+            }
+
+            <span class="c">// If we did not discover any new files, the modification time was not</span>
+            <span class="c">// changed, and we did not remove any files, then the set of files is</span>
+            <span class="c">// the same as the set we were given. Instead of building a new object</span>
+            <span class="c">// return the same collection.</span>
+            <span class="c">//</span>
+            <b>if</b> (!<span class="r54 r">foundNew</span> &amp;&amp; <span class="r51 r">lastModified</span> == <span class="r48 r">old</span>.<a href="#231fd8a4ce9b06ef" class="i field">lastModified</a> &amp;&amp; <span class="r49 r">forReuse</span>.<a href="Util/IListUtil.cs.html#926ff5c937b0b856" class="i method">isEmpty</a>())
+                <b>return</b> <span class="r48 r">old</span>.<a href="#b17466dce078aa88" class="i method">updateLastRead</a>(<span class="r50 r">lastRead</span>);
+
+            <b>foreach</b> (<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r61 rd" class="r61 r">p</span> <b>in</b> <span class="r49 r">forReuse</span>.<a href="@0@mscorlib/A.html#4367dd1e300ae797" class="i property">Values</a>)
+            {
+                <span class="r61 r">p</span>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+            }
+
+            <b>if</b> (<span class="r53 r">list</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 0)
+            {
+                <b>return</b> <b>new</b> <a href="#d264b4c376594830" class="t constructor">PackList</a>(<span class="r50 r">lastRead</span>, <span class="r51 r">lastModified</span>, <a href="#4a9a0f31c2bc396b" class="i field">NoPacks</a>.<a href="#c264452af9d4db70" class="i field">packs</a>);
+            }
+
+            <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <span id="r62 rd" class="r62 r">r</span> = <span class="r53 r">list</span>.<a href="@0@mscorlib/A.html#d4409b7542728cec" class="i method">ToArray</a>();
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#c2e31d3cf79aabe2" class="i method">Sort</a>(<span class="r62 r">r</span>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>.<a href="PackFile.cs.html#e8cd29fa7c563bef" class="i field">PackFileSortComparison</a>);
+            <b>return</b> <b>new</b> <a href="#d264b4c376594830" class="t constructor">PackList</a>(<span class="r50 r">lastRead</span>, <span class="r51 r">lastModified</span>, <span class="r62 r">r</span>);
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt; <a id="9773c406424c3170" href="R/9773c406424c3170.html" target="n" data-glyph="76,1" class="i method">ReuseMap</a>(<a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <span id="r63 rd" class="r63 r">old</span>)
+        {
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="k">var</a> <span id="r64 rd" class="r64 r">forReuse</span> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt;();
+            <b>foreach</b> (<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r65 rd" class="r65 r">p</span> <b>in</b> <span class="r63 r">old</span>.<a href="#c264452af9d4db70" class="i field">packs</a>)
+            {
+                <b>if</b> (<span class="r65 r">p</span>.<a href="PackFile.cs.html#e008e6356feaf16a" class="i property">IsInvalid</a>)
+                {
+                    <span class="c">// The pack instance is corrupted, and cannot be safely used</span>
+                    <span class="c">// again. Do not include it in our reuse map.</span>
+                    <span class="c">//</span>
+                    <span class="r65 r">p</span>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+                    <b>continue</b>;
+                }
+
+                <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r66 rd" class="r66 r">prior</span> = <span class="r64 r">forReuse</span><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r65 r">p</span>.<a href="PackFile.cs.html#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#f559e2409f4dfe9e" class="i property">Name</a>] = <span class="r65 r">p</span>;
+                <b>if</b> (<span class="r66 r">prior</span> != <b>null</b>)
+                {
+                    <span class="c">// This should never occur. It should be impossible for us</span>
+                    <span class="c">// to have two pack files with the same name, as all of them</span>
+                    <span class="c">// came out of the same directory. If it does, we promised to</span>
+                    <span class="c">// close any PackFiles we did not reuse, so close the one we</span>
+                    <span class="c">// just evicted out of the reuse map.</span>
+                    <span class="c">//</span>
+                    <span class="r66 r">prior</span>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+                }
+            }
+
+            <b>return</b> <span class="r64 r">forReuse</span>;
+        }
+
+        <b>private</b> <a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <a id="8bb18c180db07a13" href="R/8bb18c180db07a13.html" target="n" data-glyph="76,1" class="i method">listPackDirectory</a>()
+        {
+            {
+                <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r67 rd" class="r67 r">nameList</span> = <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<b>string</b>&gt;(<a href="#dc740f81c18c996b" class="i field">_packDirectory</a>.<a href="@0@mscorlib/A.html#3ee5d8b84e9f6462" class="i method">GetFileSystemInfos</a>().<a href="@0@System.Core/A.html#5c652c53e80df013" class="i method">Select</a>(<span id="r68 rd" class="r68 r">x</span> =&gt; <span class="r68 r">x</span>.<a href="@0@mscorlib/A.html#2d5526818d4807b8" class="i property">Name</a>));
+                <b>if</b> (<span class="r67 r">nameList</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 0)
+                    <b>return</b> <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+                <a href="@0@System.Core/A.html#2d265edc718b158b" class="k">var</a> <span id="r69 rd" class="r69 r">nameSet</span> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>&gt;();
+                <b>foreach</b> (<b>string</b> <span id="r70 rd" class="r70 r">name</span> <b>in</b> <span class="r67 r">nameList</span>)
+                {
+                    <b>if</b> (<span class="r70 r">name</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;pack-&quot;</span>))
+                        <span class="r69 r">nameSet</span>.<a href="@0@System.Core/A.html#43a2b651926474a7" class="i method">Add</a>(<span class="r70 r">name</span>);
+                }
+                <b>return</b> <span class="r69 r">nameSet</span>;
+            }
+        }
+
+        <b>protected override</b> <a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a>[] <a id="5e9107cbae4d6fd8" href="R/5e9107cbae4d6fd8.html" target="n" data-glyph="75,1" class="i method">loadAlternates</a>()
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r71 rd" class="r71 r">l</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a>&gt;(4);
+            <b>if</b> (<a href="#491b559d283adb4c" class="i field">_alternateObjectDir</a> != <b>null</b>)
+            {
+                <b>foreach</b> (<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r72 rd" class="r72 r">d</span> <b>in</b> <a href="#491b559d283adb4c" class="i field">_alternateObjectDir</a>)
+                {
+                    <span class="r71 r">l</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<a href="#d1a5af44c1ec1a26" class="i method">openAlternate</a>(<span class="r72 r">d</span>));
+                }
+            }
+            <b>else</b>
+            {
+                <b>using</b> (<a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="t t">StreamReader</a> <span id="r73 rd" class="r73 r">br</span> = <a href="#ab819e502a32fcee" class="i method">Open</a>(<a href="#a27a804e42d18410" class="i field">_alternatesFile</a>))
+                {
+                    <b>string</b> <span id="r74 rd" class="r74 r">line</span>;
+                    <b>while</b> ((<span class="r74 r">line</span> = <span class="r73 r">br</span>.<a href="@0@mscorlib/A.html#a4ada5f765646068" class="i method">ReadLine</a>()) != <b>null</b>)
+                    {
+                        <span class="r71 r">l</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<a href="#f524b3eea830d2b1" class="i method">openAlternate</a>(<span class="r74 r">line</span>));
+                    }
+                }
+            }
+
+            <b>if</b> (<span class="r71 r">l</span>.<a href="Util/IListUtil.cs.html#c5a3f99142afbc37" class="i method">isEmpty</a>())
+            {
+                <b>return</b> <a href="ObjectDatabase.cs.html#b1d7a1f9bc2fac96" class="i field">NoAlternates</a>;
+            }
+
+            <b>return</b> <span class="r71 r">l</span>.<a href="@0@mscorlib/A.html#d4409b7542728cec" class="i method">ToArray</a>();
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="t t">StreamReader</a> <a id="ab819e502a32fcee" href="R/ab819e502a32fcee.html" target="n" data-glyph="76,1" class="i method">Open</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r75 rd" class="r75 r">f</span>)
+        {
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#72447927169f6b77" class="t constructor">StreamReader</a>(<b>new</b> <a href="@0@mscorlib/A.html#66c00a58470ce47d" class="t constructor">FileStream</a>(<span class="r75 r">f</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>));
+        }
+
+        <b>private</b> <a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a> <a id="f524b3eea830d2b1" href="R/f524b3eea830d2b1.html" target="n" data-glyph="76,1" class="i method">openAlternate</a>(<b>string</b> <span id="r76 rd" class="r76 r">location</span>)
+        {
+            <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="k">var</a> <span id="r77 rd" class="r77 r">objdir</span> = (<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a>)<a href="Util/FS.cs.html#c49f385e4a538de3" class="t t">FS</a>.<a href="Util/FS.cs.html#b4834bd19b90739e" class="i method">resolve</a>(<a href="#831f4fb579705ad1" class="i field">_objects</a>, <span class="r76 r">location</span>);
+            <b>return</b> <a href="#d1a5af44c1ec1a26" class="i method">openAlternate</a>(<span class="r77 r">objdir</span>);
+        }
+
+        <b>private</b> <a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a> <a id="d1a5af44c1ec1a26" href="R/d1a5af44c1ec1a26.html" target="n" data-glyph="76,1" class="i method">openAlternate</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r78 rd" class="r78 r">objdir</span>)
+        {
+            <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r79 rd" class="r79 r">parent</span> = <span class="r78 r">objdir</span>.<a href="@0@mscorlib/A.html#4b0f923e4e34075e" class="i property">Parent</a>;
+            <b>if</b> (<a href="RepositoryCache.cs.html#e64ff1f794e08fa8" class="t t">RepositoryCache</a>.<a href="RepositoryCache.cs.html#cc15c2b094932da3" class="t t">FileKey</a>.<a href="RepositoryCache.cs.html#db51ee5dd80878c7" class="i method">isGitRepository</a>(<span class="r79 r">parent</span>))
+            {
+                <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r80 rd" class="r80 r">db</span> = <a href="RepositoryCache.cs.html#e64ff1f794e08fa8" class="t t">RepositoryCache</a>.<a href="RepositoryCache.cs.html#2d6c7787a243e414" class="i method">open</a>(<a href="RepositoryCache.cs.html#e64ff1f794e08fa8" class="t t">RepositoryCache</a>.<a href="RepositoryCache.cs.html#cc15c2b094932da3" class="t t">FileKey</a>.<a href="RepositoryCache.cs.html#bd4500390cd9d7c1" class="i method">exact</a>(<span class="r79 r">parent</span>));
+                <b>return</b> <b>new</b> <a href="AlternateRepositoryDatabase.cs.html#179f2b57f4b460d4" class="t constructor">AlternateRepositoryDatabase</a>(<span class="r80 r">db</span>);
+            }
+            <b>return</b> <b>new</b> <a href="#e3465b1156bddeab" class="t constructor">ObjectDirectory</a>(<span class="r78 r">objdir</span>, <b>null</b>);
+        }
+
+        <b>private class</b> <a id="2f58e3ee05e3ca33" href="R/2f58e3ee05e3ca33.html" target="n" data-glyph="4,1" class="t t">PackList</a>
+        {
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> Last wall-clock time the directory was read.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>private volatile</b> <a href="#ef405616584423c9" class="t t">LongWrapper</a> <a id="b7d0feebd76cbe6f" href="R/b7d0feebd76cbe6f.html" target="n" data-glyph="46,2" class="i field">_lastRead</a> = <b>new</b> <a href="#563a7e091aee37c3" class="t constructor">LongWrapper</a>();
+            <b>public long</b> <a id="9cc5891eecdac7a8" href="R/9cc5891eecdac7a8.html" target="n" data-glyph="102,2" class="i property">lastRead</a> { <b>get</b> { <b>return</b> <a href="#b7d0feebd76cbe6f" class="i field">_lastRead</a>.<a href="#e5aff28b8c5308e3" class="i property">Value</a>; } }
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> Last modification time of </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#676d7fa05a339f1d" class="t t">ObjectDirectory</a>.<a href="#dc740f81c18c996b" class="i field">_packDirectory</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public readonly long</b> <a id="231fd8a4ce9b06ef" href="R/231fd8a4ce9b06ef.html" target="n" data-glyph="42,2" class="i field">lastModified</a>;
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> All known packs, sorted by </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>.<a href="PackFile.cs.html#e8cd29fa7c563bef" class="i field">PackFileSortComparison</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public readonly</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <a id="c264452af9d4db70" href="R/c264452af9d4db70.html" target="n" data-glyph="42,2" class="i field">packs</a>;
+
+            <b>private bool</b> <a id="e4f6a0ad8cf8d486" href="R/e4f6a0ad8cf8d486.html" target="n" data-glyph="46,2" class="i field">cannotBeRacilyClean</a>;
+
+            <b>public</b> <a id="d264b4c376594830" href="R/d264b4c376594830.html" target="n" data-glyph="72,2" class="i constructor">PackList</a>(<b>long</b> <span id="r81 rd" class="r81 r">lastRead</span>, <b>long</b> <span id="r82 rd" class="r82 r">lastModified</span>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>[] <span id="r83 rd" class="r83 r">packs</span>)
+            {
+                <a href="#2f58e3ee05e3ca33" class="k">this</a>.<a href="#b7d0feebd76cbe6f" class="i field">_lastRead</a>.<a href="#e5aff28b8c5308e3" class="i property">Value</a> = <span class="r81 r">lastRead</span>;
+                <a href="#2f58e3ee05e3ca33" class="k">this</a>.<a href="#231fd8a4ce9b06ef" class="i field">lastModified</a> = <span class="r82 r">lastModified</span>;
+                <a href="#2f58e3ee05e3ca33" class="k">this</a>.<a href="#c264452af9d4db70" class="i field">packs</a> = <span class="r83 r">packs</span>;
+                <a href="#2f58e3ee05e3ca33" class="k">this</a>.<a href="#e4f6a0ad8cf8d486" class="i field">cannotBeRacilyClean</a> = <a href="#8e4502f3086571be" class="i method">notRacyClean</a>(<span class="r81 r">lastRead</span>);
+            }
+
+            <b>private bool</b> <a id="8e4502f3086571be" href="R/8e4502f3086571be.html" target="n" data-glyph="76,2" class="i method">notRacyClean</a>(<b>long</b> <span id="r84 rd" class="r84 r">read</span>)
+            {
+                <b>return</b> <span class="r84 r">read</span> - <a href="#231fd8a4ce9b06ef" class="i field">lastModified</a> &gt; 2 * 60 * 1000L;
+            }
+
+            <b>public</b> <a href="#2f58e3ee05e3ca33" class="t t">PackList</a> <a id="b17466dce078aa88" href="R/b17466dce078aa88.html" target="n" data-glyph="72,2" class="i method">updateLastRead</a>(<b>long</b> <span id="r85 rd" class="r85 r">now</span>)
+            {
+                <b>if</b> (<a href="#8e4502f3086571be" class="i method">notRacyClean</a>(<span class="r85 r">now</span>))
+                    <a href="#e4f6a0ad8cf8d486" class="i field">cannotBeRacilyClean</a> = <b>true</b>;
+                <a href="#b7d0feebd76cbe6f" class="i field">_lastRead</a>.<a href="#e5aff28b8c5308e3" class="i property">Value</a> = <span class="r85 r">now</span>;
+                <b>return</b> <a href="#2f58e3ee05e3ca33" class="k">this</a>;
+            }
+
+            <b>public bool</b> <a id="531cbf0f92b09702" href="R/531cbf0f92b09702.html" target="n" data-glyph="72,2" class="i method">tryAgain</a>(<b>long</b> <span id="r86 rd" class="r86 r">currLastModified</span>)
+            {
+                <span class="c">// Any difference indicates the directory was modified.</span>
+                <span class="c">//</span>
+                <b>if</b> (<a href="#231fd8a4ce9b06ef" class="i field">lastModified</a> != <span class="r86 r">currLastModified</span>)
+                    <b>return true</b>;
+
+                <span class="c">// We have already determined the last read was far enough</span>
+                <span class="c">// after the last modification that any new modifications</span>
+                <span class="c">// are certain to change the last modified time.</span>
+                <span class="c">//</span>
+                <b>if</b> (<a href="#e4f6a0ad8cf8d486" class="i field">cannotBeRacilyClean</a>)
+                    <b>return false</b>;
+
+                <b>if</b> (<a href="#8e4502f3086571be" class="i method">notRacyClean</a>(<a href="#9cc5891eecdac7a8" class="i property">lastRead</a>))
+                {
+                    <span class="c">// Our last read should have marked cannotBeRacilyClean,</span>
+                    <span class="c">// but this thread may not have seen the change. The read</span>
+                    <span class="c">// of the volatile field lastRead should have fixed that.</span>
+                    <span class="c">//</span>
+                    <b>return false</b>;
+                }
+
+                <span class="c">// We last read this directory too close to its last observed</span>
+                <span class="c">// modification time. We may have missed a modification. Scan</span>
+                <span class="c">// the directory again, to ensure we still see the same state.</span>
+                <span class="c">//</span>
+                <b>return true</b>;
+            }
+
+            <b>private class</b> <a id="ef405616584423c9" href="R/ef405616584423c9.html" target="n" data-glyph="4,2" class="t t">LongWrapper</a>
+            {
+                <b>public</b> <a id="563a7e091aee37c3" href="R/563a7e091aee37c3.html" target="n" data-glyph="72,3" class="i constructor">LongWrapper</a>()
+                {
+                    <a href="#e5aff28b8c5308e3" class="i property">Value</a> = -1;
+                }
+
+                <b>public long</b> <a id="e5aff28b8c5308e3" href="R/e5aff28b8c5308e3.html" target="n" data-glyph="102,3" class="i property">Value</a> { <b>get</b>; <b>set</b>; }
+            }
+        }
+
+        <b>public override</b> <a href="ObjectDatabase.cs.html#c624234d6d3aac9e" class="t t">ObjectDatabase</a> <a id="e6db0d041adc248a" href="R/e6db0d041adc248a.html" target="n" data-glyph="72,1" class="i method">newCachedDatabase</a>()
+        {
+            <b>return</b> <b>new</b> <a href="CachedObjectDirectory.cs.html#bca2426e81a044bb" class="t constructor">CachedObjectDirectory</a>(<a href="#676d7fa05a339f1d" class="k">this</a>);
+        }
+    }
+}</pre></td></tr></table></div></body></html>

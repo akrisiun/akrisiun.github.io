@@ -1,0 +1,268 @@
+﻿<!DOCTYPE html>
+<html><head><title>DiffFormatter.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(259);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Diff/DiffFormatter.cs" target="_top">Diff\DiffFormatter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Johannes E. Schindelin &lt;johannes.schindelin@gmx.de&gt;
+ * Copyright (C) 2009, Gil Ran &lt;gilrun@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Patch</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Format an </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="EditList.cs.html#bfb6d4fd7ba30b6b" class="t t">EditList</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> as a Git style unified patch script.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="72a5430b564849f0" href="../R/../../0000000000.html" target="n" data-glyph="0,0" class="t t">DiffFormatter</a>
+	{
+		<b>private static readonly byte</b>[] <a id="e0f902bac9cf09fd" href="../R/e0f902bac9cf09fd.html" target="n" data-glyph="46,1" class="i field">NoNewLine</a> = 
+			<a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;\\ No newline at end of file\n&quot;</span>);
+
+		<b>private int</b> <a id="088d92a738a28e4f" href="../R/088d92a738a28e4f.html" target="n" data-glyph="46,1" class="i field">_context</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a new formatter with a default level of context.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a id="b70e22198a732c93" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">DiffFormatter</a>()
+		{
+			<a href="#5c523b5f43b43919" class="i method">setContext</a>(3);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Change the number of lines of context to display.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">lineCount</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of lines of context to see before the first</span>
+		<span class="c">///</span><span class="c"> modification and After the last modification within a hunk of</span>
+		<span class="c">///</span><span class="c"> the modified file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="5c523b5f43b43919" href="../R/5c523b5f43b43919.html" target="n" data-glyph="72,1" class="i method">setContext</a>(<b>int</b> <span id="r0 rd" class="r0 r">lineCount</span>)
+		{
+			<b>if</b> (<span class="r0 r">lineCount</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;context must be &gt;= 0&quot;</span>);
+			}
+
+			<a href="#088d92a738a28e4f" class="i field">_context</a> = <span class="r0 r">lineCount</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Format a patch script, reusing a previously parsed FileHeader.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c">	This formatter is primarily useful for editing an existing patch script</span>
+		<span class="c">///</span><span class="c">	to increase or reduce the number of lines of context within the script.</span>
+		<span class="c">///</span><span class="c">	All header lines are reused as-is from the supplied FileHeader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">out</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">stream to write the patch script out to.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">head</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">existing file header containing the header lines to copy.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Text source for the pre-image version of the content. </span>
+		<span class="c">///</span><span class="c"> This must match the content of </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Patch/FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a>.<a href="../Patch/FileHeader.cs.html#8340156d7ad8e606" class="i method">getOldId</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">writing to the supplied stream failed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="eaae7d22d649d03e" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">format</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r1 rd" class="r1 r">@out</span>, <a href="../Patch/FileHeader.cs.html#94dd558d804785e0" class="t t">FileHeader</a> <span id="r2 rd" class="r2 r">head</span>, <a href="RawText.cs.html#d51a523d74721608" class="t t">RawText</a> <span id="r3 rd" class="r3 r">a</span>, <a href="RawText.cs.html#d51a523d74721608" class="t t">RawText</a> <span id="r4 rd" class="r4 r">b</span>)
+		{
+			<b>if</b> ( <span class="r2 r">head</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <span class="i n">System</span>.<a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;head&quot;</span>);
+			}
+			<b>if</b> ( <span class="r1 r">@out</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <span class="i n">System</span>.<a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;out&quot;</span>);
+			}
+			
+			<span class="c">// Reuse the existing FileHeader as-is by blindly copying its</span>
+			<span class="c">// header lines, but avoiding its hunks. Instead we recreate</span>
+			<span class="c">// the hunks from the text instances we have been supplied.</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r5 rd" class="r5 r">start</span> = <span class="r2 r">head</span>.<a href="../Patch/FileHeader.cs.html#585f273387218a8a" class="i property">StartOffset</a>;
+			<b>int</b> <span id="r6 rd" class="r6 r">end</span> = <span class="r2 r">head</span>.<a href="../Patch/FileHeader.cs.html#6bc694e41e813370" class="i property">EndOffset</a>;
+
+			<b>if</b> (!<span class="r2 r">head</span>.<a href="../Patch/FileHeader.cs.html#2197149c7f023462" class="i property">Hunks</a>.<a href="../Util/IListUtil.cs.html#c5a3f99142afbc37" class="i method">isEmpty</a>())
+			{
+				<span class="r6 r">end</span> = <span class="r2 r">head</span>.<a href="../Patch/FileHeader.cs.html#2197149c7f023462" class="i property">Hunks</a>[0].<a href="../Patch/HunkHeader.cs.html#9c55951485d783b1" class="i property">StartOffset</a>;
+			}
+
+			<span class="r1 r">@out</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r2 r">head</span>.<a href="../Patch/FileHeader.cs.html#fc52a48e75a69e9b" class="i property">Buffer</a>, <span class="r5 r">start</span>, <span class="r6 r">end</span> - <span class="r5 r">start</span>);
+
+			<a href="#6a31390938e485f5" class="i method">FormatEdits</a>(<span class="r1 r">@out</span>, <span class="r3 r">a</span>, <span class="r4 r">b</span>, <span class="r2 r">head</span>.<a href="../Patch/FileHeader.cs.html#d2331452896ac3b5" class="i method">ToEditList</a>());
+		}
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Formats a list of edits in unified diff format</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">out</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">where the unified diff is written to</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the text A which was compared</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the text B which was compared</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">edits</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">some differences which have been calculated between A and B</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="6a31390938e485f5" href="../R/6a31390938e485f5.html" target="n" data-glyph="72,1" class="i method">FormatEdits</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r7 rd" class="r7 r">@out</span>, <a href="RawText.cs.html#d51a523d74721608" class="t t">RawText</a> <span id="r8 rd" class="r8 r">a</span>, <a href="RawText.cs.html#d51a523d74721608" class="t t">RawText</a> <span id="r9 rd" class="r9 r">b</span>, <a href="EditList.cs.html#bfb6d4fd7ba30b6b" class="t t">EditList</a> <span id="r10 rd" class="r10 r">edits</span>)
+		{
+			<b>for</b> (<b>int</b> <span id="r11 rd" class="r11 r">curIdx</span> = 0; <span class="r11 r">curIdx</span> &lt; <span class="r10 r">edits</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="c">/* */</span>)
+			{
+				<a href="Edit.cs.html#d221e46374dfd441" class="t t">Edit</a> <span id="r12 rd" class="r12 r">curEdit</span> = <span class="r10 r">edits</span>.<a href="EditList.cs.html#b820be2698d3bc3e" class="i method">get</a>(<span class="r11 r">curIdx</span>);
+				<b>int</b> <span id="r13 rd" class="r13 r">endIdx</span> = <a href="#cb70e312c7a9fc28" class="i method">FindCombinedEnd</a>(<span class="r10 r">edits</span>, <span class="r11 r">curIdx</span>);
+				<a href="Edit.cs.html#d221e46374dfd441" class="t t">Edit</a> <span id="r14 rd" class="r14 r">endEdit</span> = <span class="r10 r">edits</span>.<a href="EditList.cs.html#b820be2698d3bc3e" class="i method">get</a>(<span class="r13 r">endIdx</span>);
+
+				<b>int</b> <span id="r15 rd" class="r15 r">aCur</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(0, <span class="r12 r">curEdit</span>.<a href="Edit.cs.html#65040b0e206fced1" class="i property">BeginA</a> - <a href="#088d92a738a28e4f" class="i field">_context</a>);
+				<b>int</b> <span id="r16 rd" class="r16 r">bCur</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(0, <span class="r12 r">curEdit</span>.<a href="Edit.cs.html#a6916adb214dce41" class="i property">BeginB</a> - <a href="#088d92a738a28e4f" class="i field">_context</a>);
+				<b>int</b> <span id="r17 rd" class="r17 r">aEnd</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r8 r">a</span>.<a href="RawText.cs.html#82dca6e05f43bf0f" class="i method">size</a>(), <span class="r14 r">endEdit</span>.<a href="Edit.cs.html#c633684b43618a8a" class="i property">EndA</a> + <a href="#088d92a738a28e4f" class="i field">_context</a>);
+				<b>int</b> <span id="r18 rd" class="r18 r">bEnd</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r9 r">b</span>.<a href="RawText.cs.html#82dca6e05f43bf0f" class="i method">size</a>(), <span class="r14 r">endEdit</span>.<a href="Edit.cs.html#e2c37c2b543a82a0" class="i property">EndB</a> + <a href="#088d92a738a28e4f" class="i field">_context</a>);
+
+				<a href="#ff0b2588474c6a2c" class="i method">WriteHunkHeader</a>(<span class="r7 r">@out</span>, <span class="r15 r">aCur</span>, <span class="r17 r">aEnd</span>, <span class="r16 r">bCur</span>, <span class="r18 r">bEnd</span>);
+
+				<b>while</b> (<span class="r15 r">aCur</span> &lt; <span class="r17 r">aEnd</span> || <span class="r16 r">bCur</span> &lt; <span class="r18 r">bEnd</span>)
+				{
+					<b>if</b> (<span class="r15 r">aCur</span> &lt; <span class="r12 r">curEdit</span>.<a href="Edit.cs.html#65040b0e206fced1" class="i property">BeginA</a> || <span class="r13 r">endIdx</span> + 1 &lt; <span class="r11 r">curIdx</span>)
+					{
+						<a href="#f0d701070dd05efb" class="i method">WriteLine</a>(<span class="r7 r">@out</span>, <span class="s">&#39; &#39;</span>, <span class="r8 r">a</span>, <span class="r15 r">aCur</span>);
+						<span class="r15 r">aCur</span>++;
+						<span class="r16 r">bCur</span>++;
+					}
+					<b>else if</b> (<span class="r15 r">aCur</span> &lt; <span class="r12 r">curEdit</span>.<a href="Edit.cs.html#c633684b43618a8a" class="i property">EndA</a>)
+					{
+						<a href="#f0d701070dd05efb" class="i method">WriteLine</a>(<span class="r7 r">@out</span>, <span class="s">&#39;-&#39;</span>, <span class="r8 r">a</span>, <span class="r15 r">aCur</span>++);
+
+					}
+					<b>else if</b> (<span class="r16 r">bCur</span> &lt; <span class="r12 r">curEdit</span>.<a href="Edit.cs.html#e2c37c2b543a82a0" class="i property">EndB</a>)
+					{
+						<a href="#f0d701070dd05efb" class="i method">WriteLine</a>(<span class="r7 r">@out</span>, <span class="s">&#39;+&#39;</span>, <span class="r9 r">b</span>, <span class="r16 r">bCur</span>++);
+					}
+
+					<b>if</b> (<a href="#c535e2d963ba5eaa" class="i method">End</a>(<span class="r12 r">curEdit</span>, <span class="r15 r">aCur</span>, <span class="r16 r">bCur</span>) &amp;&amp; ++<span class="r11 r">curIdx</span> &lt; <span class="r10 r">edits</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+					{
+						<span class="r12 r">curEdit</span> = <span class="r10 r">edits</span>.<a href="EditList.cs.html#b820be2698d3bc3e" class="i method">get</a>(<span class="r11 r">curIdx</span>);
+					}
+				}
+			}
+		}
+
+		<b>private static void</b> <a id="ff0b2588474c6a2c" href="../R/ff0b2588474c6a2c.html" target="n" data-glyph="76,1" class="i method">WriteHunkHeader</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r19 rd" class="r19 r">@out</span>, <b>int</b> <span id="r20 rd" class="r20 r">aCur</span>, <b>int</b> <span id="r21 rd" class="r21 r">aEnd</span>, <b>int</b> <span id="r22 rd" class="r22 r">bCur</span>, <b>int</b> <span id="r23 rd" class="r23 r">bEnd</span>)
+		{
+			<span class="r19 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;@&#39;</span>));
+			<span class="r19 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;@&#39;</span>));
+			<a href="#a229d0b755359d1b" class="i method">WriteRange</a>(<span class="r19 r">@out</span>, <span class="s">&#39;-&#39;</span>, <span class="r20 r">aCur</span> + 1, <span class="r21 r">aEnd</span> - <span class="r20 r">aCur</span>);
+			<a href="#a229d0b755359d1b" class="i method">WriteRange</a>(<span class="r19 r">@out</span>, <span class="s">&#39;+&#39;</span>, <span class="r22 r">bCur</span> + 1, <span class="r23 r">bEnd</span> - <span class="r22 r">bCur</span>);
+			<span class="r19 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39; &#39;</span>));
+			<span class="r19 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;@&#39;</span>));
+			<span class="r19 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;@&#39;</span>));
+			<span class="r19 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;\n&#39;</span>));
+		}
+
+		<b>private static void</b> <a id="a229d0b755359d1b" href="../R/a229d0b755359d1b.html" target="n" data-glyph="76,1" class="i method">WriteRange</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r24 rd" class="r24 r">@out</span>, <b>char</b> <span id="r25 rd" class="r25 r">prefix</span>, <b>int</b> <span id="r26 rd" class="r26 r">begin</span>, <b>int</b> <span id="r27 rd" class="r27 r">cnt</span>)
+		{
+			<span class="r24 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39; &#39;</span>));
+			<span class="r24 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="r25 r">prefix</span>));
+
+			<b>switch</b> (<span class="r27 r">cnt</span>)
+			{
+				<b>case</b> 0:
+					<span class="c">// If the range is empty, its beginning number must be the</span>
+					<span class="c">// line just before the range, or 0 if the range is at the</span>
+					<span class="c">// start of the file stream. Here, begin is always 1 based,</span>
+					<span class="c">// so an empty file would produce &quot;0,0&quot;.</span>
+					<span class="c">//</span>
+					<a href="#643a4befcdf2a9ee" class="i method">WriteInteger</a>(<span class="r24 r">@out</span>, <span class="r26 r">begin</span> - 1);
+					<span class="r24 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;,&#39;</span>));
+					<span class="r24 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;0&#39;</span>));
+					<b>break</b>;
+
+				<b>case</b> 1:
+					<span class="c">// If the range is exactly one line, produce only the number.</span>
+					<span class="c">//</span>
+                    <a href="#643a4befcdf2a9ee" class="i method">WriteInteger</a>(<span class="r24 r">@out</span>, <span class="r26 r">begin</span>);
+					<b>break</b>;
+
+				<b>default</b>:
+                    <a href="#643a4befcdf2a9ee" class="i method">WriteInteger</a>(<span class="r24 r">@out</span>, <span class="r26 r">begin</span>);
+                    <span class="r24 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;,&#39;</span>));
+					<a href="#643a4befcdf2a9ee" class="i method">WriteInteger</a>(<span class="r24 r">@out</span>, <span class="r27 r">cnt</span>);
+					<b>break</b>;
+			}
+		}
+
+		<b>private static void</b> <a id="643a4befcdf2a9ee" href="../R/643a4befcdf2a9ee.html" target="n" data-glyph="76,1" class="i method">WriteInteger</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r28 rd" class="r28 r">@out</span>, <b>int</b> <span id="r29 rd" class="r29 r">count</span>)
+		{
+			<b>var</b> <span id="r30 rd" class="r30 r">buffer</span> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#4cd1afe656a44706" class="i method">encodeASCII</a>(<span class="r29 r">count</span>);
+			<span class="r28 r">@out</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r30 r">buffer</span>, 0, <span class="r30 r">buffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<b>private static void</b> <a id="f0d701070dd05efb" href="../R/f0d701070dd05efb.html" target="n" data-glyph="76,1" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r31 rd" class="r31 r">@out</span>, <b>char</b> <span id="r32 rd" class="r32 r">prefix</span>, <a href="RawText.cs.html#d51a523d74721608" class="t t">RawText</a> <span id="r33 rd" class="r33 r">text</span>, <b>int</b> <span id="r34 rd" class="r34 r">cur</span>)
+		{
+			<span class="r31 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="r32 r">prefix</span>));
+			<span class="r33 r">text</span>.<a href="RawText.cs.html#2a98e4bb7e9afd87" class="i method">writeLine</a>(<span class="r31 r">@out</span>, <span class="r34 r">cur</span>);
+			<span class="r31 r">@out</span>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#0f4b42b329e2067f" class="i method">ToByte</a>(<span class="s">&#39;\n&#39;</span>));
+			<b>if</b> (<span class="r34 r">cur</span> + 1 == <span class="r33 r">text</span>.<a href="RawText.cs.html#82dca6e05f43bf0f" class="i method">size</a>() &amp;&amp; <span class="r33 r">text</span>.<a href="RawText.cs.html#37c2678f03c6b0fa" class="i method">isMissingNewlineAtEnd</a>())
+			{
+				<span class="r31 r">@out</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<a href="#e0f902bac9cf09fd" class="i field">NoNewLine</a>, 0, <a href="#e0f902bac9cf09fd" class="i field">NoNewLine</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			}
+		}
+
+		<b>private int</b> <a id="cb70e312c7a9fc28" href="../R/cb70e312c7a9fc28.html" target="n" data-glyph="76,1" class="i method">FindCombinedEnd</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Edit.cs.html#d221e46374dfd441" class="t t">Edit</a>&gt; <span id="r35 rd" class="r35 r">edits</span>, <b>int</b> <span id="r36 rd" class="r36 r">i</span>)
+		{
+			<b>int</b> <span id="r37 rd" class="r37 r">end</span> = <span class="r36 r">i</span> + 1;
+			<b>while</b> (<span class="r37 r">end</span> &lt; <span class="r35 r">edits</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &amp;&amp; (<a href="#b3fe729fc4c99ad0" class="i method">CombineA</a>(<span class="r35 r">edits</span>, <span class="r37 r">end</span>) || <a href="#06d85798f568f70e" class="i method">CombineB</a>(<span class="r35 r">edits</span>, <span class="r37 r">end</span>)))
+			{
+				<span class="r37 r">end</span>++;
+			}
+			<b>return</b> <span class="r37 r">end</span> - 1;
+		}
+
+		<b>private bool</b> <a id="b3fe729fc4c99ad0" href="../R/b3fe729fc4c99ad0.html" target="n" data-glyph="76,1" class="i method">CombineA</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Edit.cs.html#d221e46374dfd441" class="t t">Edit</a>&gt; <span id="r38 rd" class="r38 r">e</span>, <b>int</b> <span id="r39 rd" class="r39 r">i</span>)
+		{
+			<b>return</b> <span class="r38 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r39 r">i</span>].<a href="Edit.cs.html#65040b0e206fced1" class="i property">BeginA</a> - <span class="r38 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r39 r">i</span> - 1].<a href="Edit.cs.html#c633684b43618a8a" class="i property">EndA</a> &lt;= 2 * <a href="#088d92a738a28e4f" class="i field">_context</a>;
+		}
+
+		<b>private bool</b> <a id="06d85798f568f70e" href="../R/06d85798f568f70e.html" target="n" data-glyph="76,1" class="i method">CombineB</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Edit.cs.html#d221e46374dfd441" class="t t">Edit</a>&gt; <span id="r40 rd" class="r40 r">e</span>, <b>int</b> <span id="r41 rd" class="r41 r">i</span>)
+		{
+			<b>return</b> <span class="r40 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r41 r">i</span>].<a href="Edit.cs.html#a6916adb214dce41" class="i property">BeginB</a> - <span class="r40 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r41 r">i</span> - 1].<a href="Edit.cs.html#e2c37c2b543a82a0" class="i property">EndB</a> &lt;= 2 * <a href="#088d92a738a28e4f" class="i field">_context</a>;
+		}
+
+		<b>private static bool</b> <a id="c535e2d963ba5eaa" href="../R/c535e2d963ba5eaa.html" target="n" data-glyph="76,1" class="i method">End</a>(<a href="Edit.cs.html#d221e46374dfd441" class="t t">Edit</a> <span id="r42 rd" class="r42 r">edit</span>, <b>int</b> <span id="r43 rd" class="r43 r">a</span>, <b>int</b> <span id="r44 rd" class="r44 r">b</span>)
+		{
+			<b>return</b> <span class="r42 r">edit</span>.<a href="Edit.cs.html#c633684b43618a8a" class="i property">EndA</a> &lt;= <span class="r43 r">a</span> &amp;&amp; <span class="r42 r">edit</span>.<a href="Edit.cs.html#e2c37c2b543a82a0" class="i property">EndB</a> &lt;= <span class="r44 r">b</span>;
+		}
+	}
+}</pre></td></tr></table></div></body></html>

@@ -1,0 +1,532 @@
+﻿<!DOCTYPE html>
+<html><head><title>WorkDirCheckout.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(523);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/WorkDirCheckout.cs" target="_top">WorkDirCheckout.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Dave Watson &lt;dwatson@mimvista.com&gt;
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Roger C. Soares &lt;rogersoares@intelinet.com.br&gt;
+ * Copyright (C) 2006, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> This class handles checking out one or two trees merging</span>
+    <span class="c">///</span><span class="c"> with the index (actually a tree too).</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> Three-way merges are no performed. See </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d819276a9a76b6a8" class="i property">FailOnConflict</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="3680f19a7db97f92" href="R/3680f19a7db97f92.html" target="n" data-glyph="0,0" class="t t">WorkDirCheckout</a>
+    {
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>&gt; <a id="5fd2c678dad451d1" href="R/5fd2c678dad451d1.html" target="n" data-glyph="46,1" class="i field">_updated</a>;
+        <b>private readonly</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <a id="26988bed86612807" href="R/26988bed86612807.html" target="n" data-glyph="46,1" class="i field">_head</a>;
+        <b>private readonly</b> <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <a id="0edcae40baf33df2" href="R/0edcae40baf33df2.html" target="n" data-glyph="46,1" class="i field">_index</a>;
+        <b>private readonly</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <a id="bc4dfdf3879dd476" href="R/bc4dfdf3879dd476.html" target="n" data-glyph="46,1" class="i field">_merge</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="8421144fe01e84ba" href="R/8421144fe01e84ba.html" target="n" data-glyph="46,1" class="i field">_root</a>;
+        <b>private</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="eba16c253bb0c291" href="R/eba16c253bb0c291.html" target="n" data-glyph="46,1" class="i field">_repo</a>;
+
+        <b>internal</b> <a id="f11e5f95124eb807" href="R/../../0000000000.html" target="n" data-glyph="74,1" class="i constructor">WorkDirCheckout</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r1 rd" class="r1 r">workDir</span>, <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <span id="r2 rd" class="r2 r">oldIndex</span>, <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <span id="r3 rd" class="r3 r">newIndex</span>)
+            : <a href="#200d8ddb410a0a9c" class="k">this</a>()
+        {
+            <a href="#eba16c253bb0c291" class="i field">_repo</a> = <span class="r0 r">repo</span>;
+            <a href="#8421144fe01e84ba" class="i field">_root</a> = <span class="r1 r">workDir</span>;
+            <a href="#0edcae40baf33df2" class="i field">_index</a> = <span class="r2 r">oldIndex</span>;
+            <a href="#bc4dfdf3879dd476" class="i field">_merge</a> = <span class="r0 r">repo</span>.<a href="Repository.cs.html#b5b612d688cbc4ee" class="i method">MapTree</a>(<span class="r3 r">newIndex</span>.<a href="GitIndex.cs.html#8b75423d7f490963" class="i method">writeTree</a>());
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a checkout class for checking out one tree, merging with the index</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">root</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> workdir </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">index</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> current index </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">merge</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> tree to check out </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="0f803fb9e915331c" href="R/0f803fb9e915331c.html" target="n" data-glyph="72,1" class="i constructor">WorkDirCheckout</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r4 rd" class="r4 r">repo</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r5 rd" class="r5 r">root</span>, <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <span id="r6 rd" class="r6 r">index</span>, <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r7 rd" class="r7 r">merge</span>)
+            : <a href="#200d8ddb410a0a9c" class="k">this</a>()
+        {
+            <a href="#3680f19a7db97f92" class="k">this</a>.<a href="#eba16c253bb0c291" class="i field">_repo</a> = <span class="r4 r">repo</span>;
+            <a href="#3680f19a7db97f92" class="k">this</a>.<a href="#8421144fe01e84ba" class="i field">_root</a> = <span class="r5 r">root</span>;
+            <a href="#3680f19a7db97f92" class="k">this</a>.<a href="#0edcae40baf33df2" class="i field">_index</a> = <span class="r6 r">index</span>;
+            <a href="#3680f19a7db97f92" class="k">this</a>.<a href="#bc4dfdf3879dd476" class="i field">_merge</a> = <span class="r7 r">merge</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a checkout class for merging and checking our two trees and the index.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">root</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> workdir </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">head</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">index</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">merge</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="ae31b703f6cb6946" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">WorkDirCheckout</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r8 rd" class="r8 r">repo</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r9 rd" class="r9 r">root</span>, <span class="i n">Core</span>.<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r10 rd" class="r10 r">head</span>, <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <span id="r11 rd" class="r11 r">index</span>, <span class="i n">Core</span>.<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r12 rd" class="r12 r">merge</span>)
+            : <a href="#0f803fb9e915331c" class="k">this</a>(<span class="r8 r">repo</span>, <span class="r9 r">root</span>, <span class="r11 r">index</span>, <span class="r12 r">merge</span>)
+        {
+            <a href="#3680f19a7db97f92" class="k">this</a>.<a href="#26988bed86612807" class="i field">_head</a> = <span class="r10 r">head</span>;
+        }
+
+        <b>private</b> <a id="200d8ddb410a0a9c" href="R/200d8ddb410a0a9c.html" target="n" data-glyph="76,1" class="i constructor">WorkDirCheckout</a>()
+        {
+            <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+            <a href="#487fdde589f73e61" class="i property">Removed</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+            <a href="#5fd2c678dad451d1" class="i field">_updated</a> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>&gt;();
+            <a href="#d819276a9a76b6a8" class="i property">FailOnConflict</a> = <b>true</b>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> If </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">, will scan first to see if it&#39;s possible to check out, </span>
+        <span class="c">///</span><span class="c"> otherwise throw </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Exceptions/CheckoutConflictException.cs.html#30cff7f48931c0a7" class="t t">CheckoutConflictException</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">. If </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">false</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">,</span>
+        <span class="c">///</span><span class="c"> it will silently deal with the problem.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="d819276a9a76b6a8" href="R/d819276a9a76b6a8.html" target="n" data-glyph="102,1" class="i property">FailOnConflict</a> { <b>get</b>; <b>set</b>; }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The list of conflicts created by this checkout</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="aa10a1f8e6fad44f" href="R/aa10a1f8e6fad44f.html" target="n" data-glyph="102,1" class="i property">Conflicts</a> { <b>get</b>; <b>private set</b>; }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The list of all files removed by this checkout</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="487fdde589f73e61" href="R/487fdde589f73e61.html" target="n" data-glyph="102,1" class="i property">Removed</a> { <b>get</b>; <b>private set</b>; }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>&gt; <a id="b73f9333b942e74c" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">Updated</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#5fd2c678dad451d1" class="i field">_updated</a>; }
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Execute this checkout</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="fe36bb36d2ace1b0" href="R/fe36bb36d2ace1b0.html" target="n" data-glyph="72,1" class="i method">checkout</a>()
+        {
+            <b>if</b> (<a href="#26988bed86612807" class="i field">_head</a> == <b>null</b>)
+            {
+                <a href="#28a95463fe75c1b4" class="i method">PrescanOneTree</a>();
+            }
+            <b>else</b>
+            {
+                <a href="#7da5bd57ef77c5f1" class="i method">PrescanTwoTrees</a>();
+            }
+
+            <b>if</b> (<a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> != 0)
+            {
+                <b>if</b> (<a href="#d819276a9a76b6a8" class="i property">FailOnConflict</a>)
+                {
+                    <b>string</b>[] <span id="r13 rd" class="r13 r">entries</span> = <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#d4409b7542728cec" class="i method">ToArray</a>();
+                    <b>throw</b> <b>new</b> <a href="Exceptions/CheckoutConflictException.cs.html#6f81048d4fa87b29" class="t constructor">CheckoutConflictException</a>(<span class="r13 r">entries</span>);
+                }
+            }
+
+            <a href="#884169f670cd3a3b" class="i method">CleanUpConflicts</a>();
+            <b>if</b> (<a href="#26988bed86612807" class="i field">_head</a> == <b>null</b>)
+            {
+                <a href="#3a40ee6a17571ac8" class="i method">CheckoutOutIndexNoHead</a>();
+            }
+            <b>else</b>
+            {
+                <a href="#a48be36536fa38a6" class="i method">CheckoutTwoTrees</a>();
+            }
+        }
+
+        <b>private void</b> <a id="a48be36536fa38a6" href="R/a48be36536fa38a6.html" target="n" data-glyph="76,1" class="i method">CheckoutTwoTrees</a>()
+        {
+            <b>foreach</b> (<b>string</b> <span id="r14 rd" class="r14 r">path</span> <b>in</b> <a href="#487fdde589f73e61" class="i property">Removed</a>)
+            {
+                <a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#4f2fea13b7cafa06" class="i method">remove</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="r14 r">path</span>)));
+            }
+
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>&gt; <span id="r15 rd" class="r15 r">entry</span> <b>in</b> <a href="#5fd2c678dad451d1" class="i field">_updated</a>)
+            {
+                <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a>.<a href="GitIndex.cs.html#ada66cbaf2f188da" class="t t">Entry</a> <span id="r16 rd" class="r16 r">newEntry</span> = <a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#6d287df8a9f1c6e1" class="i method">addEntry</a>(<a href="#bc4dfdf3879dd476" class="i field">_merge</a>.<a href="Tree.cs.html#5da4e82e421301e7" class="i method">FindBlobMember</a>(<span class="r15 r">entry</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a>));
+                <a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#334fa795b5d1b4ce" class="i method">checkoutEntry</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r16 r">newEntry</span>);
+            }
+        }
+
+        <b>private void</b> <a id="3a40ee6a17571ac8" href="R/3a40ee6a17571ac8.html" target="n" data-glyph="76,1" class="i method">CheckoutOutIndexNoHead</a>()
+        {
+            <a href="AbstractIndexTreeVisitor.cs.html#822c466120a6ae22" class="k">var</a> <span id="r17 rd" class="r17 r">visitor</span> = <b>new</b> <a href="AbstractIndexTreeVisitor.cs.html#822c466120a6ae22" class="t constructor">AbstractIndexTreeVisitor</a>
+                              {
+                                  <a href="AbstractIndexTreeVisitor.cs.html#7bc5a9091918b3eb" class="i property">VisitEntry</a> = (<span id="r18 rd" class="r18 r">m</span>, <span id="r19 rd" class="r19 r">i</span>, <span id="r20 rd" class="r20 r">f</span>) =&gt;
+                                                   {
+                                                       <b>if</b> (<span class="r18 r">m</span> == <b>null</b>)
+                                                       {
+                                                           <a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#4f2fea13b7cafa06" class="i method">remove</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r20 r">f</span>);
+                                                           <b>return</b>;
+                                                       }
+
+                                                       <b>bool</b> <span id="r21 rd" class="r21 r">needsCheckout</span> = <b>false</b>;
+                                                       <b>if</b> (<span class="r19 r">i</span> == <b>null</b>)
+                                                       {
+                                                           <span class="r21 r">needsCheckout</span> = <b>true</b>;
+                                                       }
+                                                       <b>else if</b> (<span class="r19 r">i</span>.<a href="GitIndex.cs.html#84bb78eccc718597" class="i property">ObjectId</a>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r18 r">m</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>))
+                                                       {
+                                                           <b>if</b> (<span class="r19 r">i</span>.<a href="GitIndex.cs.html#45ab4c97d3763160" class="i method">IsModified</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <b>true</b>))
+                                                           {
+                                                               <span class="r21 r">needsCheckout</span> = <b>true</b>;
+                                                           }
+                                                       }
+                                                       <b>else</b>
+                                                       {
+                                                           <span class="r21 r">needsCheckout</span> = <b>true</b>;
+                                                       }
+
+                                                       <b>if</b> (<span class="r21 r">needsCheckout</span>)
+                                                       {
+                                                           <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a>.<a href="GitIndex.cs.html#ada66cbaf2f188da" class="t t">Entry</a> <span id="r22 rd" class="r22 r">newEntry</span> = <a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#6d287df8a9f1c6e1" class="i method">addEntry</a>(<span class="r18 r">m</span>);
+                                                           <a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#334fa795b5d1b4ce" class="i method">checkoutEntry</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r22 r">newEntry</span>);
+                                                       }
+                                                   }
+                              };
+
+            <b>new</b> <a href="IndexTreeWalker.cs.html#f43f0e1a69cb053e" class="t constructor">IndexTreeWalker</a>(<a href="#0edcae40baf33df2" class="i field">_index</a>, <a href="#bc4dfdf3879dd476" class="i field">_merge</a>, <a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r17 r">visitor</span>).<a href="IndexTreeWalker.cs.html#eec5c53b70a93f50" class="i method">Walk</a>();
+        }
+
+        <b>private void</b> <a id="884169f670cd3a3b" href="R/884169f670cd3a3b.html" target="n" data-glyph="76,1" class="i method">CleanUpConflicts</a>()
+        {
+            <b>foreach</b> (<b>string</b> <span id="r23 rd" class="r23 r">conflictFile</span> <b>in</b> <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>)
+            {
+                <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r24 rd" class="r24 r">conflict</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>(), <span class="r23 r">conflictFile</span>));
+
+                <b>try</b>
+                {
+                    <span class="r24 r">conflict</span>.<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <b>throw</b> <b>new</b> <a href="Exceptions/CheckoutConflictException.cs.html#02172b82ee4728a2" class="t constructor">CheckoutConflictException</a>(<span class="s">&quot;Cannot delete file: &quot;</span> + <span class="r24 r">conflict</span>);
+                }
+
+                <a href="#11ea5f4a10d45690" class="i method">RemoveEmptyParents</a>(<span class="r24 r">conflict</span>);
+            }
+
+            <b>foreach</b> (<b>string</b> <span id="r25 rd" class="r25 r">removedFile</span> <b>in</b> <a href="#487fdde589f73e61" class="i property">Removed</a>)
+            {
+                <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="k">var</a> <span id="r26 rd" class="r26 r">file</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>(), <span class="r25 r">removedFile</span>));
+                <span class="r26 r">file</span>.<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+                <a href="#11ea5f4a10d45690" class="i method">RemoveEmptyParents</a>(<span class="r26 r">file</span>);
+            }
+        }
+
+        <b>private void</b> <a id="11ea5f4a10d45690" href="R/11ea5f4a10d45690.html" target="n" data-glyph="76,1" class="i method">RemoveEmptyParents</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r27 rd" class="r27 r">f</span>)
+        {
+            <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r28 rd" class="r28 r">parentFile</span> = <a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#619d8d3b1de3e460" class="i method">GetParent</a>(<span class="r27 r">f</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+            <b>if</b> (<span class="r28 r">parentFile</span> == <b>null</b>) <b>return</b>;
+
+            <b>while</b> (<span class="r28 r">parentFile</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> != <a href="#8421144fe01e84ba" class="i field">_root</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>)
+            {
+                <b>if</b> (<span class="r28 r">parentFile</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>() &amp;&amp; <a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#f9704790d3b23471" class="i method">GetFiles</a>(<span class="r28 r">parentFile</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>).<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0)
+                {
+                    <span class="r28 r">parentFile</span>.<a href="@0@mscorlib/A.html#b29c6783d5b1e253" class="i method">Delete</a>();
+                }
+                <b>else</b>
+                {
+                    <b>break</b>;
+                }
+
+                <span class="r28 r">parentFile</span> = <a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#619d8d3b1de3e460" class="i method">GetParent</a>(<span class="r28 r">parentFile</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+                <b>if</b> (<span class="r28 r">parentFile</span> == <b>null</b>) <b>return</b>;
+            }
+        }
+
+        <b>internal void</b> <a id="28a95463fe75c1b4" href="R/28a95463fe75c1b4.html" target="n" data-glyph="74,1" class="i method">PrescanOneTree</a>()
+        {
+            <a href="AbstractIndexTreeVisitor.cs.html#822c466120a6ae22" class="k">var</a> <span id="r29 rd" class="r29 r">visitor</span> = <b>new</b> <a href="AbstractIndexTreeVisitor.cs.html#822c466120a6ae22" class="t constructor">AbstractIndexTreeVisitor</a>
+                              {
+                                  <a href="AbstractIndexTreeVisitor.cs.html#7bc5a9091918b3eb" class="i property">VisitEntry</a> = (<span id="r30 rd" class="r30 r">m</span>, <span id="r31 rd" class="r31 r">i</span>, <span id="r32 rd" class="r32 r">f</span>) =&gt;
+                                                   {
+                                                       <b>if</b> (<span class="r30 r">m</span> != <b>null</b>)
+                                                       {
+                                                           <b>if</b> (!<span class="r32 r">f</span>.<a href="Util/Extensions.cs.html#b6e46e03d3efdd7c" class="i method">IsFile</a>())
+                                                           {
+                                                               <a href="#31d1a11006f554bd" class="i method">CheckConflictsWithFile</a>(<span class="r32 r">f</span>);
+                                                           }
+                                                       }
+                                                       <b>else</b>
+                                                       {
+                                                           <b>if</b> (<span class="r32 r">f</span>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                                                           {
+                                                               <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r31 r">i</span>.<a href="GitIndex.cs.html#c9f28b2aa347b1ef" class="i property">Name</a>);
+                                                               <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#db8cdd552a0bb10c" class="i method">Remove</a>(<span class="r31 r">i</span>.<a href="GitIndex.cs.html#c9f28b2aa347b1ef" class="i property">Name</a>);
+                                                           }
+                                                       }
+                                                   }
+                              };
+
+            <b>new</b> <a href="IndexTreeWalker.cs.html#f43f0e1a69cb053e" class="t constructor">IndexTreeWalker</a>(<a href="#0edcae40baf33df2" class="i field">_index</a>, <a href="#bc4dfdf3879dd476" class="i field">_merge</a>, <a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r29 r">visitor</span>).<a href="IndexTreeWalker.cs.html#eec5c53b70a93f50" class="i method">Walk</a>();
+
+            <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#82567b42bbfc416e" class="i method">RemoveAll</a>(<span id="r33 rd" class="r33 r">conflict</span> =&gt; <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#521b9f7129105e15" class="i method">Contains</a>(<span class="r33 r">conflict</span>));
+        }
+
+
+         <b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="3ca36560e81b1d0b" href="R/3ca36560e81b1d0b.html" target="n" data-glyph="76,1" class="i method">ListFiles</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r34 rd" class="r34 r">file</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r35 rd" class="r35 r">list</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+            <a href="#a7ad8661d9a06007" class="i method">ListFiles</a>(<span class="r34 r">file</span>, <span class="r35 r">list</span>);
+            <b>return</b> <span class="r35 r">list</span>;
+        }
+
+         <b>private void</b> <a id="a7ad8661d9a06007" href="R/a7ad8661d9a06007.html" target="n" data-glyph="76,1" class="i method">ListFiles</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r36 rd" class="r36 r">dir</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <span id="r37 rd" class="r37 r">list</span>)
+         {
+             <b>foreach</b> (<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r38 rd" class="r38 r">f</span> <b>in</b> <span class="r36 r">dir</span>.<a href="Util/Extensions.cs.html#58178e2c5c83de84" class="i method">ListFiles</a>())
+             {
+                 <b>if</b> (<span class="r38 r">f</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+                     <a href="#a7ad8661d9a06007" class="i method">ListFiles</a>(<span class="r38 r">f</span>, <span class="r37 r">list</span>);
+                 <b>else</b>
+                 {
+                     <span class="r37 r">list</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#85fefa5ffb656935" class="i method">StripWorkDir</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r38 r">f</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>)));
+                 }
+             }
+         }
+
+        <b>internal void</b> <a id="7da5bd57ef77c5f1" href="R/7da5bd57ef77c5f1.html" target="n" data-glyph="74,1" class="i method">PrescanTwoTrees</a>()
+        {
+            <a href="AbstractIndexTreeVisitor.cs.html#822c466120a6ae22" class="k">var</a> <span id="r39 rd" class="r39 r">visitor</span> = <b>new</b> <a href="AbstractIndexTreeVisitor.cs.html#822c466120a6ae22" class="t constructor">AbstractIndexTreeVisitor</a>
+                              {
+                                  <a href="AbstractIndexTreeVisitor.cs.html#c14fd09ee1ba450e" class="i property">VisitEntryAux</a> = (<span id="r40 rd" class="r40 r">treeEntry</span>, <span id="r41 rd" class="r41 r">auxEntry</span>, <span id="r42 rd" class="r42 r">indexEntry</span>, <span id="r43 rd" class="r43 r">file</span>) =&gt;
+                                                   {
+                                                       <b>if</b> (<span class="r40 r">treeEntry</span> <b>is</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> || <span class="r41 r">auxEntry</span> <b>is</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a>)
+                                                       {
+                                                           <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Can&#39;t pass me a tree!&quot;</span>);
+                                                       }
+
+                                                       <a href="#ba1aa55e2753f940" class="i method">ProcessEntry</a>(<span class="r40 r">treeEntry</span>, <span class="r41 r">auxEntry</span>, <span class="r42 r">indexEntry</span>);
+                                                   },
+
+                                  <a href="AbstractIndexTreeVisitor.cs.html#d4d523a4ce81650b" class="i property">FinishVisitTree</a> = (<span id="r44 rd" class="r44 r">tree</span>, <span id="r45 rd" class="r45 r">auxTree</span>, <span id="r46 rd" class="r46 r">currentDirectory</span>) =&gt;
+                                                        {
+                                                            <b>if</b> (<span class="r46 r">currentDirectory</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 0) <b>return</b>;
+                                                            <b>if</b> (<span class="r45 r">auxTree</span> == <b>null</b>) <b>return</b>;
+
+                                                            <b>if</b> (<a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#90f168d780eef362" class="i method">GetEntry</a>(<span class="r46 r">currentDirectory</span>) != <b>null</b>)
+                                                            {
+                                                                <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r46 r">currentDirectory</span>);
+                                                            }
+                                                        }
+                              };
+
+            <b>new</b> <a href="IndexTreeWalker.cs.html#da6356fdd620e266" class="t constructor">IndexTreeWalker</a>(<a href="#0edcae40baf33df2" class="i field">_index</a>, <a href="#26988bed86612807" class="i field">_head</a>, <a href="#bc4dfdf3879dd476" class="i field">_merge</a>, <a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r39 r">visitor</span>).<a href="IndexTreeWalker.cs.html#eec5c53b70a93f50" class="i method">Walk</a>();
+
+            <span class="c">// if there&#39;s a conflict, don&#39;t list it under</span>
+            <span class="c">// to-be-removed, since that messed up our next</span>
+            <span class="c">// section</span>
+            <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#82567b42bbfc416e" class="i method">RemoveAll</a>(<span id="r47 rd" class="r47 r">removed</span> =&gt; <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#521b9f7129105e15" class="i method">Contains</a>(<span class="r47 r">removed</span>));
+
+            <b>foreach</b> (<b>string</b> <span id="r48 rd" class="r48 r">path</span> <b>in</b> <a href="#5fd2c678dad451d1" class="i field">_updated</a>.<a href="@0@mscorlib/A.html#9a3c0cb5c149c9f7" class="i property">Keys</a>)
+            {
+                <b>if</b> (<a href="#0edcae40baf33df2" class="i field">_index</a>.<a href="GitIndex.cs.html#90f168d780eef362" class="i method">GetEntry</a>(<span class="r48 r">path</span>) == <b>null</b>)
+                {
+                    <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r49 rd" class="r49 r">file</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>(), <span class="r48 r">path</span>));
+                    <b>if</b> (<span class="r49 r">file</span>.<a href="Util/Extensions.cs.html#b6e46e03d3efdd7c" class="i method">IsFile</a>())
+                    {
+                        <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r48 r">path</span>);
+                    }
+                    <b>else if</b> (<span class="r49 r">file</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+                    {
+                        <a href="#31d1a11006f554bd" class="i method">CheckConflictsWithFile</a>(<span class="r49 r">file</span>);
+                    }
+                }
+            }
+
+            <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#82567b42bbfc416e" class="i method">RemoveAll</a>(<span id="r50 rd" class="r50 r">conflict</span> =&gt; <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#521b9f7129105e15" class="i method">Contains</a>(<span class="r50 r">conflict</span>));
+        }
+
+        <b>private void</b> <a id="ba1aa55e2753f940" href="R/ba1aa55e2753f940.html" target="n" data-glyph="76,1" class="i method">ProcessEntry</a>(<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r51 rd" class="r51 r">h</span>, <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r52 rd" class="r52 r">m</span>, <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a>.<a href="GitIndex.cs.html#ada66cbaf2f188da" class="t t">Entry</a> <span id="r53 rd" class="r53 r">i</span>)
+        {
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r54 rd" class="r54 r">iId</span> = (<span class="r53 r">i</span> == <b>null</b> ? <b>null</b> : <span class="r53 r">i</span>.<a href="GitIndex.cs.html#84bb78eccc718597" class="i property">ObjectId</a>);
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r55 rd" class="r55 r">mId</span> = (<span class="r52 r">m</span> == <b>null</b> ? <b>null</b> : <span class="r52 r">m</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>);
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r56 rd" class="r56 r">hId</span> = (<span class="r51 r">h</span> == <b>null</b> ? <b>null</b> : <span class="r51 r">h</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>);
+
+            <b>string</b> <span id="r57 rd" class="r57 r">name</span> = (<span class="r53 r">i</span> != <b>null</b> ? <span class="r53 r">i</span>.<a href="GitIndex.cs.html#c9f28b2aa347b1ef" class="i property">Name</a> : (<span class="r51 r">h</span> != <b>null</b> ? <span class="r51 r">h</span>.<a href="TreeEntry.cs.html#f2fc52ae001c479c" class="i property">FullName</a> : <span class="r52 r">m</span>.<a href="TreeEntry.cs.html#f2fc52ae001c479c" class="i property">FullName</a>));
+
+            <b>if</b> (<span class="r53 r">i</span> == <b>null</b>)
+            {
+                <span class="c">//                    </span>
+                <span class="c">//				    I (index)                H        M        Result</span>
+                <span class="c">//			        -------------------------------------------------------</span>
+                <span class="c">//			        0 nothing             nothing  nothing  (does not happen)</span>
+                <span class="c">//			        1 nothing             nothing  exists   use M</span>
+                <span class="c">//			        2 nothing             exists   nothing  remove path from index</span>
+                <span class="c">//			        3 nothing             exists   exists   use M </span>
+
+                <b>if</b> (<span class="r51 r">h</span> == <b>null</b>)
+                {
+                    <a href="#5fd2c678dad451d1" class="i field">_updated</a>.<a href="@0@mscorlib/A.html#a7861da7aaa500fe" class="i method">Add</a>(<span class="r57 r">name</span>, <span class="r55 r">mId</span>);
+                }
+                <b>else if</b> (<span class="r52 r">m</span> == <b>null</b>)
+                {
+                    <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                }
+                <b>else</b>
+                {
+                    <a href="#5fd2c678dad451d1" class="i field">_updated</a>.<a href="@0@mscorlib/A.html#a7861da7aaa500fe" class="i method">Add</a>(<span class="r57 r">name</span>, <span class="r55 r">mId</span>);
+                }
+            }
+            <b>else if</b> (<span class="r51 r">h</span> == <b>null</b>)
+            {
+                <span class="c">//                    </span>
+                <span class="c">//					  clean I==H  I==M       H        M        Result</span>
+                <span class="c">//			         -----------------------------------------------------</span>
+                <span class="c">//			        4 yes   N/A   N/A     nothing  nothing  keep index</span>
+                <span class="c">//			        5 no    N/A   N/A     nothing  nothing  keep index</span>
+                <span class="c">//			</span>
+                <span class="c">//			        6 yes   N/A   yes     nothing  exists   keep index</span>
+                <span class="c">//			        7 no    N/A   yes     nothing  exists   keep index</span>
+                <span class="c">//			        8 yes   N/A   no      nothing  exists   fail</span>
+                <span class="c">//			        9 no    N/A   no      nothing  exists   fail       </span>
+
+                <b>if</b> (<span class="r52 r">m</span> == <b>null</b> || <span class="r55 r">mId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r54 r">iId</span>))
+                {
+                    <b>if</b> (<a href="#24afc80dfba295d0" class="i method">HasParentBlob</a>(<a href="#bc4dfdf3879dd476" class="i field">_merge</a>, <span class="r57 r">name</span>))
+                    {
+                        <b>if</b> (<span class="r53 r">i</span>.<a href="GitIndex.cs.html#45ab4c97d3763160" class="i method">IsModified</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <b>true</b>))
+                        {
+                            <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                        }
+                        <b>else</b>
+                        {
+                            <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                        }
+                    }
+                }
+                <b>else</b>
+                {
+                    <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                }
+            }
+            <b>else if</b> (<span class="r52 r">m</span> == <b>null</b>)
+            {
+                <span class="c">//                    </span>
+                <span class="c">//					10 yes   yes   N/A     exists   nothing  remove path from index</span>
+                <span class="c">//			        11 no    yes   N/A     exists   nothing  fail</span>
+                <span class="c">//			        12 yes   no    N/A     exists   nothing  fail</span>
+                <span class="c">//			        13 no    no    N/A     exists   nothing  fail</span>
+                <span class="c">//					 </span>
+
+                <b>if</b> (<span class="r56 r">hId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r54 r">iId</span>))
+                {
+                    <b>if</b> (<span class="r53 r">i</span>.<a href="GitIndex.cs.html#45ab4c97d3763160" class="i method">IsModified</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <b>true</b>))
+                    {
+                        <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                    }
+                    <b>else</b>
+                    {
+                        <a href="#487fdde589f73e61" class="i property">Removed</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                    }
+                }
+                <b>else</b>
+                {
+                    <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                }
+            }
+            <b>else</b>
+            {
+                <b>if</b> (!<span class="r56 r">hId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r55 r">mId</span>) &amp;&amp; !<span class="r56 r">hId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r54 r">iId</span>) &amp;&amp; !<span class="r55 r">mId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r54 r">iId</span>))
+                {
+                    <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                }
+                <b>else if</b> (<span class="r56 r">hId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r54 r">iId</span>) &amp;&amp; !<span class="r55 r">mId</span>.<a href="AnyObjectId.cs.html#f94476117349cde4" class="i method">Equals</a>(<span class="r54 r">iId</span>))
+                {
+                    <b>if</b> (<span class="r53 r">i</span>.<a href="GitIndex.cs.html#45ab4c97d3763160" class="i method">IsModified</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <b>true</b>))
+                    {
+                        <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r57 r">name</span>);
+                    }
+                    <b>else</b>
+                    {
+                        <a href="#5fd2c678dad451d1" class="i field">_updated</a>.<a href="@0@mscorlib/A.html#a7861da7aaa500fe" class="i method">Add</a>(<span class="r57 r">name</span>, <span class="r55 r">mId</span>);
+                    }
+                }
+            }
+        }
+
+        <b>private static bool</b> <a id="24afc80dfba295d0" href="R/24afc80dfba295d0.html" target="n" data-glyph="76,1" class="i method">HasParentBlob</a>(<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r58 rd" class="r58 r">t</span>, <b>string</b> <span id="r59 rd" class="r59 r">name</span>)
+        {
+            <b>if</b> (<span class="r59 r">name</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39;/&#39;</span>) == -1)
+            {
+                <b>return false</b>;
+            }
+
+            <b>string</b> <span id="r60 rd" class="r60 r">parent</span> = <span class="r59 r">name</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, <span class="r59 r">name</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;/&#39;</span>));
+            <b>return</b> <span class="r58 r">t</span>.<a href="Tree.cs.html#5da4e82e421301e7" class="i method">FindBlobMember</a>(<span class="r60 r">parent</span>) != <b>null</b> || <a href="#24afc80dfba295d0" class="i method">HasParentBlob</a>(<span class="r58 r">t</span>, <span class="r60 r">parent</span>);
+        }
+
+        <b>private void</b> <a id="31d1a11006f554bd" href="R/31d1a11006f554bd.html" target="n" data-glyph="76,1" class="i method">CheckConflictsWithFile</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r61 rd" class="r61 r">file</span>)
+        {
+            <b>if</b> (<span class="r61 r">file</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+            {
+                <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r62 rd" class="r62 r">childFiles</span> = <a href="#3ca36560e81b1d0b" class="i method">ListFiles</a>(<span class="r61 r">file</span>);
+                <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<span class="r62 r">childFiles</span>);
+            }
+            <b>else</b>
+            {
+                <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r63 rd" class="r63 r">parent</span> = <a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#619d8d3b1de3e460" class="i method">GetParent</a>(<span class="r61 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+                <b>if</b> (<span class="r63 r">parent</span> == <b>null</b>) <b>return</b>;
+
+                <b>while</b> (!<span class="r63 r">parent</span>.<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>))
+                {
+                    <b>if</b> (<span class="r63 r">parent</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+                    {
+                        <b>break</b>;
+                    }
+
+                    <b>if</b> (<span class="r63 r">parent</span>.<a href="Util/Extensions.cs.html#b6e46e03d3efdd7c" class="i method">IsFile</a>())
+                    {
+                        <a href="#aa10a1f8e6fad44f" class="i property">Conflicts</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a>.<a href="Repository.cs.html#85fefa5ffb656935" class="i method">StripWorkDir</a>(<a href="#8421144fe01e84ba" class="i field">_root</a>, <span class="r63 r">parent</span>));
+                        <b>break</b>;
+                    }
+
+                    <span class="r63 r">parent</span> = <a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#619d8d3b1de3e460" class="i method">GetParent</a>(<span class="r63 r">parent</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+                    <b>if</b> (<span class="r63 r">parent</span> == <b>null</b>) <b>return</b>;
+                }
+            }
+        }
+    }
+}</pre></td></tr></table></div></body></html>

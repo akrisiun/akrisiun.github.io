@@ -1,0 +1,581 @@
+﻿<!DOCTYPE html>
+<html><head><title>LockFile.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(572);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/LockFile.cs" target="_top">LockFile.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Git style file locking and replacement.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> To modify a ref file Git tries to use an atomic update approach: we write the</span>
+    <span class="c">///</span><span class="c"> new data into a brand new file, then rename it in place over the old name.</span>
+    <span class="c">///</span><span class="c"> This way we can just delete the temporary file if anything goes wrong, and</span>
+    <span class="c">///</span><span class="c"> nothing has been damaged. To coordinate access from multiple processes at</span>
+    <span class="c">///</span><span class="c"> once Git tries to atomically create the new temporary file under a well-known</span>
+    <span class="c">///</span><span class="c"> name.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="6a33a20086fca4a1" href="R/6a33a20086fca4a1.html" target="n" data-glyph="0,0" class="t t">LockFile</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+    {
+        <b>public static string</b> <a id="3b26c06e8d47ad7c" href="R/3b26c06e8d47ad7c.html" target="n" data-glyph="42,1" class="i field">SUFFIX</a> = <span class="s">&quot;.lock&quot;</span>; <span class="c">//$NON-NLS-1$</span>
+
+        <b>public static</b> <a href="@0@System.Core/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>string</b>, <b>bool</b>&gt; <a id="71575455b4f563db" href="R/71575455b4f563db.html" target="n" data-glyph="42,1" class="i field">FILTER</a> = (<span id="r0 rd" class="r0 r">name</span>) =&gt; !<span class="r0 r">name</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<a href="#3b26c06e8d47ad7c" class="i field">SUFFIX</a>);
+
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="c04761b578c3af64" href="R/c04761b578c3af64.html" target="n" data-glyph="46,1" class="i field">_refFile</a>;
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="624a1a54b0d9855f" href="R/624a1a54b0d9855f.html" target="n" data-glyph="46,1" class="i field">_lockFile</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <a id="d29b9e6e8f556fac" href="R/d29b9e6e8f556fac.html" target="n" data-glyph="46,1" class="i field">_os</a>;
+        <b>private</b> <a href="#bea645f596e2aafc" class="t t">FileLock</a> <a id="e430816f19da5702" href="R/e430816f19da5702.html" target="n" data-glyph="46,1" class="i field">_fLck</a>;
+        <b>private bool</b> <a id="bbd552f1da06aae1" href="R/bbd552f1da06aae1.html" target="n" data-glyph="46,1" class="i field">_haveLock</a>;
+        <b>private readonly string</b> <a id="5e665982596e2af6" href="R/5e665982596e2af6.html" target="n" data-glyph="46,1" class="i field">_lockFilePath</a>;
+
+
+        <b>public long</b> <a id="2c311d9ca7a2d0d2" href="R/2c311d9ca7a2d0d2.html" target="n" data-glyph="102,1" class="i property">CommitLastModified</a> { <b>get</b>; <b>private set</b>; }
+        <b>public bool</b> <a id="22b20e68bf2a3dcc" href="R/22b20e68bf2a3dcc.html" target="n" data-glyph="102,1" class="i property">NeedStatInformation</a> { <b>get</b>; <b>set</b>; }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new lock for any file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">file</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file that will be locked.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="b99601a78132e167" href="R/b99601a78132e167.html" target="n" data-glyph="72,1" class="i constructor">LockFile</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r1 rd" class="r1 r">file</span>)
+        {
+            <a href="#c04761b578c3af64" class="i field">_refFile</a> = <span class="r1 r">file</span>;
+            <a href="#624a1a54b0d9855f" class="i field">_lockFile</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>, <a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#f559e2409f4dfe9e" class="i property">Name</a> + <a href="#3b26c06e8d47ad7c" class="i field">SUFFIX</a>);
+            <a href="#5e665982596e2af6" class="i field">_lockFilePath</a> = <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>;
+
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Try to establish the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if the lock is now held by the caller; false if it is held</span>
+        <span class="c">///</span><span class="c"> by someone else.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the temporary output file could not be created. The caller</span>
+        <span class="c">///</span><span class="c"> does not hold the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="e7165a58b2fd07b9" href="R/e7165a58b2fd07b9.html" target="n" data-glyph="72,1" class="i method">Lock</a>()
+        {
+            <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <b>if</b> (<a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+            {
+                <b>return false</b>;
+            }
+
+            <b>try</b>
+            {
+                <a href="#bbd552f1da06aae1" class="i field">_haveLock</a> = <b>true</b>;
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a> = <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#fb467578f562d58a" class="i method">Create</a>();
+
+                <a href="#e430816f19da5702" class="i field">_fLck</a> = <a href="#bea645f596e2aafc" class="t t">FileLock</a>.<a href="#672793de19a65dc3" class="i method">TryLock</a>(<a href="#d29b9e6e8f556fac" class="i field">_os</a>, <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>);
+                <b>if</b> (<a href="#e430816f19da5702" class="i field">_fLck</a> == <b>null</b>)
+                {
+                    <span class="c">// We cannot use unlock() here as this file is not</span>
+                    <span class="c">// held by us, but we thought we created it. We must</span>
+                    <span class="c">// not delete it, as it belongs to some other process.</span>
+                    <a href="#bbd552f1da06aae1" class="i field">_haveLock</a> = <b>false</b>;
+                    <b>try</b>
+                    {
+                        <a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                    }
+                    <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+                    {
+                        <span class="c">// Fail by returning haveLck = false.</span>
+                    }
+                    <a href="#d29b9e6e8f556fac" class="i field">_os</a> = <b>null</b>;
+                }
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b>;
+            }
+
+            <b>return</b> <a href="#bbd552f1da06aae1" class="i field">_haveLock</a>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Try to establish the lock for appending.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if the lock is now held by the caller; false if it is held</span>
+        <span class="c">///</span><span class="c"> by someone else.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The temporary output file could not be created. The caller</span>
+        <span class="c">///</span><span class="c"> does not hold the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="6cb17d2efe00caaf" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">LockForAppend</a>()
+        {
+            <b>if</b> (!<a href="#e7165a58b2fd07b9" class="i method">Lock</a>())
+            {
+                <b>return false</b>;
+            }
+
+            <a href="#61b10db62a051b13" class="i method">CopyCurrentContent</a>();
+
+            <b>return true</b>;
+        }
+
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Copy the current file content into the temporary file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method saves the current file content by inserting it into the</span>
+        <span class="c">///</span><span class="c"> temporary file, so that the caller can safely append rather than replace</span>
+        <span class="c">///</span><span class="c"> the primary file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method does nothing if the current file does not exist, or exists</span>
+        <span class="c">///</span><span class="c"> but is empty.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The temporary file could not be written, or a read error</span>
+        <span class="c">///</span><span class="c"> occurred while reading from the current file. The lock is</span>
+        <span class="c">///</span><span class="c"> released before throwing the underlying IO exception to the</span>
+        <span class="c">///</span><span class="c"> caller. </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="61b10db62a051b13" href="R/61b10db62a051b13.html" target="n" data-glyph="72,1" class="i method">CopyCurrentContent</a>()
+        {
+            <a href="#1c8a63fcce4c360e" class="i method">RequireLock</a>();
+            <b>try</b>
+            {
+                <b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <span id="r2 rd" class="r2 r">fis</span> = <a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#950e0a34bec823b1" class="i method">OpenRead</a>())
+                {
+                    <b>var</b> <span id="r3 rd" class="r3 r">buf</span> = <b>new</b> <b>byte</b>[2048];
+                    <b>int</b> <span id="r4 rd" class="r4 r">r</span>;
+                    <b>while</b> ((<span class="r4 r">r</span> = <span class="r2 r">fis</span>.<a href="@0@mscorlib/A.html#f54c954df34d7a92" class="i method">Read</a>(<span class="r3 r">buf</span>, 0, <span class="r3 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)) &gt;= 0)
+                        <a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#d32fa48eafb90d8d" class="i method">Write</a>(<span class="r3 r">buf</span>, 0, <span class="r4 r">r</span>);
+                }
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a>)
+            {
+                <span class="c">// Don&#39;t worry about a file that doesn&#39;t exist yet, it</span>
+                <span class="c">// conceptually has no current content to copy.</span>
+                <span class="c">//</span>
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b>;
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write an ObjectId and LF to the temporary file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the id to store in the file. The id will be written in hex,</span>
+        <span class="c">///</span><span class="c"> followed by a sole LF.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="814bc0ba80b7df4f" href="R/814bc0ba80b7df4f.html" target="n" data-glyph="72,1" class="i method">Write</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r5 rd" class="r5 r">id</span>)
+        {
+            <a href="#1c8a63fcce4c360e" class="i method">RequireLock</a>();
+            <b>try</b>
+            {
+                <b>using</b> (<a href="@0@mscorlib/A.html#cf806b417abe1a35" class="k">var</a> <span id="r6 rd" class="r6 r">b</span> = <b>new</b> <a href="@0@mscorlib/A.html#93163b0edbac85a5" class="t constructor">BinaryWriter</a>(<a href="#d29b9e6e8f556fac" class="i field">_os</a>))
+                {
+                    <span class="r5 r">id</span>.<a href="AnyObjectId.cs.html#48504479afb2d920" class="i method">CopyTo</a>(<span class="r6 r">b</span>);
+                    <span class="r6 r">b</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+                    <span class="r6 r">b</span>.<a href="@0@mscorlib/A.html#38f4e6c6f7e28bbb" class="i method">Flush</a>();
+                    <a href="#e430816f19da5702" class="i field">_fLck</a>.<a href="#2733a1dd99883d7d" class="i method">Release</a>();
+                }
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a> = <b>null</b>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b>;
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write arbitrary data to the temporary file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">content</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the bytes to store in the temporary file. No additional bytes</span>
+        <span class="c">///</span><span class="c"> are added, so if the file must end with an LF it must appear</span>
+        <span class="c">///</span><span class="c"> at the end of the byte array.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="f44f21bf2f69cedb" href="R/f44f21bf2f69cedb.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>byte</b>[] <span id="r7 rd" class="r7 r">content</span>)
+        {
+            <a href="#1c8a63fcce4c360e" class="i method">RequireLock</a>();
+            <b>try</b>
+            {
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#d32fa48eafb90d8d" class="i method">Write</a>(<span class="r7 r">content</span>, 0, <span class="r7 r">content</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#3a4cf473777691b3" class="i method">Flush</a>();
+                <a href="#e430816f19da5702" class="i field">_fLck</a>.<a href="#2733a1dd99883d7d" class="i method">Release</a>();
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a> = <b>null</b>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b>;
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain the direct output stream for this lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The stream may only be accessed once, and only after </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e7165a58b2fd07b9" class="i method">Lock</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> has</span>
+        <span class="c">///</span><span class="c"> been successfully invoked and returned true. Callers must close the</span>
+        <span class="c">///</span><span class="c"> stream prior to calling </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#b167ec17da77c55b" class="i method">Commit</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to commit the change.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A stream to write to the new file. The stream is unbuffered.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="f5bd06e0d5da95c6" href="R/f5bd06e0d5da95c6.html" target="n" data-glyph="72,1" class="i method">GetOutputStream</a>()
+        {
+            <a href="#1c8a63fcce4c360e" class="i method">RequireLock</a>();
+            <b>return</b> <b>new</b> <a href="#5e7f51679a867e89" class="t constructor">LockFileOutputStream</a>(<a href="#6a33a20086fca4a1" class="k">this</a>);
+        }
+
+        <b>private void</b> <a id="1c8a63fcce4c360e" href="R/1c8a63fcce4c360e.html" target="n" data-glyph="76,1" class="i method">RequireLock</a>()
+        {
+            <b>if</b> (<a href="#d29b9e6e8f556fac" class="i field">_os</a> == <b>null</b>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;Lock on &quot;</span> + <a href="#c04761b578c3af64" class="i field">_refFile</a> + <span class="s">&quot; not held.&quot;</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Request that </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#b167ec17da77c55b" class="i method">Commit</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> remember modification time.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">on</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">true if the commit method must remember the modification time.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="2d0f9e342eec0631" href="R/2d0f9e342eec0631.html" target="n" data-glyph="72,1" class="i method">setNeedStatInformation</a>(<b>bool</b> <span id="r8 rd" class="r8 r">on</span>)
+        {
+            <a href="#22b20e68bf2a3dcc" class="i property">NeedStatInformation</a> = <span class="r8 r">on</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Wait until the lock file information differs from the old file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method tests both the length and the last modification date. If both</span>
+        <span class="c">///</span><span class="c"> are the same, this method sleeps until it can force the new lock file&#39;s</span>
+        <span class="c">///</span><span class="c"> modification date to be later than the target file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="ef3d6004b91e6333" href="R/ef3d6004b91e6333.html" target="n" data-glyph="72,1" class="i method">waitForStatChange</a>()
+        {
+            <a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+            <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+            <b>if</b> (<a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a> == <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>)
+            {
+                <b>long</b> <span id="r9 rd" class="r9 r">otime</span> = <a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+                <b>long</b> <span id="r10 rd" class="r10 r">ntime</span> = <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+                <b>while</b> (<span class="r9 r">otime</span> == <span class="r10 r">ntime</span>)
+                {
+                    <a href="@0@mscorlib/A.html#3980e012bae82e96" class="t t">Thread</a>.<a href="@0@mscorlib/A.html#5f1072b92dae1dd8" class="i method">Sleep</a>(25 <span class="c">/* milliseconds */</span>);
+                    <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#5d3da4ce6bc1832d" class="i property">LastWriteTime</a> = <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>;
+                    <span class="r10 r">ntime</span> = <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+                }
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Commit this change and release the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If this method fails (returns false) the lock is still released.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> true if the commit was successful and the file contains the new</span>
+        <span class="c">///</span><span class="c"> data; false if the commit failed and the file remains with the</span>
+        <span class="c">///</span><span class="c"> old data.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="b167ec17da77c55b" href="R/b167ec17da77c55b.html" target="n" data-glyph="72,1" class="i method">Commit</a>()
+        {
+            <b>if</b> (<a href="#d29b9e6e8f556fac" class="i field">_os</a> != <b>null</b>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;Lock on &quot;</span> + <a href="#c04761b578c3af64" class="i field">_refFile</a> + <span class="s">&quot; not closed.&quot;</span>);
+            }
+
+            <a href="#3cab7c4e463389c9" class="i method">SaveStatInformation</a>();
+
+            <b>if</b> (<a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+            {
+                <b>return true</b>;
+            }
+
+            <a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+            <b>if</b> (!<a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a> || <a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="Util/PathUtil.cs.html#bf54af593f7b2aad" class="i method">DeleteFile</a>())
+                <b>if</b> (<a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<a href="#c04761b578c3af64" class="i field">_refFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+                    <b>return true</b>;
+            <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+            <b>return false</b>;
+        }
+
+        <b>private void</b> <a id="3cab7c4e463389c9" href="R/3cab7c4e463389c9.html" target="n" data-glyph="76,1" class="i method">SaveStatInformation</a>()
+        {
+            <b>if</b> (<a href="#22b20e68bf2a3dcc" class="i property">NeedStatInformation</a>)
+            {
+                <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="@0@mscorlib/A.html#1c7b7d54ada1ef87" class="i method">Refresh</a>();
+                <a href="#2c311d9ca7a2d0d2" class="i property">CommitLastModified</a> = <a href="#624a1a54b0d9855f" class="i field">_lockFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Unlock this file and abort this change.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The temporary file (if created) is deleted before returning.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="2c1f6b2d12857b2d" href="R/2c1f6b2d12857b2d.html" target="n" data-glyph="72,1" class="i method">Unlock</a>()
+        {
+            <b>if</b> (<a href="#d29b9e6e8f556fac" class="i field">_os</a> != <b>null</b>)
+            {
+                <b>if</b> (<a href="#e430816f19da5702" class="i field">_fLck</a> != <b>null</b>)
+                {
+                    <b>try</b>
+                    {
+                        <a href="#e430816f19da5702" class="i field">_fLck</a>.<a href="#2733a1dd99883d7d" class="i method">Release</a>();
+                    }
+                    <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                    {
+                        <span class="c">// Huh?</span>
+                    }
+                    <a href="#e430816f19da5702" class="i field">_fLck</a> = <b>null</b>;
+                }
+                <b>try</b>
+                {
+                    <a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <span class="c">// Ignore this</span>
+                }
+                <a href="#d29b9e6e8f556fac" class="i field">_os</a> = <b>null</b>;
+            }
+
+            <b>if</b> (<a href="#bbd552f1da06aae1" class="i field">_haveLock</a>)
+            {
+                <a href="#bbd552f1da06aae1" class="i field">_haveLock</a> = <b>false</b>;
+                <a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#c4e7406e837331d5" class="i method">Delete</a>(<a href="#5e665982596e2af6" class="i field">_lockFilePath</a>);
+            }
+        }
+
+        <b>public void</b> <a id="e10961fb781f286b" href="R/e10961fb781f286b.html" target="n" data-glyph="72,1" class="i method">Dispose</a>()
+        {
+            <b>if</b> (<a href="#bbd552f1da06aae1" class="i field">_haveLock</a>)
+            {
+                <a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+            }
+        }
+
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+        <b>public class</b> <a id="cf32dd8713ebb786" href="R/cf32dd8713ebb786.html" target="n" data-glyph="0,1" class="t t">LockFileOutputStream</a> : <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>
+        {
+            <b>private readonly</b> <a href="#6a33a20086fca4a1" class="t t">LockFile</a> <a id="145f326192cdc533" href="R/145f326192cdc533.html" target="n" data-glyph="46,2" class="i field">_lockFile</a>;
+
+            <b>public</b> <a id="5e7f51679a867e89" href="R/5e7f51679a867e89.html" target="n" data-glyph="72,2" class="i constructor">LockFileOutputStream</a>(<a href="#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r11 rd" class="r11 r">lockfile</span>)
+            {
+                <a href="#145f326192cdc533" class="i field">_lockFile</a> = <span class="r11 r">lockfile</span>;
+            }
+
+            <b>public override void</b> <a id="055e1eb0d2cb30ab" href="R/055e1eb0d2cb30ab.html" target="n" data-glyph="72,2" class="i method">Write</a>(<b>byte</b>[] <span id="r12 rd" class="r12 r">buffer</span>, <b>int</b> <span id="r13 rd" class="r13 r">offset</span>, <b>int</b> <span id="r14 rd" class="r14 r">count</span>)
+            {
+                <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#d32fa48eafb90d8d" class="i method">Write</a>(<span class="r12 r">buffer</span>, <span class="r13 r">offset</span>, <span class="r14 r">count</span>);
+            }
+
+            <b>public void</b> <a id="d52caf0a2506c8dd" href="R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">write</a>(<b>byte</b>[] <span id="r15 rd" class="r15 r">b</span>)
+            {
+                <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#d32fa48eafb90d8d" class="i method">Write</a>(<span class="r15 r">b</span>, 0, <span class="r15 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+            }
+
+            <b>public void</b> <a id="3a6dc4f8b21716a8" href="R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">write</a>(<b>int</b> <span id="r16 rd" class="r16 r">b</span>)
+            {
+                <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#a6dd4f627fab93a9" class="i method">WriteByte</a>((<b>byte</b>)<span class="r16 r">b</span>);
+            }
+
+            <b>public override void</b> <a id="ab027a26f6c7e1ce" href="R/ab027a26f6c7e1ce.html" target="n" data-glyph="72,2" class="i method">Flush</a>()
+            {
+                <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#3a4cf473777691b3" class="i method">Flush</a>();
+            }
+
+            <b>public override void</b> <a id="f7bbb5443e8fad74" href="R/f7bbb5443e8fad74.html" target="n" data-glyph="72,2" class="i method">Close</a>()
+            {
+                <b>try</b>
+                {
+                    <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#3a4cf473777691b3" class="i method">Flush</a>();
+                    <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#e430816f19da5702" class="i field">_fLck</a>.<a href="#2733a1dd99883d7d" class="i method">Release</a>();
+                    <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                    <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#d29b9e6e8f556fac" class="i field">_os</a> = <b>null</b>;
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+                {
+                    <a href="#145f326192cdc533" class="i field">_lockFile</a>.<a href="#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                    <b>throw</b>;
+                }
+            }
+
+            <b>public override bool</b> <a id="69f7d8f8b1b1eeea" href="R/69f7d8f8b1b1eeea.html" target="n" data-glyph="102,2" class="i property">CanRead</a>
+            {
+                <b>get</b> { <b>return false</b>; }
+            }
+
+            <b>public override bool</b> <a id="6f2d701dadb4df86" href="R/6f2d701dadb4df86.html" target="n" data-glyph="102,2" class="i property">CanSeek</a>
+            {
+                <b>get</b> { <b>return false</b>; }
+            }
+
+            <b>public override bool</b> <a id="ae312648b71f31db" href="R/ae312648b71f31db.html" target="n" data-glyph="102,2" class="i property">CanWrite</a>
+            {
+                <b>get</b> { <b>return true</b>; }
+            }
+
+            <b>public override long</b> <a id="5a8e691e46dcc467" href="R/5a8e691e46dcc467.html" target="n" data-glyph="102,2" class="i property">Length</a>
+            {
+                <b>get</b> { <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>(); }
+            }
+
+            <b>public override long</b> <a id="132702eb3468b849" href="R/132702eb3468b849.html" target="n" data-glyph="102,2" class="i property">Position</a>
+            {
+                <b>get</b>
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+                }
+                <b>set</b>
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+                }
+            }
+
+            <b>public override int</b> <a id="440319b1f423356e" href="R/440319b1f423356e.html" target="n" data-glyph="72,2" class="i method">Read</a>(<b>byte</b>[] <span id="r17 rd" class="r17 r">buffer</span>, <b>int</b> <span id="r18 rd" class="r18 r">offset</span>, <b>int</b> <span id="r19 rd" class="r19 r">count</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+            }
+
+            <b>public override long</b> <a id="9518575f4bf1b8b3" href="R/9518575f4bf1b8b3.html" target="n" data-glyph="72,2" class="i method">Seek</a>(<b>long</b> <span id="r20 rd" class="r20 r">offset</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a> <span id="r21 rd" class="r21 r">origin</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+            }
+
+            <b>public override void</b> <a id="4e5c75d7495e9016" href="R/4e5c75d7495e9016.html" target="n" data-glyph="72,2" class="i method">SetLength</a>(<b>long</b> <span id="r22 rd" class="r22 r">value</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Wraps a FileStream and tracks its locking status</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public class</b> <a id="bea645f596e2aafc" href="R/bea645f596e2aafc.html" target="n" data-glyph="0,1" class="t t">FileLock</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+        {
+            <b>public</b> <a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <a id="764d8591a75ed1fe" href="R/764d8591a75ed1fe.html" target="n" data-glyph="102,2" class="i property">FileStream</a> { <b>get</b>; <b>private set</b>; }
+            <b>public bool</b> <a id="4ed89041b745e32a" href="R/4ed89041b745e32a.html" target="n" data-glyph="102,2" class="i property">Locked</a> { <b>get</b>; <b>private set</b>; }
+            <b>public string</b> <a id="bafc5714effa2c6c" href="R/bafc5714effa2c6c.html" target="n" data-glyph="102,2" class="i property">File</a> { <b>get</b>; <b>private set</b>; }
+
+            <b>private</b> <a id="e28bd35fc40303d6" href="R/e28bd35fc40303d6.html" target="n" data-glyph="76,2" class="i constructor">FileLock</a>(<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <span id="r23 rd" class="r23 r">fs</span>, <b>string</b> <span id="r24 rd" class="r24 r">file</span>)
+            {
+                <a href="#bafc5714effa2c6c" class="i property">File</a> = <span class="r24 r">file</span>;
+                <a href="#764d8591a75ed1fe" class="i property">FileStream</a> = <span class="r23 r">fs</span>;
+                <a href="#764d8591a75ed1fe" class="i property">FileStream</a>.<a href="@0@mscorlib/A.html#651e41c186deaf07" class="i method">Lock</a>(0, <b>long</b>.<a href="@0@mscorlib/A.html#52a2718fdacedb8b" class="i field">MaxValue</a>);
+                <a href="#4ed89041b745e32a" class="i property">Locked</a> = <b>true</b>;
+            }
+
+            <b>public static</b> <a href="#bea645f596e2aafc" class="t t">FileLock</a> <a id="672793de19a65dc3" href="R/672793de19a65dc3.html" target="n" data-glyph="72,2" class="i method">TryLock</a>(<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <span id="r25 rd" class="r25 r">fs</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r26 rd" class="r26 r">file</span>)
+            {
+                <b>try</b>
+                {
+                    <b>return</b> <b>new</b> <a href="#e28bd35fc40303d6" class="t constructor">FileLock</a>(<span class="r25 r">fs</span>, <span class="r26 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r27 rd" class="r27 r">e</span>)
+                {
+                    <a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#73de7bb60da320d3" class="i method">WriteLine</a>(<span class="s">&quot;Could not lock &quot;</span> + <span class="r26 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+                    <a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#73de7bb60da320d3" class="i method">WriteLine</a>(<span class="r27 r">e</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>);
+                    <b>return null</b>;
+                }
+            }
+
+            <b>public void</b> <a id="7065137d767e1bb2" href="R/7065137d767e1bb2.html" target="n" data-glyph="72,2" class="i method">Dispose</a>()
+            {
+                <a href="#2733a1dd99883d7d" class="i method">Release</a>();
+            }
+
+            <b>public void</b> <a id="2733a1dd99883d7d" href="R/2733a1dd99883d7d.html" target="n" data-glyph="72,2" class="i method">Release</a>()
+            {
+                <b>if</b> (<a href="#4ed89041b745e32a" class="i property">Locked</a> == <b>false</b>)
+                {
+                    <b>return</b>;
+                }
+                <b>try</b>
+                {
+                    <a href="#764d8591a75ed1fe" class="i property">FileStream</a>.<a href="@0@mscorlib/A.html#69dcfd4407a42f1a" class="i method">Unlock</a>(0, <b>long</b>.<a href="@0@mscorlib/A.html#52a2718fdacedb8b" class="i field">MaxValue</a>);
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+                    <a href="@0@mscorlib/A.html#25d9c1e022317a99" class="t t">GC</a>.<a href="@0@mscorlib/A.html#2673f5220a565bf2" class="i method">SuppressFinalize</a>(<a href="#bea645f596e2aafc" class="k">this</a>); <span class="c">// [henon] disarm lock-release checker</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <span class="c">// unlocking went wrong</span>
+                    <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a> + <span class="s">&quot;: tried to unlock an unlocked filelock &quot;</span> + <a href="#bafc5714effa2c6c" class="i property">File</a>);
+                    <b>throw</b>;
+                }
+                <a href="#4ed89041b745e32a" class="i property">Locked</a> = <b>false</b>;
+            }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+            <span class="c">// [henon] this : a debug mode warning if the filelock has not been disposed properly</span>
+            ~<a id="bc7f8c7bfeac4182" href="R/../../0000000000.html" target="n" data-glyph="75,2" class="i method">FileLock</a>()
+            {
+                <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a> + <span class="s">&quot; has not been properly disposed: &quot;</span> + <a href="#bafc5714effa2c6c" class="i property">File</a>);
+            }
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+    }
+}
+</pre></td></tr></table></div></body></html>

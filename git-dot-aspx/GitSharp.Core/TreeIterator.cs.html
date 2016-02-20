@@ -1,0 +1,202 @@
+﻿<!DOCTYPE html>
+<html><head><title>TreeIterator.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(193);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/TreeIterator.cs" target="_top">TreeIterator.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2006, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * 
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<b>public class</b> <a id="8f81ff4fd3be102b" href="R/8f81ff4fd3be102b.html" target="n" data-glyph="0,0" class="t t">TreeIterator</a>
+	{
+		<b>private readonly</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <a id="d1e3d14bf44d88e8" href="R/d1e3d14bf44d88e8.html" target="n" data-glyph="46,1" class="i field">_tree</a>;
+		<b>private readonly</b> <a href="#1e4632d8ee12b582" class="t t">Order</a> <a id="a10481206be18b7e" href="R/a10481206be18b7e.html" target="n" data-glyph="46,1" class="i field">_order</a>;
+		<b>private readonly bool</b> <a id="014194ffbedeb04d" href="R/014194ffbedeb04d.html" target="n" data-glyph="46,1" class="i field">_visitTreeNodes</a>;
+
+		<b>private int</b> <a id="4ded387973062b8e" href="R/4ded387973062b8e.html" target="n" data-glyph="46,1" class="i field">_index</a>;
+		<b>private</b> <a href="#8f81ff4fd3be102b" class="t t">TreeIterator</a> <a id="6454750aaa64716f" href="R/6454750aaa64716f.html" target="n" data-glyph="46,1" class="i field">_sub</a>;
+		<b>private bool</b> <a id="52c623338650deda" href="R/52c623338650deda.html" target="n" data-glyph="46,1" class="i field">_hasVisitedTree</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Traversal order</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		[<a href="@0@mscorlib/A.html#e971d5381ca60183" class="t constructor">Serializable</a>]
+		<b>public enum</b> <a id="1e4632d8ee12b582" href="R/1e4632d8ee12b582.html" target="n" data-glyph="18,1" class="t t"><span id="3237349657dd6516">Order</span></a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Visit node first, then leaves</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<a id="3b5eec2f33712b5e" href="R/3b5eec2f33712b5e.html" target="n" data-glyph="24,2" class="i field">PREORDER</a>,
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Visit leaves first, then node</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<a id="e6be871f07cb0bd2" href="R/e6be871f07cb0bd2.html" target="n" data-glyph="24,2" class="i field">POSTORDER</a>
+		};
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8f81ff4fd3be102b" class="t t">TreeIterator</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for visiting all non-tree nodes.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="d2c1d6eae624fc79" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">TreeIterator</a>(<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r0 rd" class="r0 r">start</span>)
+			: <a href="#39cfc423a177282c" class="k">this</a>(<span class="r0 r">start</span>, <a href="#1e4632d8ee12b582" class="t t">Order</a>.<a href="#3b5eec2f33712b5e" class="i field">PREORDER</a>, <b>false</b>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8f81ff4fd3be102b" class="t t">TreeIterator</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for visiting all nodes in a</span>
+		<span class="c">///</span><span class="c"> tree in a given order</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Root node</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">order</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#1e4632d8ee12b582" class="t t">Order</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="5c26b296459e2ab3" href="R/5c26b296459e2ab3.html" target="n" data-glyph="72,1" class="i constructor">TreeIterator</a>(<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r1 rd" class="r1 r">start</span>, <a href="#1e4632d8ee12b582" class="t t">Order</a> <span id="r2 rd" class="r2 r">order</span>)
+			: <a href="#39cfc423a177282c" class="k">this</a>(<span class="r1 r">start</span>, <span class="r2 r">order</span>, <b>true</b>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8f81ff4fd3be102b" class="t t">TreeIterator</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">First node to visit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">order</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Visitation </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#1e4632d8ee12b582" class="t t">Order</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">visitTreeNode</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">True to include tree node</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>private</b> <a id="39cfc423a177282c" href="R/39cfc423a177282c.html" target="n" data-glyph="76,1" class="i constructor">TreeIterator</a>(<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r3 rd" class="r3 r">start</span>, <a href="#1e4632d8ee12b582" class="t t">Order</a> <span id="r4 rd" class="r4 r">order</span>, <b>bool</b> <span id="r5 rd" class="r5 r">visitTreeNode</span>)
+		{
+			<a href="#d1e3d14bf44d88e8" class="i field">_tree</a> = <span class="r3 r">start</span>;
+			<a href="#014194ffbedeb04d" class="i field">_visitTreeNodes</a> = <span class="r5 r">visitTreeNode</span>;
+			<a href="#4ded387973062b8e" class="i field">_index</a> = -1;
+			<a href="#a10481206be18b7e" class="i field">_order</a> = <span class="r4 r">order</span>;
+			<b>if</b> (!<a href="#014194ffbedeb04d" class="i field">_visitTreeNodes</a>)
+			{
+				<a href="#52c623338650deda" class="i field">_hasVisitedTree</a> = <b>true</b>;
+			}
+
+			<b>try</b>
+			{
+				<a href="#0d561b7ba481a9df" class="i method">Step</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r6 rd" class="r6 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#266f59a804f72937" class="t constructor">Exception</a>(<b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>, <span class="r6 r">e</span>);
+			}
+		}
+
+		<b>private</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <a id="020d94cbe14b729a" href="R/020d94cbe14b729a.html" target="n" data-glyph="76,1" class="i method">NextTreeEntry</a>()
+		{
+			<b>if</b> (<a href="#6454750aaa64716f" class="i field">_sub</a> != <b>null</b>)
+				<b>return</b> <a href="#6454750aaa64716f" class="i field">_sub</a>.<a href="#020d94cbe14b729a" class="i method">NextTreeEntry</a>();
+
+			<b>if</b> (<a href="#4ded387973062b8e" class="i field">_index</a> &lt; 0 &amp;&amp; <a href="#a10481206be18b7e" class="i field">_order</a> == <a href="#1e4632d8ee12b582" class="t t">Order</a>.<a href="#3b5eec2f33712b5e" class="i field">PREORDER</a>)
+				<b>return</b> <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>;
+
+			<b>if</b> (<a href="#a10481206be18b7e" class="i field">_order</a> == <a href="#1e4632d8ee12b582" class="t t">Order</a>.<a href="#e6be871f07cb0bd2" class="i field">POSTORDER</a> &amp;&amp; <a href="#4ded387973062b8e" class="i field">_index</a> == <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#3dfefac78521bf43" class="i property">MemberCount</a>)
+				<b>return</b> <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>;
+
+			<b>if</b> (<a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#9883e64bacef8470" class="i property">Members</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt;= <a href="#4ded387973062b8e" class="i field">_index</a>)
+				<b>return null</b>;
+
+			<b>return</b> <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#9883e64bacef8470" class="i property">Members</a>[<a href="#4ded387973062b8e" class="i field">_index</a>];
+		}
+
+		<b>private bool</b> <a id="5299b00bca63b73a" href="R/5299b00bca63b73a.html" target="n" data-glyph="76,1" class="i method">HasNextTreeEntry</a>()
+		{
+			<b>if</b> (<a href="#d1e3d14bf44d88e8" class="i field">_tree</a> == <b>null</b>) <b>return false</b>;
+
+			<b>return</b> <a href="#6454750aaa64716f" class="i field">_sub</a> != <b>null</b> || <a href="#4ded387973062b8e" class="i field">_index</a> &lt; <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#3dfefac78521bf43" class="i property">MemberCount</a> || <a href="#a10481206be18b7e" class="i field">_order</a> == <a href="#1e4632d8ee12b582" class="t t">Order</a>.<a href="#e6be871f07cb0bd2" class="i field">POSTORDER</a> &amp;&amp; <a href="#4ded387973062b8e" class="i field">_index</a> == <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#3dfefac78521bf43" class="i property">MemberCount</a>;
+		}
+
+		<b>private bool</b> <a id="0d561b7ba481a9df" href="R/0d561b7ba481a9df.html" target="n" data-glyph="76,1" class="i method">Step</a>()
+		{
+			<b>if</b> (<a href="#d1e3d14bf44d88e8" class="i field">_tree</a> == <b>null</b>) <b>return false</b>;
+			<b>if</b> (<a href="#6454750aaa64716f" class="i field">_sub</a> != <b>null</b>)
+			{
+				<b>if</b> (<a href="#6454750aaa64716f" class="i field">_sub</a>.<a href="#0d561b7ba481a9df" class="i method">Step</a>()) <b>return true</b>;
+				<a href="#6454750aaa64716f" class="i field">_sub</a> = <b>null</b>;
+			}
+
+			<b>if</b> (<a href="#4ded387973062b8e" class="i field">_index</a> &lt; 0 &amp;&amp; !<a href="#52c623338650deda" class="i field">_hasVisitedTree</a> &amp;&amp; <a href="#a10481206be18b7e" class="i field">_order</a> == <a href="#1e4632d8ee12b582" class="t t">Order</a>.<a href="#3b5eec2f33712b5e" class="i field">PREORDER</a>)
+			{
+				<a href="#52c623338650deda" class="i field">_hasVisitedTree</a> = <b>true</b>;
+				<b>return true</b>;
+			}
+
+			<b>while</b> (++<a href="#4ded387973062b8e" class="i field">_index</a> &lt; <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#3dfefac78521bf43" class="i property">MemberCount</a>)
+			{
+				<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r7 rd" class="r7 r">e</span> = (<a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#9883e64bacef8470" class="i property">Members</a>[<a href="#4ded387973062b8e" class="i field">_index</a>] <b>as</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a>);
+				<b>if</b> (<span class="r7 r">e</span> != <b>null</b>)
+				{
+					<a href="#6454750aaa64716f" class="i field">_sub</a> = <b>new</b> <a href="#39cfc423a177282c" class="t constructor">TreeIterator</a>(<span class="r7 r">e</span>, <a href="#a10481206be18b7e" class="i field">_order</a>, <a href="#014194ffbedeb04d" class="i field">_visitTreeNodes</a>);
+					<b>if</b> (<a href="#6454750aaa64716f" class="i field">_sub</a>.<a href="#5299b00bca63b73a" class="i method">HasNextTreeEntry</a>()) <b>return true</b>;
+					<a href="#6454750aaa64716f" class="i field">_sub</a> = <b>null</b>;
+					<b>continue</b>;
+				}
+				<b>return true</b>;
+			}
+
+			<b>if</b> (<a href="#4ded387973062b8e" class="i field">_index</a> == <a href="#d1e3d14bf44d88e8" class="i field">_tree</a>.<a href="Tree.cs.html#3dfefac78521bf43" class="i property">MemberCount</a> &amp;&amp; !<a href="#52c623338650deda" class="i field">_hasVisitedTree</a> &amp;&amp; <a href="#a10481206be18b7e" class="i field">_order</a> == <a href="#1e4632d8ee12b582" class="t t">Order</a>.<a href="#e6be871f07cb0bd2" class="i field">POSTORDER</a>)
+			{
+				<a href="#52c623338650deda" class="i field">_hasVisitedTree</a> = <b>true</b>;
+				<b>return true</b>;
+			}
+
+			<b>return false</b>;
+		}
+
+
+		<b>public bool</b> <a id="282f8a2889eaa3d9" href="R/282f8a2889eaa3d9.html" target="n" data-glyph="72,1" class="i method">hasNext</a>()
+		{
+			<b>return</b> <a href="#5299b00bca63b73a" class="i method">HasNextTreeEntry</a>();
+		}
+
+		<b>public</b> <a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <a id="f7074bba944a1a1a" href="R/f7074bba944a1a1a.html" target="n" data-glyph="72,1" class="i method">next</a>()
+		{
+			<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r8 rd" class="r8 r">ret</span> = <a href="#020d94cbe14b729a" class="i method">NextTreeEntry</a>();
+			<a href="#0d561b7ba481a9df" class="i method">Step</a>();
+			<b>return</b> <span class="r8 r">ret</span>;
+		}
+	}
+}</pre></td></tr></table></div></body></html>

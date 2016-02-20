@@ -1,0 +1,415 @@
+﻿<!DOCTYPE html>
+<html><head><title>TreeFormatter.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(406);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/TreeFormatter.cs" target="_top">NGit\TreeFormatter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Mutable formatter to construct a single tree object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Mutable formatter to construct a single tree object.</span>
+	<span class="c">///</span><span class="c"> This formatter does not process subtrees. Callers must handle creating each</span>
+	<span class="c">///</span><span class="c"> subtree on their own.</span>
+	<span class="c">///</span><span class="c"> To maintain good performance for bulk operations, this formatter does not</span>
+	<span class="c">///</span><span class="c"> validate its input. Callers are responsible for ensuring the resulting tree</span>
+	<span class="c">///</span><span class="c"> object is correctly well formed by writing entries in the correct order.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="d8a5fe2095322e59" href="../R/d8a5fe2095322e59.html" target="n" data-glyph="0,0" class="t t">TreeFormatter</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the size of a tree entry record.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Compute the size of a tree entry record.</span>
+		<span class="c">///</span><span class="c"> This method can be used to estimate the correct size of a tree prior to</span>
+		<span class="c">///</span><span class="c"> allocating a formatter. Getting the size correct at allocation time</span>
+		<span class="c">///</span><span class="c"> ensures the internal buffer is sized correctly, reducing copying.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the mode the entry will have.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">nameLen</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the length of the name, in bytes.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the length of the record.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static int</b> <a id="f5bd460d044cf8bc" href="../R/f5bd460d044cf8bc.html" target="n" data-glyph="72,1" class="i method">EntrySize</a>(<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r0 rd" class="r0 r">mode</span>, <b>int</b> <span id="r1 rd" class="r1 r">nameLen</span>)
+		{
+			<b>return</b> <span class="r0 r">mode</span>.<a href="FileMode.cs.html#b22e048d52d4e957" class="i method">CopyToLength</a>() + <span class="r1 r">nameLen</span> + <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#60ff5c86f7e4f264" class="i field">OBJECT_ID_LENGTH</a> + 2;
+		}
+
+		<b>private byte</b>[] <a id="a3854dcf9793148d" href="../R/a3854dcf9793148d.html" target="n" data-glyph="46,1" class="i field">buf</a>;
+
+		<b>private int</b> <a id="467b563acfa89469" href="../R/467b563acfa89469.html" target="n" data-glyph="46,1" class="i field">ptr</a>;
+
+		<b>private</b> <a href="../NGit.Util/TemporaryBuffer.cs.html#aeb8269d005d0658" class="t t">TemporaryBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#4a0c327fdd7b8270" class="t t">Heap</a> <a id="be78ae31d979a273" href="../R/be78ae31d979a273.html" target="n" data-glyph="46,1" class="i field">overflowBuffer</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create an empty formatter with a default buffer size.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create an empty formatter with a default buffer size.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public</b> <a id="62977126698dfd2f" href="../R/62977126698dfd2f.html" target="n" data-glyph="72,1" class="i constructor">TreeFormatter</a>() : <a href="#2975383c9d04c6ec" class="k">this</a>(8192)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create an empty formatter with the specified buffer size.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create an empty formatter with the specified buffer size.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">size</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> estimated size of the tree, in bytes. Callers can use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f5bd460d044cf8bc" class="i method">EntrySize</a>(<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>, <b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">EntrySize(FileMode, int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to estimate the size of each</span>
+		<span class="c">///</span><span class="c"> entry in advance of allocating the formatter.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="2975383c9d04c6ec" href="../R/2975383c9d04c6ec.html" target="n" data-glyph="72,1" class="i constructor">TreeFormatter</a>(<b>int</b> <span id="r2 rd" class="r2 r">size</span>)
+		{
+			<a href="#a3854dcf9793148d" class="i field">buf</a> = <b>new</b> <b>byte</b>[<span class="r2 r">size</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add a link to a submodule commit, mode is</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileMode.GITLINK</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the ObjectId to store in this entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="cc3019ea214afcf1" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>string</b> <span id="r3 rd" class="r3 r">name</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r4 rd" class="r4 r">commit</span>)
+		{
+			<a href="#ad4364d57456df69" class="i method">Append</a>(<span class="r3 r">name</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a>, <span class="r4 r">commit</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add a subtree, mode is</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#0381c1d3c3e060f3" class="i field">TREE</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileMode.TREE</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">tree</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the ObjectId to store in this entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="964fed42822ec1b3" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>string</b> <span id="r5 rd" class="r5 r">name</span>, <a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r6 rd" class="r6 r">tree</span>)
+		{
+			<a href="#ad4364d57456df69" class="i method">Append</a>(<span class="r5 r">name</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#0381c1d3c3e060f3" class="i field">TREE</a>, <span class="r6 r">tree</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add a regular file, mode is</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">FileMode.REGULAR_FILE</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">blob</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the ObjectId to store in this entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="a6429165b9e0255a" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>string</b> <span id="r7 rd" class="r7 r">name</span>, <a href="../NGit.Revwalk/RevBlob.cs.html#e4cee64dd6309c41" class="t t">RevBlob</a> <span id="r8 rd" class="r8 r">blob</span>)
+		{
+			<a href="#ad4364d57456df69" class="i method">Append</a>(<span class="r7 r">name</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>, <span class="r8 r">blob</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> mode describing the treatment of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">id</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the ObjectId to store in this entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="ad4364d57456df69" href="../R/ad4364d57456df69.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>string</b> <span id="r9 rd" class="r9 r">name</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r10 rd" class="r10 r">mode</span>, <a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r11 rd" class="r11 r">id</span>)
+		{
+			<a href="#b7bebfa1b125272d" class="i method">Append</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="r9 r">name</span>), <span class="r10 r">mode</span>, <span class="r11 r">id</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> name of the entry. The name should be UTF-8 encoded, but file</span>
+		<span class="c">///</span><span class="c"> name encoding is not a well defined concept in Git.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> mode describing the treatment of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">id</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the ObjectId to store in this entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="b7bebfa1b125272d" href="../R/b7bebfa1b125272d.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>byte</b>[] <span id="r12 rd" class="r12 r">name</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r13 rd" class="r13 r">mode</span>, <a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r14 rd" class="r14 r">id</span>)
+		{
+			<a href="#e01545a5526e5d0b" class="i method">Append</a>(<span class="r12 r">name</span>, 0, <span class="r12 r">name</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r13 r">mode</span>, <span class="r14 r">id</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">nameBuf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> buffer holding the name of the entry. The name should be UTF-8</span>
+		<span class="c">///</span><span class="c"> encoded, but file name encoding is not a well defined concept</span>
+		<span class="c">///</span><span class="c"> in Git.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">namePos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first position within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">nameBuf</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> of the name data.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">nameLen</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">nameBuf</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to use as the name.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> mode describing the treatment of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">id</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the ObjectId to store in this entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="e01545a5526e5d0b" href="../R/e01545a5526e5d0b.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>byte</b>[] <span id="r15 rd" class="r15 r">nameBuf</span>, <b>int</b> <span id="r16 rd" class="r16 r">namePos</span>, <b>int</b> <span id="r17 rd" class="r17 r">nameLen</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r18 rd" class="r18 r">mode</span>
+			, <a href="AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r19 rd" class="r19 r">id</span>)
+		{
+			<b>if</b> (<a href="#824e53e60f321888" class="i method">FmtBuf</a>(<span class="r15 r">nameBuf</span>, <span class="r16 r">namePos</span>, <span class="r17 r">nameLen</span>, <span class="r18 r">mode</span>))
+			{
+				<span class="r19 r">id</span>.<a href="AnyObjectId.cs.html#be57099b85a2cd0c" class="i method">CopyRawTo</a>(<a href="#a3854dcf9793148d" class="i field">buf</a>, <a href="#467b563acfa89469" class="i field">ptr</a>);
+				<a href="#467b563acfa89469" class="i field">ptr</a> += <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#60ff5c86f7e4f264" class="i field">OBJECT_ID_LENGTH</a>;
+			}
+			<b>else</b>
+			{
+				<b>try</b>
+				{
+					<a href="#5eb0ada6cfaa4dca" class="i method">FmtOverflowBuffer</a>(<span class="r15 r">nameBuf</span>, <span class="r16 r">namePos</span>, <span class="r17 r">nameLen</span>, <span class="r18 r">mode</span>);
+					<span class="r19 r">id</span>.<a href="AnyObjectId.cs.html#ca9e3a122ae6bcec" class="i method">CopyRawTo</a>(<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r20 rd" class="r20 r">badBuffer</span>)
+				{
+					<span class="c">// This should never occur.</span>
+					<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#a59f7e2f156a0c62" class="t constructor">RuntimeException</a>(<span class="r20 r">badBuffer</span>);
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Append any entry to the tree.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r21 r">nameBuf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> buffer holding the name of the entry. The name should be UTF-8</span>
+		<span class="c">///</span><span class="c"> encoded, but file name encoding is not a well defined concept</span>
+		<span class="c">///</span><span class="c"> in Git.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">namePos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first position within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">nameBuf</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> of the name data.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">nameLen</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">nameBuf</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to use as the name.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> mode describing the treatment of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">id</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">idBuf</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">buffer holding the raw ObjectId of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r26 r">idPos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first position within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idBuf</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to copy the id from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="49e12a14a12e8c38" href="../R/49e12a14a12e8c38.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>byte</b>[] <span id="r21 rd" class="r21 r">nameBuf</span>, <b>int</b> <span id="r22 rd" class="r22 r">namePos</span>, <b>int</b> <span id="r23 rd" class="r23 r">nameLen</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r24 rd" class="r24 r">mode</span>
+			, <b>byte</b>[] <span id="r25 rd" class="r25 r">idBuf</span>, <b>int</b> <span id="r26 rd" class="r26 r">idPos</span>)
+		{
+			<b>if</b> (<a href="#824e53e60f321888" class="i method">FmtBuf</a>(<span class="r21 r">nameBuf</span>, <span class="r22 r">namePos</span>, <span class="r23 r">nameLen</span>, <span class="r24 r">mode</span>))
+			{
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r25 r">idBuf</span>, <span class="r26 r">idPos</span>, <a href="#a3854dcf9793148d" class="i field">buf</a>, <a href="#467b563acfa89469" class="i field">ptr</a>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#60ff5c86f7e4f264" class="i field">OBJECT_ID_LENGTH</a>);
+				<a href="#467b563acfa89469" class="i field">ptr</a> += <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#60ff5c86f7e4f264" class="i field">OBJECT_ID_LENGTH</a>;
+			}
+			<b>else</b>
+			{
+				<b>try</b>
+				{
+					<a href="#5eb0ada6cfaa4dca" class="i method">FmtOverflowBuffer</a>(<span class="r21 r">nameBuf</span>, <span class="r22 r">namePos</span>, <span class="r23 r">nameLen</span>, <span class="r24 r">mode</span>);
+					<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#1bd99e1ba93bd556" class="i method">Write</a>(<span class="r25 r">idBuf</span>, <span class="r26 r">idPos</span>, <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#60ff5c86f7e4f264" class="i field">OBJECT_ID_LENGTH</a>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r27 rd" class="r27 r">badBuffer</span>)
+				{
+					<span class="c">// This should never occur.</span>
+					<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#a59f7e2f156a0c62" class="t constructor">RuntimeException</a>(<span class="r27 r">badBuffer</span>);
+				}
+			}
+		}
+
+		<b>private bool</b> <a id="824e53e60f321888" href="../R/824e53e60f321888.html" target="n" data-glyph="76,1" class="i method">FmtBuf</a>(<b>byte</b>[] <span id="r28 rd" class="r28 r">nameBuf</span>, <b>int</b> <span id="r29 rd" class="r29 r">namePos</span>, <b>int</b> <span id="r30 rd" class="r30 r">nameLen</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r31 rd" class="r31 r">mode</span>)
+		{
+			<b>if</b> (<a href="#a3854dcf9793148d" class="i field">buf</a> == <b>null</b> || <a href="#a3854dcf9793148d" class="i field">buf</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <a href="#467b563acfa89469" class="i field">ptr</a> + <a href="#f5bd460d044cf8bc" class="i method">EntrySize</a>(<span class="r31 r">mode</span>, <span class="r30 r">nameLen</span>))
+			{
+				<b>return false</b>;
+			}
+			<span class="r31 r">mode</span>.<a href="FileMode.cs.html#c2a755ad14ceeee1" class="i method">CopyTo</a>(<a href="#a3854dcf9793148d" class="i field">buf</a>, <a href="#467b563acfa89469" class="i field">ptr</a>);
+			<a href="#467b563acfa89469" class="i field">ptr</a> += <span class="r31 r">mode</span>.<a href="FileMode.cs.html#b22e048d52d4e957" class="i method">CopyToLength</a>();
+			<a href="#a3854dcf9793148d" class="i field">buf</a>[<a href="#467b563acfa89469" class="i field">ptr</a>++] = (<b>byte</b>)(<span class="s">&#39; &#39;</span>);
+			<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r28 r">nameBuf</span>, <span class="r29 r">namePos</span>, <a href="#a3854dcf9793148d" class="i field">buf</a>, <a href="#467b563acfa89469" class="i field">ptr</a>, <span class="r30 r">nameLen</span>);
+			<a href="#467b563acfa89469" class="i field">ptr</a> += <span class="r30 r">nameLen</span>;
+			<a href="#a3854dcf9793148d" class="i field">buf</a>[<a href="#467b563acfa89469" class="i field">ptr</a>++] = 0;
+			<b>return true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="5eb0ada6cfaa4dca" href="../R/5eb0ada6cfaa4dca.html" target="n" data-glyph="76,1" class="i method">FmtOverflowBuffer</a>(<b>byte</b>[] <span id="r32 rd" class="r32 r">nameBuf</span>, <b>int</b> <span id="r33 rd" class="r33 r">namePos</span>, <b>int</b> <span id="r34 rd" class="r34 r">nameLen</span>, <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>
+			 <span id="r35 rd" class="r35 r">mode</span>)
+		{
+			<b>if</b> (<a href="#a3854dcf9793148d" class="i field">buf</a> != <b>null</b>)
+			{
+				<a href="#be78ae31d979a273" class="i field">overflowBuffer</a> = <b>new</b> <a href="../NGit.Util/TemporaryBuffer.cs.html#aeb8269d005d0658" class="t t">TemporaryBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#eb4d21d531721d13" class="t constructor">Heap</a>(<b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>);
+				<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#1bd99e1ba93bd556" class="i method">Write</a>(<a href="#a3854dcf9793148d" class="i field">buf</a>, 0, <a href="#467b563acfa89469" class="i field">ptr</a>);
+				<a href="#a3854dcf9793148d" class="i field">buf</a> = <b>null</b>;
+			}
+			<span class="r35 r">mode</span>.<a href="FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>);
+			<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#2bc3048bce09875f" class="i method">Write</a>(<b>unchecked</b>((<b>byte</b>)<span class="s">&#39; &#39;</span>));
+			<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#1bd99e1ba93bd556" class="i method">Write</a>(<span class="r32 r">nameBuf</span>, <span class="r33 r">namePos</span>, <span class="r34 r">nameLen</span>);
+			<a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#2bc3048bce09875f" class="i method">Write</a>(<b>unchecked</b>((<b>byte</b>)0));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert this tree and obtain its ObjectId.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert this tree and obtain its ObjectId.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">ins</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the inserter to store the tree.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">computed ObjectId of the tree</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the tree could not be stored.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="196e1cd8ff5ed521" href="../R/196e1cd8ff5ed521.html" target="n" data-glyph="72,1" class="i method">InsertTo</a>(<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r36 rd" class="r36 r">ins</span>)
+		{
+			<b>if</b> (<a href="#a3854dcf9793148d" class="i field">buf</a> != <b>null</b>)
+			{
+				<b>return</b> <span class="r36 r">ins</span>.<a href="ObjectInserter.cs.html#736f77437410c426" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c1694187955c95c1" class="i field">OBJ_TREE</a>, <a href="#a3854dcf9793148d" class="i field">buf</a>, 0, <a href="#467b563acfa89469" class="i field">ptr</a>);
+			}
+			<b>long</b> <span id="r37 rd" class="r37 r">len</span> = <a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#ae10dcaed9b8154c" class="i method">Length</a>();
+			<b>return</b> <span class="r36 r">ins</span>.<a href="ObjectInserter.cs.html#fb2dcf0d4b0844fa" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c1694187955c95c1" class="i field">OBJ_TREE</a>, <span class="r37 r">len</span>, <a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#1bfb4ec64ca84edc" class="i method">OpenInputStream</a>());
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the ObjectId for this tree</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">ins</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">ObjectId for this tree</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="22a5fd0d8a107922" href="../R/22a5fd0d8a107922.html" target="n" data-glyph="72,1" class="i method">ComputeId</a>(<a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a> <span id="r38 rd" class="r38 r">ins</span>)
+		{
+			<b>if</b> (<a href="#a3854dcf9793148d" class="i field">buf</a> != <b>null</b>)
+			{
+				<b>return</b> <span class="r38 r">ins</span>.<a href="ObjectInserter.cs.html#40950ab6b5497749" class="i method">IdFor</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c1694187955c95c1" class="i field">OBJ_TREE</a>, <a href="#a3854dcf9793148d" class="i field">buf</a>, 0, <a href="#467b563acfa89469" class="i field">ptr</a>);
+			}
+			<b>long</b> <span id="r39 rd" class="r39 r">len</span> = <a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#ae10dcaed9b8154c" class="i method">Length</a>();
+			<b>try</b>
+			{
+				<b>return</b> <span class="r38 r">ins</span>.<a href="ObjectInserter.cs.html#5a83b3db6bbcc6f6" class="i method">IdFor</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#c1694187955c95c1" class="i field">OBJ_TREE</a>, <span class="r39 r">len</span>, <a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#1bfb4ec64ca84edc" class="i method">OpenInputStream</a>());
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r40 rd" class="r40 r">e</span>)
+			{
+				<span class="c">// this should never happen</span>
+				<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#a59f7e2f156a0c62" class="t constructor">RuntimeException</a>(<span class="r40 r">e</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Copy this formatter&#39;s buffer into a byte array.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Copy this formatter&#39;s buffer into a byte array.</span>
+		<span class="c">///</span><span class="c"> This method is not efficient, as it needs to create a copy of the</span>
+		<span class="c">///</span><span class="c"> internal buffer in order to supply an array of the correct size to the</span>
+		<span class="c">///</span><span class="c"> caller. If the buffer is just to pass to an ObjectInserter, consider</span>
+		<span class="c">///</span><span class="c"> using</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectInserter.cs.html#f245fd0ba211832f" class="t t">ObjectInserter</a>.<a href="ObjectInserter.cs.html#722c8de02d2f279b" class="i method">Insert</a>(<a href="#d8a5fe2095322e59" class="t t">TreeFormatter</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ObjectInserter.Insert(TreeFormatter)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> instead.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a copy of this formatter&#39;s buffer.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual byte</b>[] <a id="b9f331f4765da1b1" href="../R/b9f331f4765da1b1.html" target="n" data-glyph="72,1" class="i method">ToByteArray</a>()
+		{
+			<b>if</b> (<a href="#a3854dcf9793148d" class="i field">buf</a> != <b>null</b>)
+			{
+				<b>byte</b>[] <span id="r41 rd" class="r41 r">r</span> = <b>new</b> <b>byte</b>[<a href="#467b563acfa89469" class="i field">ptr</a>];
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#a3854dcf9793148d" class="i field">buf</a>, 0, <span class="r41 r">r</span>, 0, <a href="#467b563acfa89469" class="i field">ptr</a>);
+				<b>return</b> <span class="r41 r">r</span>;
+			}
+			<b>try</b>
+			{
+				<b>return</b> <a href="#be78ae31d979a273" class="i field">overflowBuffer</a>.<a href="../NGit.Util/TemporaryBuffer.cs.html#a77cfb1717f1bc2d" class="i method">ToByteArray</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r42 rd" class="r42 r">err</span>)
+			{
+				<span class="c">// This should never happen, its read failure on a byte array.</span>
+				<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#a59f7e2f156a0c62" class="t constructor">RuntimeException</a>(<span class="r42 r">err</span>);
+			}
+		}
+
+		<b>public override string</b> <a id="270f5e524c639145" href="../R/270f5e524c639145.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+		{
+			<b>byte</b>[] <span id="r43 rd" class="r43 r">raw</span> = <a href="#b9f331f4765da1b1" class="i method">ToByteArray</a>();
+			<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r44 rd" class="r44 r">p</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+			<span class="r44 r">p</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#873a9af2a273c715" class="i method">Reset</a>(<span class="r43 r">raw</span>);
+			<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r45 rd" class="r45 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+			<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;Tree={&quot;</span>);
+			<b>if</b> (!<span class="r44 r">p</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#1b2ce711f8f2ddaa" class="i property">Eof</a>)
+			{
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\n&#39;</span>);
+				<b>try</b>
+				{
+					<b>new</b> <a href="ObjectChecker.cs.html#d4c6595dae32ff3a" class="t constructor">ObjectChecker</a>().<a href="ObjectChecker.cs.html#1fecc76018857067" class="i method">CheckTree</a>(<span class="r43 r">raw</span>);
+				}
+				<b>catch</b> (<a href="../NGit.Errors/CorruptObjectException.cs.html#cc0fe9dcd5bb1542" class="t t">CorruptObjectException</a> <span id="r46 rd" class="r46 r">error</span>)
+				{
+					<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;*** ERROR: &quot;</span>).<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r46 r">error</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>).<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;\n&quot;</span>);
+					<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\n&#39;</span>);
+				}
+			}
+			<b>while</b> (!<span class="r44 r">p</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#1b2ce711f8f2ddaa" class="i property">Eof</a>)
+			{
+				<a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r47 rd" class="r47 r">mode</span> = <span class="r44 r">p</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#5f740308b516a2ae" class="i property">EntryFileMode</a>;
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#7685cb28f3648166" class="i method">Append</a>(<span class="r47 r">mode</span>);
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#24a42755dc298aac" class="i method">TypeString</a>(<span class="r47 r">mode</span>.<a href="FileMode.cs.html#6d8835bb81f9e7ef" class="i method">GetObjectType</a>()));
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r44 r">p</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>.<a href="AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>);
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r44 r">p</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#f2d55c476b7e3bc1" class="i property">EntryPathString</a>);
+				<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\n&#39;</span>);
+				<span class="r44 r">p</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#6a597933ae2fc4ae" class="i method">Next</a>();
+			}
+			<span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;}&quot;</span>);
+			<b>return</b> <span class="r45 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

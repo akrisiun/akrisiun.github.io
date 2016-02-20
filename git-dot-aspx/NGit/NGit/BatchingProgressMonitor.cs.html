@@ -1,0 +1,331 @@
+﻿<!DOCTYPE html>
+<html><head><title>BatchingProgressMonitor.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(322);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/BatchingProgressMonitor.cs" target="_top">NGit\BatchingProgressMonitor.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">ProgressMonitor that batches update events.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">ProgressMonitor that batches update events.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public abstract class</b> <a id="a45f395355adb3f7" href="../R/a45f395355adb3f7.html" target="n" data-glyph="0,0" class="t t"><span id="cf28afbc126550d4">BatchingProgressMonitor</span></a> : <a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>
+	{
+		<b>private static readonly</b> <a href="/Sharpen/A.html#4af9f41a466c0c57" class="t t">ScheduledThreadPoolExecutor</a> <a id="2c3eea378ebf0d4c" href="../R/2c3eea378ebf0d4c.html" target="n" data-glyph="46,1" class="i field">alarmQueue</a>;
+
+		<b>internal static readonly object</b> <a id="31c7e7d37bb46594" href="../R/31c7e7d37bb46594.html" target="n" data-glyph="44,1" class="i field">alarmQueueKiller</a>;
+
+		<b>static</b> <a id="be6c7678de50f54b" href="../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">BatchingProgressMonitor</a>()
+		{
+			<span class="c">// To support garbage collection, start our thread but</span>
+			<span class="c">// swap out the thread factory. When our class is GC&#39;d</span>
+			<span class="c">// the alarmQueueKiller will finalize and ask the executor</span>
+			<span class="c">// to shutdown, ending the worker.</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r0 rd" class="r0 r">threads</span> = 1;
+			<a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a> = <b>new</b> <a href="/Sharpen/A.html#b6d1652992efee33" class="t constructor">ScheduledThreadPoolExecutor</a>(<span class="r0 r">threads</span>, <b>new</b> <a href="#38532aaebbb17ee8" class="t constructor">_ThreadFactory_66</a>());
+			<a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#d382c5c373167514" class="i method">SetContinueExistingPeriodicTasksAfterShutdownPolicy</a>(<b>false</b>);
+			<a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#1f36a23007be5e8b" class="i method">SetExecuteExistingDelayedTasksAfterShutdownPolicy</a>(<b>false</b>);
+			<a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#82fe052b447268aa" class="i method">PrestartAllCoreThreads</a>();
+			<span class="c">// Now that the threads are running, its critical to swap out</span>
+			<span class="c">// our own thread factory for one that isn&#39;t in the ClassLoader.</span>
+			<span class="c">// This allows the class to GC.</span>
+			<span class="c">//</span>
+			<a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#597aee2c8c17ce98" class="i method">SetThreadFactory</a>(<a href="/Sharpen/A.html#488acad6996b1954" class="t t">Executors</a>.<a href="/Sharpen/A.html#33dc23bd499603a6" class="i method">DefaultThreadFactory</a>());
+			<a href="#31c7e7d37bb46594" class="i field">alarmQueueKiller</a> = <b>new</b> <a href="#25a8ba95ca26520e" class="t constructor">_object_87</a>();
+		}
+
+		<b>private sealed class</b> <a id="c0f7d8bd012c800a" href="../R/c0f7d8bd012c800a.html" target="n" data-glyph="4,1" class="t t">_ThreadFactory_66</a> : <a href="/Sharpen/A.html#826905dece848729" class="t t">ThreadFactory</a>
+		{
+			<b>public</b> <a id="38532aaebbb17ee8" href="../R/38532aaebbb17ee8.html" target="n" data-glyph="72,2" class="i constructor">_ThreadFactory_66</a>()
+			{
+				<a href="#c0f7d8bd012c800a" class="k">this</a>.<a href="#ef7dd836abd4a796" class="i field">baseFactory</a> = <a href="/Sharpen/A.html#488acad6996b1954" class="t t">Executors</a>.<a href="/Sharpen/A.html#33dc23bd499603a6" class="i method">DefaultThreadFactory</a>();
+			}
+
+			<b>private readonly</b> <a href="/Sharpen/A.html#826905dece848729" class="t t">ThreadFactory</a> <a id="ef7dd836abd4a796" href="../R/ef7dd836abd4a796.html" target="n" data-glyph="46,2" class="i field">baseFactory</a>;
+
+			<b>public</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a> <a id="2b9264d8ce26ff9f" href="../R/../../0000000000.html" target="n" data-glyph="72,2" class="i method">NewThread</a>(<a href="/Sharpen/A.html#f045ac791f6c522f" class="t t">Runnable</a> <span id="r1 rd" class="r1 r">taskBody</span>)
+			{
+				<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a> <span id="r2 rd" class="r2 r">thr</span> = <a href="#c0f7d8bd012c800a" class="k">this</a>.<a href="#ef7dd836abd4a796" class="i field">baseFactory</a>.<a href="/Sharpen/A.html#75e9175352019cd8" class="i method">NewThread</a>(<span class="r1 r">taskBody</span>);
+				<span class="r2 r">thr</span>.<a href="/Sharpen/A.html#7046e9ef75861e01" class="i method">SetName</a>(<span class="s">&quot;JGit-AlarmQueue&quot;</span>);
+				<span class="r2 r">thr</span>.<a href="/Sharpen/A.html#492a2f0356d4059d" class="i method">SetDaemon</a>(<b>true</b>);
+				<b>return</b> <span class="r2 r">thr</span>;
+			}
+		}
+
+		<b>private sealed class</b> <a id="5dbecc2503bdb1cf" href="../R/5dbecc2503bdb1cf.html" target="n" data-glyph="4,1" class="t t">_object_87</a> : <b>object</b>
+		{
+			<b>public</b> <a id="25a8ba95ca26520e" href="../R/25a8ba95ca26520e.html" target="n" data-glyph="72,2" class="i constructor">_object_87</a>()
+			{
+			}
+
+			~<a id="b93eb289df7a7738" href="../R/../../0000000000.html" target="n" data-glyph="75,2" class="i method">_object_87</a>()
+			{
+				<a href="#a45f395355adb3f7" class="t t">BatchingProgressMonitor</a>.<a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#431b4adcd583be1c" class="i method">ShutdownNow</a>();
+			}
+		}
+
+		<b>private long</b> <a id="f00440e028b021dc" href="../R/f00440e028b021dc.html" target="n" data-glyph="46,1" class="i field">delayStartTime</a>;
+
+		<b>private</b> <a href="/Sharpen/A.html#133e16eab76e8aea" class="t t">TimeUnit</a> <a id="58535c71a197d74e" href="../R/58535c71a197d74e.html" target="n" data-glyph="46,1" class="i field">delayStartUnit</a> = <a href="/Sharpen/A.html#133e16eab76e8aea" class="t t">TimeUnit</a>.<a href="/Sharpen/A.html#861a58be3521111a" class="i field">MILLISECONDS</a>;
+
+		<b>private</b> <a href="#a45f395355adb3f7" class="t t">BatchingProgressMonitor</a>.<a href="#c33e606fb31354f4" class="t t">Task</a> <a id="7b42dd1c0b4d32b3" href="../R/7b42dd1c0b4d32b3.html" target="n" data-glyph="46,1" class="i field">task</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set an optional delay before the first output.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set an optional delay before the first output.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">time</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> how long to wait before output. If 0 output begins on the</span>
+		<span class="c">///</span><span class="c"> first</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#ce565f9a62e049fd" class="i method">Update</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Update(int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> call.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">unit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> time unit of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">time</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="e96c1fab22abd297" href="../R/e96c1fab22abd297.html" target="n" data-glyph="72,1" class="i method">SetDelayStart</a>(<b>long</b> <span id="r3 rd" class="r3 r">time</span>, <a href="/Sharpen/A.html#133e16eab76e8aea" class="t t">TimeUnit</a> <span id="r4 rd" class="r4 r">unit</span>)
+		{
+			<a href="#f00440e028b021dc" class="i field">delayStartTime</a> = <span class="r3 r">time</span>;
+			<a href="#58535c71a197d74e" class="i field">delayStartUnit</a> = <span class="r4 r">unit</span>;
+		}
+
+		<b>public override void</b> <a id="2590aab3aad604d5" href="../R/2590aab3aad604d5.html" target="n" data-glyph="72,1" class="i method">Start</a>(<b>int</b> <span id="r5 rd" class="r5 r">totalTasks</span>)
+		{
+		}
+
+		<span class="c">// Ignore the number of tasks.</span>
+		<b>public override void</b> <a id="2e11dab85525dd71" href="../R/2e11dab85525dd71.html" target="n" data-glyph="72,1" class="i method">BeginTask</a>(<b>string</b> <span id="r6 rd" class="r6 r">title</span>, <b>int</b> <span id="r7 rd" class="r7 r">work</span>)
+		{
+			<a href="#fe0ad4a87ef116a3" class="i method">EndTask</a>();
+			<a href="#7b42dd1c0b4d32b3" class="i field">task</a> = <b>new</b> <a href="#a45f395355adb3f7" class="t t">BatchingProgressMonitor</a>.<a href="#8c0ca60087b710a1" class="t constructor">Task</a>(<span class="r6 r">title</span>, <span class="r7 r">work</span>);
+			<b>if</b> (<a href="#f00440e028b021dc" class="i field">delayStartTime</a> != 0)
+			{
+				<a href="#7b42dd1c0b4d32b3" class="i field">task</a>.<a href="#15548fb12f2b1f31" class="i method">Delay</a>(<a href="#f00440e028b021dc" class="i field">delayStartTime</a>, <a href="#58535c71a197d74e" class="i field">delayStartUnit</a>);
+			}
+		}
+
+		<b>public override void</b> <a id="ce565f9a62e049fd" href="../R/ce565f9a62e049fd.html" target="n" data-glyph="72,1" class="i method">Update</a>(<b>int</b> <span id="r8 rd" class="r8 r">completed</span>)
+		{
+			<b>if</b> (<a href="#7b42dd1c0b4d32b3" class="i field">task</a> != <b>null</b>)
+			{
+				<a href="#7b42dd1c0b4d32b3" class="i field">task</a>.<a href="#7a35921a1861886d" class="i method">Update</a>(<a href="#a45f395355adb3f7" class="k">this</a>, <span class="r8 r">completed</span>);
+			}
+		}
+
+		<b>public override void</b> <a id="fe0ad4a87ef116a3" href="../R/fe0ad4a87ef116a3.html" target="n" data-glyph="72,1" class="i method">EndTask</a>()
+		{
+			<b>if</b> (<a href="#7b42dd1c0b4d32b3" class="i field">task</a> != <b>null</b>)
+			{
+				<a href="#7b42dd1c0b4d32b3" class="i field">task</a>.<a href="#b7e180fde5049902" class="i method">End</a>(<a href="#a45f395355adb3f7" class="k">this</a>);
+				<a href="#7b42dd1c0b4d32b3" class="i field">task</a> = <b>null</b>;
+			}
+		}
+
+		<b>public override bool</b> <a id="9bb5c9b9fe3dafa6" href="../R/9bb5c9b9fe3dafa6.html" target="n" data-glyph="72,1" class="i method">IsCancelled</a>()
+		{
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Update the progress monitor if the total work isn&#39;t known,</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">taskName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the task.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">workCurr</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number of units already completed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal abstract void</b> <a id="ca117f28641bb3ab" href="../R/ca117f28641bb3ab.html" target="n" data-glyph="75,1" class="i method">OnUpdate</a>(<b>string</b> <span id="r9 rd" class="r9 r">taskName</span>, <b>int</b> <span id="r10 rd" class="r10 r">workCurr</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Finish the progress monitor when the total wasn&#39;t known in advance.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Finish the progress monitor when the total wasn&#39;t known in advance.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">taskName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the task.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">workCurr</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">total number of units processed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal abstract void</b> <a id="d73ca8601bdf5b34" href="../R/d73ca8601bdf5b34.html" target="n" data-glyph="75,1" class="i method">OnEndTask</a>(<b>string</b> <span id="r11 rd" class="r11 r">taskName</span>, <b>int</b> <span id="r12 rd" class="r12 r">workCurr</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Update the progress monitor when the total is known in advance.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Update the progress monitor when the total is known in advance.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">taskName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the task.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">workCurr</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number of units already completed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">workTotal</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">estimated number of units to process.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">percentDone</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">workCurr * 100 / workTotal</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal abstract void</b> <a id="34774bf15f915b6f" href="../R/34774bf15f915b6f.html" target="n" data-glyph="75,1" class="i method">OnUpdate</a>(<b>string</b> <span id="r13 rd" class="r13 r">taskName</span>, <b>int</b> <span id="r14 rd" class="r14 r">workCurr</span>, <b>int</b> <span id="r15 rd" class="r15 r">workTotal</span>
+			, <b>int</b> <span id="r16 rd" class="r16 r">percentDone</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Finish the progress monitor when the total is known in advance.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Finish the progress monitor when the total is known in advance.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">taskName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the task.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">workCurr</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">total number of units processed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">workTotal</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">estimated number of units to process.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">percentDone</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">workCurr * 100 / workTotal</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal abstract void</b> <a id="9a5d2705eef502ad" href="../R/9a5d2705eef502ad.html" target="n" data-glyph="75,1" class="i method">OnEndTask</a>(<b>string</b> <span id="r17 rd" class="r17 r">taskName</span>, <b>int</b> <span id="r18 rd" class="r18 r">workCurr</span>, <b>int</b> <span id="r19 rd" class="r19 r">workTotal</span>
+			, <b>int</b> <span id="r20 rd" class="r20 r">percentDone</span>);
+
+		<b>private class</b> <a id="c33e606fb31354f4" href="../R/c33e606fb31354f4.html" target="n" data-glyph="4,1" class="t t">Task</a> : <a href="/Sharpen/A.html#f045ac791f6c522f" class="t t">Runnable</a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Title of the current task.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Title of the current task.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<b>private readonly string</b> <a id="e8cdd5697df90a73" href="../R/e8cdd5697df90a73.html" target="n" data-glyph="46,2" class="i field">taskName</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Number of work units, or</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>.<a href="ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ProgressMonitor.UNKNOWN</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> .</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<b>private readonly int</b> <a id="8ded789e44ccd753" href="../R/8ded789e44ccd753.html" target="n" data-glyph="46,2" class="i field">totalWork</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">True when timer expires and output should occur on next update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">True when timer expires and output should occur on next update.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<b>private volatile bool</b> <a id="9ea5eda5424bb084" href="../R/9ea5eda5424bb084.html" target="n" data-glyph="46,2" class="i field">display</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Scheduled timer, supporting cancellation if task ends early.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Scheduled timer, supporting cancellation if task ends early.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<b>private</b> <a href="/Sharpen/A.html#65cc1a0fba37b273" class="t t">Future</a>&lt;<b>object</b>&gt; <a id="8ab13318d34bd334" href="../R/8ab13318d34bd334.html" target="n" data-glyph="46,2" class="i field">timerFuture</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">True if the task has displayed anything.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">True if the task has displayed anything.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<b>private bool</b> <a id="7653819783cef30a" href="../R/7653819783cef30a.html" target="n" data-glyph="46,2" class="i field">output</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Number of work units already completed.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Number of work units already completed.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<b>private int</b> <a id="ac738fdc5535ac0c" href="../R/ac738fdc5535ac0c.html" target="n" data-glyph="46,2" class="i field">lastWork</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Percentage of</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8ded789e44ccd753" class="i field">totalWork</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">totalWork</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> that is done.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<b>private int</b> <a id="e6326f5f07f806f1" href="../R/e6326f5f07f806f1.html" target="n" data-glyph="46,2" class="i field">lastPercent</a>;
+
+			<b>internal</b> <a id="8c0ca60087b710a1" href="../R/8c0ca60087b710a1.html" target="n" data-glyph="74,2" class="i constructor">Task</a>(<b>string</b> <span id="r21 rd" class="r21 r">taskName</span>, <b>int</b> <span id="r22 rd" class="r22 r">totalWork</span>)
+			{
+				<a href="#c33e606fb31354f4" class="k">this</a>.<a href="#e8cdd5697df90a73" class="i field">taskName</a> = <span class="r21 r">taskName</span>;
+				<a href="#c33e606fb31354f4" class="k">this</a>.<a href="#8ded789e44ccd753" class="i field">totalWork</a> = <span class="r22 r">totalWork</span>;
+				<a href="#c33e606fb31354f4" class="k">this</a>.<a href="#9ea5eda5424bb084" class="i field">display</a> = <b>true</b>;
+			}
+
+			<b>internal virtual void</b> <a id="15548fb12f2b1f31" href="../R/15548fb12f2b1f31.html" target="n" data-glyph="74,2" class="i method">Delay</a>(<b>long</b> <span id="r23 rd" class="r23 r">time</span>, <a href="/Sharpen/A.html#133e16eab76e8aea" class="t t">TimeUnit</a> <span id="r24 rd" class="r24 r">unit</span>)
+			{
+				<a href="#9ea5eda5424bb084" class="i field">display</a> = <b>false</b>;
+				<a href="#8ab13318d34bd334" class="i field">timerFuture</a> = <a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#bd87c13525330b8b" class="i method">Schedule</a>(<a href="#c33e606fb31354f4" class="k">this</a>, <span class="r23 r">time</span>, <span class="r24 r">unit</span>);
+			}
+
+			<b>public virtual void</b> <a id="bb20dfb0bdec97e6" href="../R/bb20dfb0bdec97e6.html" target="n" data-glyph="72,2" class="i method">Run</a>()
+			{
+				<a href="#9ea5eda5424bb084" class="i field">display</a> = <b>true</b>;
+			}
+
+			<b>internal virtual void</b> <a id="7a35921a1861886d" href="../R/7a35921a1861886d.html" target="n" data-glyph="74,2" class="i method">Update</a>(<a href="#a45f395355adb3f7" class="t t">BatchingProgressMonitor</a> <span id="r25 rd" class="r25 r">pm</span>, <b>int</b> <span id="r26 rd" class="r26 r">completed</span>)
+			{
+				<a href="#ac738fdc5535ac0c" class="i field">lastWork</a> += <span class="r26 r">completed</span>;
+				<b>if</b> (<a href="#8ded789e44ccd753" class="i field">totalWork</a> == <a href="ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>)
+				{
+					<span class="c">// Only display once per second, as the alarm fires.</span>
+					<b>if</b> (<a href="#9ea5eda5424bb084" class="i field">display</a>)
+					{
+						<span class="r25 r">pm</span>.<a href="#ca117f28641bb3ab" class="i method">OnUpdate</a>(<a href="#e8cdd5697df90a73" class="i field">taskName</a>, <a href="#ac738fdc5535ac0c" class="i field">lastWork</a>);
+						<a href="#7653819783cef30a" class="i field">output</a> = <b>true</b>;
+						<a href="#eb86b3b557448145" class="i method">RestartTimer</a>();
+					}
+				}
+				<b>else</b>
+				{
+					<span class="c">// Display once per second or when 1% is done.</span>
+					<b>int</b> <span id="r27 rd" class="r27 r">currPercent</span> = <a href="#ac738fdc5535ac0c" class="i field">lastWork</a> * 100 / <a href="#8ded789e44ccd753" class="i field">totalWork</a>;
+					<b>if</b> (<a href="#9ea5eda5424bb084" class="i field">display</a>)
+					{
+						<span class="r25 r">pm</span>.<a href="#34774bf15f915b6f" class="i method">OnUpdate</a>(<a href="#e8cdd5697df90a73" class="i field">taskName</a>, <a href="#ac738fdc5535ac0c" class="i field">lastWork</a>, <a href="#8ded789e44ccd753" class="i field">totalWork</a>, <span class="r27 r">currPercent</span>);
+						<a href="#7653819783cef30a" class="i field">output</a> = <b>true</b>;
+						<a href="#eb86b3b557448145" class="i method">RestartTimer</a>();
+						<a href="#e6326f5f07f806f1" class="i field">lastPercent</a> = <span class="r27 r">currPercent</span>;
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r27 r">currPercent</span> != <a href="#e6326f5f07f806f1" class="i field">lastPercent</a>)
+						{
+							<span class="r25 r">pm</span>.<a href="#34774bf15f915b6f" class="i method">OnUpdate</a>(<a href="#e8cdd5697df90a73" class="i field">taskName</a>, <a href="#ac738fdc5535ac0c" class="i field">lastWork</a>, <a href="#8ded789e44ccd753" class="i field">totalWork</a>, <span class="r27 r">currPercent</span>);
+							<a href="#7653819783cef30a" class="i field">output</a> = <b>true</b>;
+							<a href="#e6326f5f07f806f1" class="i field">lastPercent</a> = <span class="r27 r">currPercent</span>;
+						}
+					}
+				}
+			}
+
+			<b>private void</b> <a id="eb86b3b557448145" href="../R/eb86b3b557448145.html" target="n" data-glyph="76,2" class="i method">RestartTimer</a>()
+			{
+				<a href="#9ea5eda5424bb084" class="i field">display</a> = <b>false</b>;
+				<a href="#8ab13318d34bd334" class="i field">timerFuture</a> = <a href="#2c3eea378ebf0d4c" class="i field">alarmQueue</a>.<a href="/Sharpen/A.html#bd87c13525330b8b" class="i method">Schedule</a>(<a href="#c33e606fb31354f4" class="k">this</a>, 1, <a href="/Sharpen/A.html#133e16eab76e8aea" class="t t">TimeUnit</a>.<a href="/Sharpen/A.html#9774f375b8accc23" class="i field">SECONDS</a>);
+			}
+
+			<b>internal virtual void</b> <a id="b7e180fde5049902" href="../R/b7e180fde5049902.html" target="n" data-glyph="74,2" class="i method">End</a>(<a href="#a45f395355adb3f7" class="t t">BatchingProgressMonitor</a> <span id="r28 rd" class="r28 r">pm</span>)
+			{
+				<b>if</b> (<a href="#7653819783cef30a" class="i field">output</a>)
+				{
+					<b>if</b> (<a href="#8ded789e44ccd753" class="i field">totalWork</a> == <a href="ProgressMonitor.cs.html#bf7559e1ef83af2b" class="i field">UNKNOWN</a>)
+					{
+						<span class="r28 r">pm</span>.<a href="#d73ca8601bdf5b34" class="i method">OnEndTask</a>(<a href="#e8cdd5697df90a73" class="i field">taskName</a>, <a href="#ac738fdc5535ac0c" class="i field">lastWork</a>);
+					}
+					<b>else</b>
+					{
+						<b>int</b> <span id="r29 rd" class="r29 r">pDone</span> = <a href="#ac738fdc5535ac0c" class="i field">lastWork</a> * 100 / <a href="#8ded789e44ccd753" class="i field">totalWork</a>;
+						<span class="r28 r">pm</span>.<a href="#9a5d2705eef502ad" class="i method">OnEndTask</a>(<a href="#e8cdd5697df90a73" class="i field">taskName</a>, <a href="#ac738fdc5535ac0c" class="i field">lastWork</a>, <a href="#8ded789e44ccd753" class="i field">totalWork</a>, <span class="r29 r">pDone</span>);
+					}
+				}
+				<b>if</b> (<a href="#8ab13318d34bd334" class="i field">timerFuture</a> != <b>null</b>)
+				{
+					<a href="#8ab13318d34bd334" class="i field">timerFuture</a>.<a href="/Sharpen/A.html#8c69eff04ad375ff" class="i method">Cancel</a>(<b>false</b>);
+				}
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

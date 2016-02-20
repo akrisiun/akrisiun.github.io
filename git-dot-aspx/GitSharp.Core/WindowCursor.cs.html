@@ -1,0 +1,219 @@
+﻿<!DOCTYPE html>
+<html><head><title>WindowCursor.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(210);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/WindowCursor.cs" target="_top">WindowCursor.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyrigth (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Active handle to a ByteWindow.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="1782168e8a82d90f" href="R/1782168e8a82d90f.html" target="n" data-glyph="0,0" class="t t">WindowCursor</a>
+    {
+        <b>private</b> <span class="t t">Inflater</span> <a id="f3302942cce0c7c7" href="R/f3302942cce0c7c7.html" target="n" data-glyph="46,1" class="i field">_inflater</a>;
+        <b>private</b> <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <a id="88a6877a129873e2" href="R/88a6877a129873e2.html" target="n" data-glyph="46,1" class="i field">_byteWindow</a>;
+
+        <b>public</b> <a id="8cb7e36e619a1307" href="R/8cb7e36e619a1307.html" target="n" data-glyph="72,1" class="i constructor">WindowCursor</a>()
+        {
+            <a href="#ebcaee92dd598545" class="i property">TempId</a> = <b>new</b> <b>byte</b>[<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>];
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Temporary buffer large enough for at least one raw object id.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal byte</b>[] <a id="ebcaee92dd598545" href="R/ebcaee92dd598545.html" target="n" data-glyph="104,1" class="i property">TempId</a> { <b>get</b>; <b>private set</b>; }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Copy bytes from the window to a caller supplied buffer.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The file the desired window is stored within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Position within the file to read from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">dstbuf</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Destination buffer to copy into.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">dstoff</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to start copying into.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">cnt</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The number of bytes to copy. This value may exceed the number of</span>
+        <span class="c">///</span><span class="c"> bytes remaining in the window starting at offset </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">position</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> number of bytes actually copied; this may be less than</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">cnt</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> if </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">cnt</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> exceeded the number of</span>
+        <span class="c">///</span><span class="c"> bytes available.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> This cursor does not match the provider or id and the proper </span>
+        <span class="c">///</span><span class="c"> window could not be acquired through the provider&#39;s cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="dee6313c2d573f4d" href="R/dee6313c2d573f4d.html" target="n" data-glyph="72,1" class="i method">Copy</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r0 rd" class="r0 r">pack</span>, <b>long</b> <span id="r1 rd" class="r1 r">position</span>, <b>byte</b>[] <span id="r2 rd" class="r2 r">dstbuf</span>, <b>int</b> <span id="r3 rd" class="r3 r">dstoff</span>, <b>int</b> <span id="r4 rd" class="r4 r">cnt</span>)
+        {
+            <b>long</b> <span id="r5 rd" class="r5 r">length</span> = <span class="r0 r">pack</span>.<a href="PackFile.cs.html#e91f8509a9270ba7" class="i property">Length</a>;
+            <b>int</b> <span id="r6 rd" class="r6 r">need</span> = <span class="r4 r">cnt</span>;
+            <b>while</b> (<span class="r6 r">need</span> &gt; 0 &amp;&amp; <span class="r1 r">position</span> &lt; <span class="r5 r">length</span>)
+            {
+                <a href="#00b0bc7e18cd8161" class="i method">Pin</a>(<span class="r0 r">pack</span>, <span class="r1 r">position</span>);
+                <b>int</b> <span id="r7 rd" class="r7 r">r</span> = <a href="#88a6877a129873e2" class="i field">_byteWindow</a>.<a href="ByteWindow.cs.html#344bb5ba9eb7597d" class="i method">copy</a>(<span class="r1 r">position</span>, <span class="r2 r">dstbuf</span>, <span class="r3 r">dstoff</span>, <span class="r6 r">need</span>);
+                <span class="r1 r">position</span> += <span class="r7 r">r</span>;
+                <span class="r3 r">dstoff</span> += <span class="r7 r">r</span>;
+                <span class="r6 r">need</span> -= <span class="r7 r">r</span>;
+            }
+            <b>return</b> <span class="r4 r">cnt</span> - <span class="r6 r">need</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Pump bytes into the supplied inflater as input.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The file the desired window is stored within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Position within the file to read from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">dstbuf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Destination buffer the inflater should output decompressed</span>
+        <span class="c">///</span><span class="c"> data to.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">dstoff</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Current offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to inflate into.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Updated </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">dstoff</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> based on the number of bytes</span>
+        <span class="c">///</span><span class="c"> successfully inflated into </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> this cursor does not match the provider or id and the proper</span>
+        <span class="c">///</span><span class="c"> window could not be acquired through the provider&#39;s cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="aaceb4050dbf362a" href="R/aaceb4050dbf362a.html" target="n" data-glyph="72,1" class="i method">Inflate</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r8 rd" class="r8 r">pack</span>, <b>long</b> <span id="r9 rd" class="r9 r">position</span>, <b>byte</b>[] <span id="r10 rd" class="r10 r">dstbuf</span>, <b>int</b> <span id="r11 rd" class="r11 r">dstoff</span>)
+        {
+            <b>if</b> (<a href="#f3302942cce0c7c7" class="i field">_inflater</a> == <b>null</b>)
+            {
+                <a href="#f3302942cce0c7c7" class="i field">_inflater</a> = <a href="InflaterCache.cs.html#4501370cb361e63d" class="t t">InflaterCache</a>.<a href="InflaterCache.cs.html#f34a9199b9f0dd3c" class="i property">Instance</a>.<a href="InflaterCache.cs.html#37cf43157350c5e2" class="i method">get</a>();
+            }
+            <b>else</b>
+            {
+                <a href="#f3302942cce0c7c7" class="i field">_inflater</a>.<span class="i method">Reset</span>();
+            }
+
+            <b>while</b> (<b>true</b>)
+            {
+                <a href="#00b0bc7e18cd8161" class="i method">Pin</a>(<span class="r8 r">pack</span>, <span class="r9 r">position</span>);
+                <span class="r11 r">dstoff</span> = <a href="#88a6877a129873e2" class="i field">_byteWindow</a>.<a href="ByteWindow.cs.html#b75125d87668ad0f" class="i method">Inflate</a>(<span class="r9 r">position</span>, <span class="r10 r">dstbuf</span>, <span class="r11 r">dstoff</span>, <a href="#f3302942cce0c7c7" class="i field">_inflater</a>);
+                <b>if</b> (<a href="#f3302942cce0c7c7" class="i field">_inflater</a>.<span class="i property">IsFinished</span>)
+                {
+                    <b>return</b> <span class="r11 r">dstoff</span>;
+                }
+                <span class="r9 r">position</span> = <a href="#88a6877a129873e2" class="i field">_byteWindow</a>.<a href="ByteWindow.cs.html#d0a6bd440e6f83ef" class="i property">End</a>;
+            }
+        }
+
+        <b>public void</b> <a id="f7bc9d9f7878cd1f" href="R/f7bc9d9f7878cd1f.html" target="n" data-glyph="72,1" class="i method">InflateVerify</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r12 rd" class="r12 r">pack</span>, <b>long</b> <span id="r13 rd" class="r13 r">position</span>)
+        {
+            <b>if</b> (<a href="#f3302942cce0c7c7" class="i field">_inflater</a> == <b>null</b>)
+            {
+                <a href="#f3302942cce0c7c7" class="i field">_inflater</a> = <a href="InflaterCache.cs.html#4501370cb361e63d" class="t t">InflaterCache</a>.<a href="InflaterCache.cs.html#f34a9199b9f0dd3c" class="i property">Instance</a>.<a href="InflaterCache.cs.html#37cf43157350c5e2" class="i method">get</a>();
+            }
+            <b>else</b>
+            {
+                <a href="#f3302942cce0c7c7" class="i field">_inflater</a>.<span class="i method">Reset</span>();
+            }
+
+            <b>while</b> (<b>true</b>)
+            {
+                <a href="#00b0bc7e18cd8161" class="i method">Pin</a>(<span class="r12 r">pack</span>, <span class="r13 r">position</span>);
+                <a href="#88a6877a129873e2" class="i field">_byteWindow</a>.<a href="ByteWindow.cs.html#ca956ab97b9805f3" class="i method">inflateVerify</a>(<span class="r13 r">position</span>, <a href="#f3302942cce0c7c7" class="i field">_inflater</a>);
+                
+				<b>if</b> (<a href="#f3302942cce0c7c7" class="i field">_inflater</a>.<span class="i property">IsFinished</span>)
+                {
+                    <b>return</b>;
+                }
+                
+				<span class="r13 r">position</span> = <a href="#88a6877a129873e2" class="i field">_byteWindow</a>.<a href="ByteWindow.cs.html#d0a6bd440e6f83ef" class="i property">End</a>;
+            }
+        }
+
+        <b>private void</b> <a id="00b0bc7e18cd8161" href="R/00b0bc7e18cd8161.html" target="n" data-glyph="76,1" class="i method">Pin</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r14 rd" class="r14 r">pack</span>, <b>long</b> <span id="r15 rd" class="r15 r">position</span>)
+        {
+            <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <span id="r16 rd" class="r16 r">w</span> = <a href="#88a6877a129873e2" class="i field">_byteWindow</a>;
+            <b>if</b> (<span class="r16 r">w</span> == <b>null</b> || !<span class="r16 r">w</span>.<a href="ByteWindow.cs.html#7cfd8b9379a3b028" class="i method">contains</a>(<span class="r14 r">pack</span>, <span class="r15 r">position</span>))
+            {
+                <span class="c">// If memory is low, we may need what is in our window field to</span>
+                <span class="c">// be cleaned up by the GC during the get for the next window.</span>
+                <span class="c">// So we always clear it, even though we are just going to set</span>
+                <span class="c">// it again.</span>
+                <span class="c">//</span>
+                <a href="#88a6877a129873e2" class="i field">_byteWindow</a> = <b>null</b>;
+                <a href="#88a6877a129873e2" class="i field">_byteWindow</a> = <a href="WindowCache.cs.html#d914cae44569e9e3" class="t t">WindowCache</a>.<a href="WindowCache.cs.html#d8d5f849927e5053" class="i method">get</a>(<span class="r14 r">pack</span>, <span class="r15 r">position</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Release the current window cursor.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="5fc4aebb06ba157d" href="R/5fc4aebb06ba157d.html" target="n" data-glyph="72,1" class="i method">Release</a>()
+        {
+            <a href="#88a6877a129873e2" class="i field">_byteWindow</a> = <b>null</b>;
+            <b>try</b>
+            {
+                <a href="InflaterCache.cs.html#4501370cb361e63d" class="t t">InflaterCache</a>.<a href="InflaterCache.cs.html#f34a9199b9f0dd3c" class="i property">Instance</a>.<a href="InflaterCache.cs.html#8b42bb69044e0ee1" class="i method">release</a>(<a href="#f3302942cce0c7c7" class="i field">_inflater</a>);
+            }
+            <b>finally</b>
+            {
+                <a href="#f3302942cce0c7c7" class="i field">_inflater</a> = <b>null</b>;
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Release the window cursor.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">cursor</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">cursor to Release; may be null.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">always null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#1782168e8a82d90f" class="t t">WindowCursor</a> <a id="d42267e1859020f9" href="R/d42267e1859020f9.html" target="n" data-glyph="72,1" class="i method">Release</a>(<a href="#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r17 rd" class="r17 r">cursor</span>)
+        {
+            <b>if</b> (<span class="r17 r">cursor</span> != <b>null</b>)
+            {
+                <span class="r17 r">cursor</span>.<a href="#5fc4aebb06ba157d" class="i method">Release</a>();
+            }
+
+            <b>return null</b>;
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

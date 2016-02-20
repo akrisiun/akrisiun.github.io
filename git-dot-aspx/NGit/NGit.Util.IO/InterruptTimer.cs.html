@@ -1,0 +1,293 @@
+﻿<!DOCTYPE html>
+<html><head><title>InterruptTimer.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(284);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Util.IO/InterruptTimer.cs" target="_top">NGit.Util.IO\InterruptTimer.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Triggers an interrupt on the calling thread if it doesn&#39;t complete a block.</span>
+	<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Triggers an interrupt on the calling thread if it doesn&#39;t complete a block.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Classes can use this to trip an alarm interrupting the calling thread if it</span>
+	<span class="c">///</span><span class="c"> doesn&#39;t complete a block within the specified timeout. Typical calling</span>
+	<span class="c">///</span><span class="c"> pattern is:</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> private InterruptTimer myTimer = ...;</span>
+	<span class="c">///</span><span class="c"> void foo() {</span>
+	<span class="c">///</span><span class="c"> try {</span>
+	<span class="c">///</span><span class="c"> myTimer.begin(timeout);</span>
+	<span class="c">///</span><span class="c"> // work</span>
+	<span class="c">///</span><span class="c"> } finally {</span>
+	<span class="c">///</span><span class="c"> myTimer.end();</span>
+	<span class="c">///</span><span class="c"> }</span>
+	<span class="c">///</span><span class="c"> }</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> An InterruptTimer is not recursive. To implement recursive timers,</span>
+	<span class="c">///</span><span class="c"> independent InterruptTimer instances are required. A single InterruptTimer</span>
+	<span class="c">///</span><span class="c"> may be shared between objects which won&#39;t recursively call each other.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Each InterruptTimer spawns one background thread to sleep the specified time</span>
+	<span class="c">///</span><span class="c"> and interrupt the thread which called</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f5f4ef4ed7953a8a" class="i method">Begin</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Begin(int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> . It is up to the</span>
+	<span class="c">///</span><span class="c"> caller to ensure that the operations within the work block between the</span>
+	<span class="c">///</span><span class="c"> matched begin and end calls tests the interrupt flag (most IO operations do).</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> To terminate the background thread, use</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#49501574a0309c54" class="i method">Terminate</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Terminate()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> . If the</span>
+	<span class="c">///</span><span class="c"> application fails to terminate the thread, it will (eventually) terminate</span>
+	<span class="c">///</span><span class="c"> itself when the InterruptTimer instance is garbage collected.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="TimeoutInputStream.cs.html#f85c4a6880b8b37c" class="t t">TimeoutInputStream</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">TimeoutInputStream</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public sealed class</b> <a id="50c7b6b6cb0fa59e" href="../R/50c7b6b6cb0fa59e.html" target="n" data-glyph="0,0" class="t t">InterruptTimer</a>
+	{
+		<b>private readonly</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#b8b99882a00e9f01" class="t t">AlarmState</a> <a id="cd707445e3597bfe" href="../R/cd707445e3597bfe.html" target="n" data-glyph="46,1" class="i field">state</a>;
+
+		<b>private readonly</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#788a11e064d7d909" class="t t">AlarmThread</a> <a id="902704edab4b2d28" href="../R/902704edab4b2d28.html" target="n" data-glyph="46,1" class="i field">thread</a>;
+
+		<b>internal readonly</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#38f2d93e7b39d180" class="t t">AutoKiller</a> <a id="420535422e4c0e05" href="../R/420535422e4c0e05.html" target="n" data-glyph="44,1" class="i field">autoKiller</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a new timer with a default thread name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create a new timer with a default thread name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public</b> <a id="91f37c129e602879" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">InterruptTimer</a>() : <a href="#c7fa88cebd99078c" class="k">this</a>(<span class="s">&quot;JGit-InterruptTimer&quot;</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a new timer to signal on interrupt on the caller.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a new timer to signal on interrupt on the caller.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The timer thread is created in the calling thread&#39;s ThreadGroup.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">threadName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the timer thread.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="c7fa88cebd99078c" href="../R/c7fa88cebd99078c.html" target="n" data-glyph="72,1" class="i constructor">InterruptTimer</a>(<b>string</b> <span id="r0 rd" class="r0 r">threadName</span>)
+		{
+			<a href="#cd707445e3597bfe" class="i field">state</a> = <b>new</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#e43db472c3e7a646" class="t constructor">AlarmState</a>();
+			<a href="#420535422e4c0e05" class="i field">autoKiller</a> = <b>new</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#ba4c31bcb9803813" class="t constructor">AutoKiller</a>(<a href="#cd707445e3597bfe" class="i field">state</a>);
+			<a href="#902704edab4b2d28" class="i field">thread</a> = <b>new</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#83a5246d31b9a03e" class="t constructor">AlarmThread</a>(<span class="r0 r">threadName</span>, <a href="#cd707445e3597bfe" class="i field">state</a>);
+			<a href="#902704edab4b2d28" class="i field">thread</a>.<a href="/Sharpen/A.html#421e075210622d1e" class="i method">Start</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Arm the interrupt timer before entering a blocking operation.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Arm the interrupt timer before entering a blocking operation.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">timeout</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of milliseconds before the interrupt should trigger.</span>
+		<span class="c">///</span><span class="c"> Must be </span><span class="c">&amp;gt;</span><span class="c"> 0.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="f5f4ef4ed7953a8a" href="../R/f5f4ef4ed7953a8a.html" target="n" data-glyph="72,1" class="i method">Begin</a>(<b>int</b> <span id="r1 rd" class="r1 r">timeout</span>)
+		{
+			<b>if</b> (<span class="r1 r">timeout</span> &lt;= 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#08ae71e68a937bd3" class="i field">invalidTimeout</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>
+					(<span class="r1 r">timeout</span>)));
+			}
+			<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#591036d8baa069c6" class="i method">Interrupted</a>();
+			<a href="#cd707445e3597bfe" class="i field">state</a>.<a href="#a402b6d55e64bad9" class="i method">Begin</a>(<span class="r1 r">timeout</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Disable the interrupt timer, as the operation is complete.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Disable the interrupt timer, as the operation is complete.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="8e1259ea12c32586" href="../R/8e1259ea12c32586.html" target="n" data-glyph="72,1" class="i method">End</a>()
+		{
+			<a href="#cd707445e3597bfe" class="i field">state</a>.<a href="#bf687fdd5bd624ec" class="i method">End</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Shutdown the timer thread, and wait for it to terminate.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Shutdown the timer thread, and wait for it to terminate.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="49501574a0309c54" href="../R/49501574a0309c54.html" target="n" data-glyph="72,1" class="i method">Terminate</a>()
+		{
+			<a href="#cd707445e3597bfe" class="i field">state</a>.<a href="#634eb0674b7d43f0" class="i method">Terminate</a>();
+			<b>try</b>
+			{
+				<a href="#902704edab4b2d28" class="i field">thread</a>.<a href="/Sharpen/A.html#ae2b3ac507c25a60" class="i method">Join</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+			{
+			}
+		}
+
+		<b>internal sealed class</b> <a id="788a11e064d7d909" href="../R/788a11e064d7d909.html" target="n" data-glyph="2,1" class="t t">AlarmThread</a> : <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>
+		{
+			<b>internal</b> <a id="83a5246d31b9a03e" href="../R/83a5246d31b9a03e.html" target="n" data-glyph="74,2" class="i constructor">AlarmThread</a>(<b>string</b> <span id="r2 rd" class="r2 r">name</span>, <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#b8b99882a00e9f01" class="t t">AlarmState</a> <span id="r3 rd" class="r3 r">q</span>) : <a href="/Sharpen/A.html#83966b7a9ccffe23" class="k">base</a>(<span class="r3 r">q</span>)
+			{
+				<span class="c">//</span>
+				<a href="/Sharpen/A.html#7046e9ef75861e01" class="i method">SetName</a>(<span class="r2 r">name</span>);
+				<a href="/Sharpen/A.html#492a2f0356d4059d" class="i method">SetDaemon</a>(<b>true</b>);
+			}
+		}
+
+		<b>internal sealed class</b> <a id="38f2d93e7b39d180" href="../R/38f2d93e7b39d180.html" target="n" data-glyph="2,1" class="t t">AutoKiller</a>
+		{
+			<b>private readonly</b> <a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#b8b99882a00e9f01" class="t t">AlarmState</a> <a id="41a60e7a8332e0f7" href="../R/41a60e7a8332e0f7.html" target="n" data-glyph="46,2" class="i field">state</a>;
+
+			<b>internal</b> <a id="ba4c31bcb9803813" href="../R/ba4c31bcb9803813.html" target="n" data-glyph="74,2" class="i constructor">AutoKiller</a>(<a href="#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a>.<a href="#b8b99882a00e9f01" class="t t">AlarmState</a> <span id="r4 rd" class="r4 r">s</span>)
+			{
+				<span class="c">// The trick here is, the AlarmThread does not have a reference to the</span>
+				<span class="c">// AutoKiller instance, only the InterruptTimer itself does. Thus when</span>
+				<span class="c">// the InterruptTimer is GC&#39;d, the AutoKiller is also unreachable and</span>
+				<span class="c">// can be GC&#39;d. When it gets finalized, it tells the AlarmThread to</span>
+				<span class="c">// terminate, triggering the thread to exit gracefully.</span>
+				<span class="c">//</span>
+				<a href="#41a60e7a8332e0f7" class="i field">state</a> = <span class="r4 r">s</span>;
+			}
+
+			~<a id="15aa95ccb0dd9376" href="../R/../../0000000000.html" target="n" data-glyph="75,2" class="i method">AutoKiller</a>()
+			{
+				<a href="#41a60e7a8332e0f7" class="i field">state</a>.<a href="#634eb0674b7d43f0" class="i method">Terminate</a>();
+			}
+		}
+
+		<b>internal sealed class</b> <a id="b8b99882a00e9f01" href="../R/b8b99882a00e9f01.html" target="n" data-glyph="2,1" class="t t">AlarmState</a> : <a href="/Sharpen/A.html#f045ac791f6c522f" class="t t">Runnable</a>
+		{
+			<b>private</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a> <a id="d4c0bf31241b3832" href="../R/d4c0bf31241b3832.html" target="n" data-glyph="46,2" class="i field">callingThread</a>;
+
+			<b>private long</b> <a id="f39c4758061d2949" href="../R/f39c4758061d2949.html" target="n" data-glyph="46,2" class="i field">deadline</a>;
+
+			<b>private bool</b> <a id="f7e0bcfdeca64860" href="../R/f7e0bcfdeca64860.html" target="n" data-glyph="46,2" class="i field">terminated</a>;
+
+			<b>public</b> <a id="e43db472c3e7a646" href="../R/e43db472c3e7a646.html" target="n" data-glyph="72,2" class="i constructor">AlarmState</a>()
+			{
+				<a href="#d4c0bf31241b3832" class="i field">callingThread</a> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#9c18f268284a4c54" class="i method">CurrentThread</a>();
+			}
+
+			<b>public void</b> <a id="a12de94935f70d92" href="../R/a12de94935f70d92.html" target="n" data-glyph="72,2" class="i method">Run</a>()
+			{
+				<b>lock</b> (<a href="#b8b99882a00e9f01" class="k">this</a>)
+				{
+					<b>while</b> (!<a href="#f7e0bcfdeca64860" class="i field">terminated</a> &amp;&amp; <a href="#d4c0bf31241b3832" class="i field">callingThread</a>.<a href="/Sharpen/A.html#04bd21c5ae43e3c0" class="i method">IsAlive</a>())
+					{
+						<b>try</b>
+						{
+							<b>if</b> (0 &lt; <a href="#f39c4758061d2949" class="i field">deadline</a>)
+							{
+								<b>long</b> <span id="r5 rd" class="r5 r">delay</span> = <a href="#f39c4758061d2949" class="i field">deadline</a> - <a href="#428de5125e9722a4" class="i method">Now</a>();
+								<b>if</b> (<span class="r5 r">delay</span> &lt;= 0)
+								{
+									<a href="#f39c4758061d2949" class="i field">deadline</a> = 0;
+									<a href="#d4c0bf31241b3832" class="i field">callingThread</a>.<a href="/Sharpen/A.html#10516fb714437913" class="i method">Interrupt</a>();
+								}
+								<b>else</b>
+								{
+									<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#db416a8cb30585bd" class="i method">Wait</a>(<a href="#b8b99882a00e9f01" class="k">this</a>, <span class="r5 r">delay</span>);
+								}
+							}
+							<b>else</b>
+							{
+								<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#db416a8cb30585bd" class="i method">Wait</a>(<a href="#b8b99882a00e9f01" class="k">this</a>, 1000);
+							}
+						}
+						<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+						{
+						}
+					}
+				}
+			}
+
+			<span class="c">// Treat an interrupt as notice to examine state.</span>
+			<b>internal void</b> <a id="a402b6d55e64bad9" href="../R/a402b6d55e64bad9.html" target="n" data-glyph="74,2" class="i method">Begin</a>(<b>int</b> <span id="r6 rd" class="r6 r">timeout</span>)
+			{
+				<b>lock</b> (<a href="#b8b99882a00e9f01" class="k">this</a>)
+				{
+					<b>if</b> (<a href="#f7e0bcfdeca64860" class="i field">terminated</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#a1ec6f1ca8321e90" class="i field">timerAlreadyTerminated</a>);
+					}
+					<a href="#d4c0bf31241b3832" class="i field">callingThread</a> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#9c18f268284a4c54" class="i method">CurrentThread</a>();
+					<a href="#f39c4758061d2949" class="i field">deadline</a> = <a href="#428de5125e9722a4" class="i method">Now</a>() + <span class="r6 r">timeout</span>;
+					<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#9b9c002eb4f193d2" class="i method">NotifyAll</a>(<a href="#b8b99882a00e9f01" class="k">this</a>);
+				}
+			}
+
+			<b>internal void</b> <a id="bf687fdd5bd624ec" href="../R/bf687fdd5bd624ec.html" target="n" data-glyph="74,2" class="i method">End</a>()
+			{
+				<b>lock</b> (<a href="#b8b99882a00e9f01" class="k">this</a>)
+				{
+					<b>if</b> (0 == <a href="#f39c4758061d2949" class="i field">deadline</a>)
+					{
+						<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#591036d8baa069c6" class="i method">Interrupted</a>();
+					}
+					<b>else</b>
+					{
+						<a href="#f39c4758061d2949" class="i field">deadline</a> = 0;
+					}
+					<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#9b9c002eb4f193d2" class="i method">NotifyAll</a>(<a href="#b8b99882a00e9f01" class="k">this</a>);
+				}
+			}
+
+			<b>internal void</b> <a id="634eb0674b7d43f0" href="../R/634eb0674b7d43f0.html" target="n" data-glyph="74,2" class="i method">Terminate</a>()
+			{
+				<b>lock</b> (<a href="#b8b99882a00e9f01" class="k">this</a>)
+				{
+					<b>if</b> (!<a href="#f7e0bcfdeca64860" class="i field">terminated</a>)
+					{
+						<a href="#f39c4758061d2949" class="i field">deadline</a> = 0;
+						<a href="#f7e0bcfdeca64860" class="i field">terminated</a> = <b>true</b>;
+						<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#9b9c002eb4f193d2" class="i method">NotifyAll</a>(<a href="#b8b99882a00e9f01" class="k">this</a>);
+					}
+				}
+			}
+
+			<b>private static long</b> <a id="428de5125e9722a4" href="../R/428de5125e9722a4.html" target="n" data-glyph="76,2" class="i method">Now</a>()
+			{
+				<b>return</b> <a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#e138393156840d80" class="i method">CurrentTimeMillis</a>();
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

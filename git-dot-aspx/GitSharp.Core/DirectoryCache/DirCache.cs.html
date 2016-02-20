@@ -1,0 +1,895 @@
+﻿<!DOCTYPE html>
+<html><head><title>DirCache.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(886);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/DirectoryCache/DirCache.cs" target="_top">DirectoryCache\DirCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">DirectoryCache</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Support for the Git dircache (aka index file).</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> The index file keeps track of which objects are currently checked out in the</span>
+    <span class="c">///</span><span class="c"> working directory, and the last modified time of those working files. Changes</span>
+    <span class="c">///</span><span class="c"> in the working directory can be detected by comparing the modification times</span>
+    <span class="c">///</span><span class="c"> to the cached modification time within the index file.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> Index files are also used during merges, where the merge happens within the</span>
+    <span class="c">///</span><span class="c"> index file first, and the working directory is updated as a post-merge step.</span>
+    <span class="c">///</span><span class="c"> Conflicts are stored in the index file to allow tool (and human) based</span>
+    <span class="c">///</span><span class="c"> resolutions to be easily performed.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="16e3752ca8ac126c" href="../R/16e3752ca8ac126c.html" target="n" data-glyph="0,0" class="t t">DirCache</a>
+    {
+        <b>private static readonly byte</b>[] <a id="cd4915d880f7694e" href="../R/cd4915d880f7694e.html" target="n" data-glyph="46,1" class="i field">SigDirc</a> = { (<b>byte</b>)<span class="s">&#39;D&#39;</span>, (<b>byte</b>)<span class="s">&#39;I&#39;</span>, (<b>byte</b>)<span class="s">&#39;R&#39;</span>, (<b>byte</b>)<span class="s">&#39;C&#39;</span> };
+        <b>private static readonly</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <a id="5e9ddd429a282360" href="../R/5e9ddd429a282360.html" target="n" data-glyph="46,1" class="i field">NoEntries</a> = { };
+        <b>private const int</b> <a id="691b7b5bf59884be" href="../R/691b7b5bf59884be.html" target="n" data-glyph="10,1" class="i field">ExtTree</a> = 0x54524545 <span class="c">/* &#39;TREE&#39; */</span>;
+        <b>private const int</b> <a id="d6430fc69c925548" href="../R/d6430fc69c925548.html" target="n" data-glyph="10,1" class="i field">InfoLen</a> = <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>.<a href="DirCacheEntry.cs.html#bafee4c0c8016156" class="i field">INFO_LEN</a>;
+
+        <b>internal static readonly</b> <a href="@0@mscorlib/A.html#e55872249056ac0e" class="t t">Comparison</a>&lt;<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>&gt; <a id="1e1fcaa9916bca5e" href="../R/1e1fcaa9916bca5e.html" target="n" data-glyph="44,1" class="i field">EntryComparer</a> = (<span id="r0 rd" class="r0 r">o1</span>, <span id="r1 rd" class="r1 r">o2</span>) =&gt;
+        {
+            <b>int</b> <span id="r2 rd" class="r2 r">cr</span> = <a href="#2d052d3d92c7f1df" class="i method">Compare</a>(<span class="r0 r">o1</span>, <span class="r1 r">o2</span>);
+            <b>if</b> (<span class="r2 r">cr</span> != 0)
+            {
+                <b>return</b> <span class="r2 r">cr</span>;
+            }
+            <b>return</b> <span class="r0 r">o1</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>() - <span class="r1 r">o2</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>();
+        };
+
+        <b>public static int</b> <a id="2d052d3d92c7f1df" href="../R/2d052d3d92c7f1df.html" target="n" data-glyph="72,1" class="i method">Compare</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r3 rd" class="r3 r">a</span>, <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r4 rd" class="r4 r">b</span>)
+        {
+            <b>return</b> <a href="#5debad0b77022673" class="i method">Compare</a>(<span class="r3 r">a</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>, <span class="r3 r">a</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r4 r">b</span>);
+        }
+
+        <b>private static int</b> <a id="5debad0b77022673" href="../R/5debad0b77022673.html" target="n" data-glyph="76,1" class="i method">Compare</a>(<b>byte</b>[] <span id="r5 rd" class="r5 r">aPath</span>, <b>int</b> <span id="r6 rd" class="r6 r">aLen</span>, <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r7 rd" class="r7 r">b</span>)
+        {
+            <b>return</b> <a href="#735a2c0e3c729f19" class="i method">Compare</a>(<span class="r5 r">aPath</span>, <span class="r6 r">aLen</span>, <span class="r7 r">b</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>, <span class="r7 r">b</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+        }
+
+        <b>public static int</b> <a id="735a2c0e3c729f19" href="../R/735a2c0e3c729f19.html" target="n" data-glyph="72,1" class="i method">Compare</a>(<b>byte</b>[] <span id="r8 rd" class="r8 r">aPath</span>, <b>int</b> <span id="r9 rd" class="r9 r">aLen</span>, <b>byte</b>[] <span id="r10 rd" class="r10 r">bPath</span>, <b>int</b> <span id="r11 rd" class="r11 r">bLen</span>)
+        {
+            <b>for</b> (<b>int</b> <span id="r12 rd" class="r12 r">cPos</span> = 0; <span class="r12 r">cPos</span> &lt; <span class="r9 r">aLen</span> &amp;&amp; <span class="r12 r">cPos</span> &lt; <span class="r11 r">bLen</span>; <span class="r12 r">cPos</span>++)
+            {
+                <b>int</b> <span id="r13 rd" class="r13 r">cmp</span> = (<span class="r8 r">aPath</span>[<span class="r12 r">cPos</span>] &amp; 0xff) - (<span class="r10 r">bPath</span>[<span class="r12 r">cPos</span>] &amp; 0xff);
+                <b>if</b> (<span class="r13 r">cmp</span> != 0)
+                {
+                    <b>return</b> <span class="r13 r">cmp</span>;
+                }
+            }
+
+            <b>return</b> <span class="r9 r">aLen</span> - <span class="r11 r">bLen</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new empty index which is never stored on disk.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An empty cache which has no backing store file. The cache may not</span>
+        <span class="c">///</span><span class="c"> be read or written, but it may be queried and updated (in memory).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#16e3752ca8ac126c" class="t t">DirCache</a> <a id="383cb2774624713c" href="../R/383cb2774624713c.html" target="n" data-glyph="72,1" class="i method">newInCore</a>()
+        {
+            <b>return</b> <b>new</b> <a href="#e9b73313caecadc1" class="t constructor">DirCache</a>(<b>null</b>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new in-core index representation and read an index from disk.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	The new index will be read before it is returned to the caller. Read</span>
+        <span class="c">///</span><span class="c"> failures are reported as exceptions and therefore prevent the method from</span>
+        <span class="c">///</span><span class="c"> returning a partially populated index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">indexLocation</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Location of the index file on disk.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> a cache representing the contents of the specified index file (if</span>
+        <span class="c">///</span><span class="c"> it exists) or an empty cache if the file does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is present but could not be read.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is using a format or extension that this</span>
+        <span class="c">///</span><span class="c"> library does not support.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#16e3752ca8ac126c" class="t t">DirCache</a> <a id="b81bb20acbdc547c" href="../R/b81bb20acbdc547c.html" target="n" data-glyph="72,1" class="i method">read</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r14 rd" class="r14 r">indexLocation</span>)
+        {
+            <a href="#16e3752ca8ac126c" class="k">var</a> <span id="r15 rd" class="r15 r">c</span> = <b>new</b> <a href="#e9b73313caecadc1" class="t constructor">DirCache</a>(<span class="r14 r">indexLocation</span>);
+            <span class="r15 r">c</span>.<a href="#653c408a3b76f769" class="i method">read</a>();
+            <b>return</b> <span class="r15 r">c</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new in-core index representation and read an index from disk.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The new index will be read before it is returned to the caller. Read</span>
+        <span class="c">///</span><span class="c"> failures are reported as exceptions and therefore prevent the method from</span>
+        <span class="c">///</span><span class="c"> returning a partially populated index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> repository the caller wants to read the default index of.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A cache representing the contents of the specified index file (if</span>
+        <span class="c">///</span><span class="c"> it exists) or an empty cache if the file does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is present but could not be read.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is using a format or extension that this</span>
+        <span class="c">///</span><span class="c"> library does not support.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#16e3752ca8ac126c" class="t t">DirCache</a> <a id="30b18db114cf5baf" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">read</a>(<a href="../Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r16 rd" class="r16 r">db</span>)
+        {
+            <b>return</b> <a href="#b81bb20acbdc547c" class="i method">read</a>(<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r16 r">db</span>.<a href="../Repository.cs.html#77a819ff8f2ad4d4" class="i property">Directory</a> + <span class="s">&quot;/index&quot;</span>));
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new in-core index representation, lock it, and read from disk.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The new index will be locked and then read before it is returned to the</span>
+        <span class="c">///</span><span class="c"> caller. Read failures are reported as exceptions and therefore prevent</span>
+        <span class="c">///</span><span class="c"> the method from returning a partially populated index.  On read failure,</span>
+        <span class="c">///</span><span class="c"> the lock is released.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">indexLocation</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> location of the index file on disk.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A cache representing the contents of the specified index file (if</span>
+        <span class="c">///</span><span class="c"> it exists) or an empty cache if the file does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is present but could not be read, or the lock</span>
+        <span class="c">///</span><span class="c"> could not be obtained.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the index file is using a format or extension that this</span>
+        <span class="c">///</span><span class="c"> library does not support.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#16e3752ca8ac126c" class="t t">DirCache</a> <a id="ec5318f34a20765b" href="../R/ec5318f34a20765b.html" target="n" data-glyph="72,1" class="i method">Lock</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r17 rd" class="r17 r">indexLocation</span>)
+        {
+            <a href="#16e3752ca8ac126c" class="k">var</a> <span id="r18 rd" class="r18 r">c</span> = <b>new</b> <a href="#e9b73313caecadc1" class="t constructor">DirCache</a>(<span class="r17 r">indexLocation</span>);
+            <b>if</b> (!<span class="r18 r">c</span>.<a href="#6862e5f2845637a6" class="i method">Lock</a>())
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Cannot lock &quot;</span> + <span class="r17 r">indexLocation</span>);
+            }
+
+            <b>try</b>
+            {
+                <span class="r18 r">c</span>.<a href="#653c408a3b76f769" class="i method">read</a>();
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <span class="r18 r">c</span>.<a href="#4543d33d12a76151" class="i method">unlock</a>();
+                <b>throw</b>;
+            }
+
+            <b>return</b> <span class="r18 r">c</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new in-core index representation, lock it, and read from disk.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	The new index will be locked and then read before it is returned to the</span>
+        <span class="c">///</span><span class="c">	caller. Read failures are reported as exceptions and therefore prevent</span>
+        <span class="c">///</span><span class="c">	the method from returning a partially populated index.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Repository the caller wants to read the default index of.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A cache representing the contents of the specified index file (if</span>
+        <span class="c">///</span><span class="c"> it exists) or an empty cache if the file does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is present but could not be read, or the lock</span>
+        <span class="c">///</span><span class="c"> could not be obtained.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is using a format or extension that this</span>
+        <span class="c">///</span><span class="c"> library does not support.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#16e3752ca8ac126c" class="t t">DirCache</a> <a id="cf4f0a6135d116c3" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Lock</a>(<a href="../Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r19 rd" class="r19 r">db</span>)
+        {
+            <b>return</b> <a href="#ec5318f34a20765b" class="i method">Lock</a>(<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r19 r">db</span>.<a href="../Repository.cs.html#77a819ff8f2ad4d4" class="i property">Directory</a> + <span class="s">&quot;/index&quot;</span>));
+        }
+
+        <span class="c">// Location of the current version of the index file.</span>
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="a222327082b2270d" href="../R/a222327082b2270d.html" target="n" data-glyph="46,1" class="i field">_liveFile</a>;
+
+        <span class="c">// Modification time of the file at the last Read/write we did.</span>
+        <b>private long</b> <a id="f774be69451ab824" href="../R/f774be69451ab824.html" target="n" data-glyph="46,1" class="i field">_lastModified</a>;
+
+        <span class="c">// Individual file index entries, sorted by path name.</span>
+        <b>private</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <a id="3219fbb01925add9" href="../R/3219fbb01925add9.html" target="n" data-glyph="46,1" class="i field">_sortedEntries</a>;
+
+        <span class="c">// Number of positions within sortedEntries that are valid.</span>
+        <b>private int</b> <a id="017e2f84916b207e" href="../R/017e2f84916b207e.html" target="n" data-glyph="46,1" class="i field">_entryCnt</a>;
+
+        <span class="c">// Cache tree for this index; null if the cache tree is not available.</span>
+        <b>private</b> <a href="DirCacheTree.cs.html#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <a id="d0875bb224f8626a" href="../R/d0875bb224f8626a.html" target="n" data-glyph="46,1" class="i field">_cacheTree</a>;
+
+        <span class="c">// Our active lock (if we hold it); null if we don&#39;t have it locked.</span>
+        <b>private</b> <a href="../LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <a id="be92d12f1401d874" href="../R/be92d12f1401d874.html" target="n" data-glyph="46,1" class="i field">_myLock</a>;
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new in-core index representation.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	The new index will be empty. Callers may wish to read from the on disk</span>
+        <span class="c">///</span><span class="c">	file first with </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#653c408a3b76f769" class="i method">read</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">indexLocation</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">location of the index file on disk. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="e9b73313caecadc1" href="../R/e9b73313caecadc1.html" target="n" data-glyph="72,1" class="i constructor">DirCache</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r20 rd" class="r20 r">indexLocation</span>)
+        {
+            <a href="#a222327082b2270d" class="i field">_liveFile</a> = <span class="r20 r">indexLocation</span>;
+            <a href="#7385d190d5f509c5" class="i method">clear</a>();
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new builder to update this cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Callers should add all entries to the builder, then use</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheBuilder.cs.html#262e9b3e8be58d73" class="t t">DirCacheBuilder</a>.<a href="DirCacheBuilder.cs.html#9ce6c8bee7c08585" class="i method">finish</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to update this instance.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A new builder instance for this cache.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="DirCacheBuilder.cs.html#262e9b3e8be58d73" class="t t">DirCacheBuilder</a> <a id="a7b4273ebeeb1bff" href="../R/a7b4273ebeeb1bff.html" target="n" data-glyph="72,1" class="i method">builder</a>()
+        {
+            <b>return</b> <b>new</b> <a href="DirCacheBuilder.cs.html#8d0c9e6e207d276f" class="t constructor">DirCacheBuilder</a>(<a href="#16e3752ca8ac126c" class="k">this</a>, <a href="#017e2f84916b207e" class="i field">_entryCnt</a> + 16);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new editor to recreate this cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Callers should add commands to the editor, then use</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheEditor.cs.html#30303a7cd5ec58f3" class="t t">DirCacheEditor</a>.<a href="DirCacheEditor.cs.html#5718ccb7f93a49a4" class="i method">finish</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to update this instance.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A new builder instance for this cache.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="DirCacheEditor.cs.html#30303a7cd5ec58f3" class="t t">DirCacheEditor</a> <a id="764c34ceac296db2" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">editor</a>()
+        {
+            <b>return</b> <b>new</b> <a href="DirCacheEditor.cs.html#69e925ae613f1212" class="t constructor">DirCacheEditor</a>(<a href="#16e3752ca8ac126c" class="k">this</a>, <a href="#017e2f84916b207e" class="i field">_entryCnt</a> + 16);
+        }
+
+        <b>public void</b> <a id="9b3baf60d7fddbbf" href="../R/9b3baf60d7fddbbf.html" target="n" data-glyph="72,1" class="i method">replace</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <span id="r21 rd" class="r21 r">e</span>, <b>int</b> <span id="r22 rd" class="r22 r">cnt</span>)
+        {
+            <a href="#3219fbb01925add9" class="i field">_sortedEntries</a> = <span class="r21 r">e</span>;
+            <a href="#017e2f84916b207e" class="i field">_entryCnt</a> = <span class="r22 r">cnt</span>;
+            <a href="#d0875bb224f8626a" class="i field">_cacheTree</a> = <b>null</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Read the index from disk, if it has changed on disk.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method tries to avoid loading the index if it has not changed since</span>
+        <span class="c">///</span><span class="c"> the last time we consulted it. A missing index file will be treated as</span>
+        <span class="c">///</span><span class="c"> though it were present but had no file entries in it.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is present but could not be read. This</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#16e3752ca8ac126c" class="t t">DirCache</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> instance may not be populated correctly.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The index file is using a format or extension that this</span>
+        <span class="c">///</span><span class="c"> library does not support.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="653c408a3b76f769" href="../R/653c408a3b76f769.html" target="n" data-glyph="72,1" class="i method">read</a>()
+        {
+            <b>if</b> (<a href="#a222327082b2270d" class="i field">_liveFile</a> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;DirCache does not have a backing file&quot;</span>);
+            }
+            <b>if</b> (!<a href="#a222327082b2270d" class="i field">_liveFile</a>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+            {
+                <a href="#7385d190d5f509c5" class="i method">clear</a>();
+            }
+            <b>else if</b> (<a href="#a222327082b2270d" class="i field">_liveFile</a>.<a href="../Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() != <a href="#f774be69451ab824" class="i field">_lastModified</a>)
+            {
+                <b>try</b>
+                {
+                    <a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r23 rd" class="r23 r">inStream</span> = <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<a href="#a222327082b2270d" class="i field">_liveFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#0f1c68c756d0636b" class="i field">Read</a>);
+                    <b>try</b>
+                    {
+                        <a href="#7385d190d5f509c5" class="i method">clear</a>();
+                        <a href="#f51e05f7352f8b09" class="i method">ReadFrom</a>(<span class="r23 r">inStream</span>);
+                    }
+                    <b>finally</b>
+                    {
+                        <b>try</b>
+                        {
+                            <span class="r23 r">inStream</span>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                        }
+                        <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                        {
+                            <span class="c">// Ignore any close failures.</span>
+                        }
+                    }
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a>)
+                {
+                    <span class="c">// Someone must have deleted it between our exists test</span>
+                    <span class="c">// and actually opening the path. That&#39;s fine, its empty.</span>
+                    <span class="c">//</span>
+                    <a href="#7385d190d5f509c5" class="i method">clear</a>();
+                }
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Empty this index, removing all entries.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="7385d190d5f509c5" href="../R/7385d190d5f509c5.html" target="n" data-glyph="72,1" class="i method">clear</a>()
+        {
+            <a href="#f774be69451ab824" class="i field">_lastModified</a> = 0;
+            <a href="#3219fbb01925add9" class="i field">_sortedEntries</a> = <a href="#5e9ddd429a282360" class="i field">NoEntries</a>;
+            <a href="#017e2f84916b207e" class="i field">_entryCnt</a> = 0;
+            <a href="#d0875bb224f8626a" class="i field">_cacheTree</a> = <b>null</b>;
+        }
+
+        <b>private void</b> <a id="f51e05f7352f8b09" href="../R/f51e05f7352f8b09.html" target="n" data-glyph="76,1" class="i method">ReadFrom</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r24 rd" class="r24 r">inStream</span>)
+        {
+            <a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="k">var</a> <span id="r25 rd" class="r25 r">@in</span> = <b>new</b> <a href="@0@mscorlib/A.html#72447927169f6b77" class="t constructor">StreamReader</a>(<span class="r24 r">inStream</span>);
+            <a href="../Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <span id="r26 rd" class="r26 r">md</span> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#c3b287d96df31211" class="i method">newMessageDigest</a>();
+
+            <span class="c">// Read the index header and verify we understand it.</span>
+            <span class="c">//</span>
+            <b>var</b> <span id="r27 rd" class="r27 r">hdr</span> = <b>new</b> <b>byte</b>[20];
+            <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r24 r">inStream</span>, <span class="r27 r">hdr</span>, 0, 12);
+            <span class="r26 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<span class="r27 r">hdr</span>, 0, 12);
+            <b>if</b> (!<a href="#a60eac2a555079d5" class="i method">IsDIRC</a>(<span class="r27 r">hdr</span>))
+            {
+                <b>throw</b> <b>new</b> <a href="../Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;Not a DIRC file.&quot;</span>);
+            }
+
+            <b>int</b> <span id="r28 rd" class="r28 r">ver</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<span class="r27 r">hdr</span>, 4);
+            <b>if</b> (<span class="r28 r">ver</span> != 2)
+            {
+                <b>throw</b> <b>new</b> <a href="../Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;Unknown DIRC version &quot;</span> + <span class="r28 r">ver</span>);
+            }
+
+            <a href="#017e2f84916b207e" class="i field">_entryCnt</a> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<span class="r27 r">hdr</span>, 8);
+            <b>if</b> (<a href="#017e2f84916b207e" class="i field">_entryCnt</a> &lt; 0)
+            {
+                <b>throw</b> <b>new</b> <a href="../Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;DIRC has too many entries.&quot;</span>);
+            }
+
+            <span class="c">// Load the individual file entries.</span>
+            <span class="c">//</span>
+            <b>var</b> <span id="r29 rd" class="r29 r">infos</span> = <b>new</b> <b>byte</b>[<a href="#d6430fc69c925548" class="i field">InfoLen</a> * <a href="#017e2f84916b207e" class="i field">_entryCnt</a>];
+            <a href="#3219fbb01925add9" class="i field">_sortedEntries</a> = <b>new</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[<a href="#017e2f84916b207e" class="i field">_entryCnt</a>];
+            <b>for</b> (<b>int</b> <span id="r30 rd" class="r30 r">i</span> = 0; <span class="r30 r">i</span> &lt; <a href="#017e2f84916b207e" class="i field">_entryCnt</a>; <span class="r30 r">i</span>++)
+            {
+                <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r30 r">i</span>] = <b>new</b> <a href="DirCacheEntry.cs.html#96120207ea8c7cc5" class="t constructor">DirCacheEntry</a>(<span class="r29 r">infos</span>, <span class="r30 r">i</span> * <a href="#d6430fc69c925548" class="i field">InfoLen</a>, <span class="r24 r">inStream</span>, <span class="r26 r">md</span>);
+            }
+            <a href="#f774be69451ab824" class="i field">_lastModified</a> = <a href="#a222327082b2270d" class="i field">_liveFile</a>.<a href="../Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+
+            <span class="c">// After the file entries are index extensions, and then a footer.</span>
+            <span class="c">//</span>
+            <b>while</b> (<b>true</b>)
+            {
+                <a href="@0@mscorlib/A.html#e566178cce890c36" class="k">var</a> <span id="r31 rd" class="r31 r">pos</span> = <span class="r24 r">inStream</span>.<a href="@0@mscorlib/A.html#35112b2a53fb536a" class="i property">Position</a>;
+                <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r24 r">inStream</span>, <span class="r27 r">hdr</span>, 0, 20);
+
+                <b>if</b> (<span class="r24 r">inStream</span>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>() &lt; 0)
+                {
+                    <span class="c">// No extensions present; the file ended where we expected.</span>
+                    <span class="c">//</span>
+                    <b>break</b>;
+                }
+                <span class="r24 r">inStream</span>.<a href="@0@mscorlib/A.html#eb5599035c4388ce" class="i method">Seek</a>(<span class="r31 r">pos</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a>.<a href="@0@mscorlib/A.html#c29481af7c617299" class="i field">Begin</a>);
+                <span class="r26 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<span class="r27 r">hdr</span>, 0, 8);
+                <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#cd59e98551dddaa0" class="i method">skipFully</a>(<span class="r24 r">inStream</span>, 8);
+
+                <b>long</b> <span id="r32 rd" class="r32 r">sz</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#2227b95120eb08e5" class="i method">decodeUInt32</a>(<span class="r27 r">hdr</span>, 4);
+
+                <b>switch</b> (<a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<span class="r27 r">hdr</span>, 0))
+                {
+                    <b>case</b> <a href="#691b7b5bf59884be" class="i field">ExtTree</a>:
+                        <b>if</b> (<b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a> &lt; <span class="r32 r">sz</span>)
+                        {
+                            <b>throw</b> <b>new</b> <a href="../Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;DIRC extension &quot;</span>
+                                        + <a href="#bfa07eab350de9a1" class="i method">formatExtensionName</a>(<span class="r27 r">hdr</span>) + <span class="s">&quot; is too large at &quot;</span>
+                                        + <span class="r32 r">sz</span> + <span class="s">&quot; bytes.&quot;</span>);
+                        }
+                        <b>byte</b>[] <span id="r33 rd" class="r33 r">raw</span> = <b>new</b> <b>byte</b>[(<b>int</b>)<span class="r32 r">sz</span>];
+                        <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r24 r">inStream</span>, <span class="r33 r">raw</span>, 0, <span class="r33 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                        <span class="r26 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<span class="r33 r">raw</span>, 0, <span class="r33 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                        <a href="#d0875bb224f8626a" class="i field">_cacheTree</a> = <b>new</b> <a href="DirCacheTree.cs.html#30d1e01fced78853" class="t constructor">DirCacheTree</a>(<span class="r33 r">raw</span>, <b>new</b> <a href="../Util/MutableInteger.cs.html#5b3a0be7485d5537" class="t constructor">MutableInteger</a>(), <b>null</b>);
+                        <b>break</b>;
+
+                    <b>default</b>:
+                        <b>if</b> (<span class="r27 r">hdr</span>[0] &gt;= (<b>byte</b>)<span class="s">&#39;A&#39;</span> &amp;&amp; <span class="r27 r">hdr</span>[0] &lt;= (<b>byte</b>)<span class="s">&#39;Z&#39;</span>)
+                        {
+                            <span class="c">// The extension is optional and is here only as</span>
+                            <span class="c">// a performance optimization. Since we do not</span>
+                            <span class="c">// understand it, we can safely skip past it, after</span>
+                            <span class="c">// we include its data in our checksum.</span>
+                            <span class="c">//</span>
+                            <a href="#a6062161b036d882" class="i method">skipOptionalExtension</a>(<span class="r24 r">inStream</span>, <span class="r26 r">md</span>, <span class="r27 r">hdr</span>, <span class="r32 r">sz</span>);
+                        }
+                        <b>else</b>
+                        {
+                            <span class="c">// The extension is not an optimization and is</span>
+                            <span class="c">// _required_ to understand this index format.</span>
+                            <span class="c">// Since we did not trap it above we must abort.</span>
+                            <span class="c">//</span>
+                            <b>throw</b> <b>new</b> <a href="../Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;DIRC extension &quot;</span>
+                                    + <a href="#bfa07eab350de9a1" class="i method">formatExtensionName</a>(<span class="r27 r">hdr</span>)
+                                    + <span class="s">&quot; not supported by this version.&quot;</span>);
+                        }
+
+                        <b>break</b>;
+                }
+            }
+
+            <b>byte</b>[] <span id="r34 rd" class="r34 r">exp</span> = <span class="r26 r">md</span>.<a href="../Util/MessageDigest.cs.html#032ba42f3411690d" class="i method">Digest</a>();
+            <b>if</b> (!<span class="r34 r">exp</span>.<a href="@0@System.Core/A.html#9bdd6ef7ba6a5615" class="i method">SequenceEqual</a>(<span class="r27 r">hdr</span>))
+            {
+                <b>throw</b> <b>new</b> <a href="../Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;DIRC checksum mismatch&quot;</span>);
+            }
+        }
+
+        <b>private void</b> <a id="a6062161b036d882" href="../R/a6062161b036d882.html" target="n" data-glyph="76,1" class="i method">skipOptionalExtension</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r35 rd" class="r35 r">inStream</span>, <a href="../Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <span id="r36 rd" class="r36 r">md</span>, <b>byte</b>[] <span id="r37 rd" class="r37 r">hdr</span>, <b>long</b> <span id="r38 rd" class="r38 r">sz</span>)
+        {
+            <b>byte</b>[] <span id="r39 rd" class="r39 r">b</span> = <b>new</b> <b>byte</b>[4096];
+            <b>while</b> (0 &lt; <span class="r38 r">sz</span>)
+            {
+                <b>int</b> <span id="r40 rd" class="r40 r">n</span> = <span class="r35 r">inStream</span>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r39 r">b</span>, 0, (<b>int</b>)<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<span class="r39 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r38 r">sz</span>));
+                <b>if</b> (<span class="r40 r">n</span> &lt; 0)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#da81e2a33d64e827" class="t constructor">EndOfStreamException</a>(<span class="s">&quot;Short read of optional DIRC extension &quot;</span>
+                            + <a href="#bfa07eab350de9a1" class="i method">formatExtensionName</a>(<span class="r37 r">hdr</span>) + <span class="s">&quot;; expected another &quot;</span> + <span class="r38 r">sz</span>
+                            + <span class="s">&quot; bytes within the section.&quot;</span>);
+                }
+                <span class="r36 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<span class="r39 r">b</span>, 0, <span class="r40 r">n</span>);
+                <span class="r38 r">sz</span> -= <span class="r40 r">n</span>;
+            }
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <a id="bfa07eab350de9a1" href="../R/bfa07eab350de9a1.html" target="n" data-glyph="76,1" class="i method">formatExtensionName</a>(<b>byte</b>[] <span id="r41 rd" class="r41 r">hdr</span>)
+        {
+            <b>return</b> <span class="s">&quot;&#39;&quot;</span> + <a href="../Util/JavaHelper/Charset.cs.html#deb6aa96e25fd4d7" class="t t">Charset</a>.<a href="../Util/JavaHelper/Charset.cs.html#053612684daba28e" class="i method">forName</a>(<span class="s">&quot;ISO-8859-1&quot;</span>).<a href="@0@mscorlib/A.html#233647d04fbec0c0" class="i method">GetString</a>(<span class="r41 r">hdr</span>, 0, 4) + <span class="s">&quot;&#39;&quot;</span>;
+        }
+
+        <b>private static bool</b> <a id="a60eac2a555079d5" href="../R/a60eac2a555079d5.html" target="n" data-glyph="76,1" class="i method">IsDIRC</a>(<b>byte</b>[] <span id="r42 rd" class="r42 r">header</span>)
+        {
+            <b>if</b> (<span class="r42 r">header</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <a href="#cd4915d880f7694e" class="i field">SigDirc</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+            {
+                <b>return false</b>;
+            }
+
+            <b>for</b> (<b>int</b> <span id="r43 rd" class="r43 r">i</span> = 0; <span class="r43 r">i</span> &lt; <a href="#cd4915d880f7694e" class="i field">SigDirc</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r43 r">i</span>++)
+            {
+                <b>if</b> (<span class="r42 r">header</span>[<span class="r43 r">i</span>] != <a href="#cd4915d880f7694e" class="i field">SigDirc</a>[<span class="r43 r">i</span>]) <b>return false</b>;
+            }
+
+            <b>return true</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Try to establish an update lock on the cache file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if the lock is now held by the caller; false if it is held</span>
+        <span class="c">///</span><span class="c"> by someone else.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The output file could not be created. The caller does not</span>
+        <span class="c">///</span><span class="c"> hold the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="6862e5f2845637a6" href="../R/6862e5f2845637a6.html" target="n" data-glyph="72,1" class="i method">Lock</a>()
+        {
+            <b>if</b> (<a href="#a222327082b2270d" class="i field">_liveFile</a> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;DirCache does not have a backing file&quot;</span>);
+            }
+
+            <a href="#be92d12f1401d874" class="i field">_myLock</a> = <b>new</b> <a href="../LockFile.cs.html#b99601a78132e167" class="t constructor">LockFile</a>(<a href="#a222327082b2270d" class="i field">_liveFile</a>);
+            <b>if</b> (<a href="#be92d12f1401d874" class="i field">_myLock</a>.<a href="../LockFile.cs.html#e7165a58b2fd07b9" class="i method">Lock</a>())
+            {
+                <a href="#be92d12f1401d874" class="i field">_myLock</a>.<a href="../LockFile.cs.html#22b20e68bf2a3dcc" class="i property">NeedStatInformation</a> = <b>true</b>;
+                <b>return true</b>;
+            }
+
+            <b>return false</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write the entry records from memory to disk.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The cache must be locked first by calling </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6862e5f2845637a6" class="i method">Lock</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> and receiving</span>
+        <span class="c">///</span><span class="c"> true as the return value. Applications are encouraged to lock the index,</span>
+        <span class="c">///</span><span class="c"> then invoke </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#653c408a3b76f769" class="i method">read</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to ensure the in-memory data is current,</span>
+        <span class="c">///</span><span class="c"> prior to updating the in-memory entries.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Once written the lock is closed and must be either committed with</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#662b6ea6bd7a242e" class="i method">commit</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> or rolled back with </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4543d33d12a76151" class="i method">unlock</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The output file could not be created. The caller no longer</span>
+        <span class="c">///</span><span class="c"> holds the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="0f6fa1aa93728648" href="../R/0f6fa1aa93728648.html" target="n" data-glyph="72,1" class="i method">write</a>()
+        {
+            <a href="../LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r44 rd" class="r44 r">tmp</span> = <a href="#be92d12f1401d874" class="i field">_myLock</a>;
+            <a href="#698896b1f72eb026" class="i method">RequireLocked</a>(<span class="r44 r">tmp</span>);
+            <b>try</b>
+            {
+                <a href="#e79dd640f9a1271d" class="i method">WriteTo</a>(<span class="r44 r">tmp</span>.<a href="../LockFile.cs.html#f5bd06e0d5da95c6" class="i method">GetOutputStream</a>());
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <span class="r44 r">tmp</span>.<a href="../LockFile.cs.html#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                <b>throw</b>;
+            }
+        }
+
+        <b>private void</b> <a id="e79dd640f9a1271d" href="../R/e79dd640f9a1271d.html" target="n" data-glyph="76,1" class="i method">WriteTo</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r45 rd" class="r45 r">os</span>)
+        {
+            <a href="../Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <span id="r46 rd" class="r46 r">foot</span> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#c3b287d96df31211" class="i method">newMessageDigest</a>();
+            <a href="../Util/DigestOutputStream.cs.html#dd96eb3c78b56bea" class="k">var</a> <span id="r47 rd" class="r47 r">dos</span> = <b>new</b> <a href="../Util/DigestOutputStream.cs.html#f5761241bc5a9893" class="t constructor">DigestOutputStream</a>(<span class="r45 r">os</span>, <span class="r46 r">foot</span>);
+
+            <span class="c">// Write the header.</span>
+            <span class="c">//</span>
+            <b>var</b> <span id="r48 rd" class="r48 r">tmp</span> = <b>new</b> <b>byte</b>[128];
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#cd4915d880f7694e" class="i field">SigDirc</a>, 0, <span class="r48 r">tmp</span>, 0, <a href="#cd4915d880f7694e" class="i field">SigDirc</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<span class="r48 r">tmp</span>, 4, <span class="c">/* version */</span>2);
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<span class="r48 r">tmp</span>, 8, <a href="#017e2f84916b207e" class="i field">_entryCnt</a>);
+            <span class="r47 r">dos</span>.<a href="../Util/DigestOutputStream.cs.html#bfe74152877a3b07" class="i method">Write</a>(<span class="r48 r">tmp</span>, 0, 12);
+
+            <span class="c">// Write the individual file entries.</span>
+            <span class="c">//</span>
+            <b>if</b> (<a href="#f774be69451ab824" class="i field">_lastModified</a> &lt;= 0) 
+            {
+                <span class="c">// Write a new index, as no entries require smudging.</span>
+                <span class="c">//</span>
+                <b>for</b> (<b>int</b> <span id="r49 rd" class="r49 r">i</span> = 0; <span class="r49 r">i</span> &lt; <a href="#017e2f84916b207e" class="i field">_entryCnt</a>; <span class="r49 r">i</span>++)
+                {
+                    <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r49 r">i</span>].<a href="DirCacheEntry.cs.html#6e5cd1dc629b1ac4" class="i method">write</a>(<span class="r47 r">dos</span>);
+                }
+            }
+            <b>else</b>
+            {
+                <b>int</b> <span id="r50 rd" class="r50 r">smudge_s</span> = (<b>int</b>)(<a href="#f774be69451ab824" class="i field">_lastModified</a> / 1000);
+                <b>int</b> <span id="r51 rd" class="r51 r">smudge_ns</span> = ((<b>int</b>)(<a href="#f774be69451ab824" class="i field">_lastModified</a> % 1000)) * 1000000;
+                <b>for</b> (<b>int</b> <span id="r52 rd" class="r52 r">i</span> = 0; <span class="r52 r">i</span> &lt; <a href="#017e2f84916b207e" class="i field">_entryCnt</a>; <span class="r52 r">i</span>++)
+                {
+                    <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r53 rd" class="r53 r">e</span> = <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r52 r">i</span>];
+                    <b>if</b> (<span class="r53 r">e</span>.<a href="DirCacheEntry.cs.html#754c038ab3246a94" class="i method">mightBeRacilyClean</a>(<span class="r50 r">smudge_s</span>, <span class="r51 r">smudge_ns</span>))
+                        <span class="r53 r">e</span>.<a href="DirCacheEntry.cs.html#ddfebca30dcdb1b9" class="i method">smudgeRacilyClean</a>();
+                    <span class="r53 r">e</span>.<a href="DirCacheEntry.cs.html#6e5cd1dc629b1ac4" class="i method">write</a>(<span class="r47 r">dos</span>);
+                }
+            }
+
+            <b>if</b> (<a href="#d0875bb224f8626a" class="i field">_cacheTree</a> != <b>null</b>)
+            {
+                <a href="../Util/TemporaryBuffer.cs.html#5727e5431555d215" class="k">var</a> <span id="r54 rd" class="r54 r">bb</span> = <b>new</b> <a href="../Util/TemporaryBuffer.cs.html#aefbe444c2eb9e5e" class="t constructor">LocalFileBuffer</a>();
+                <a href="#d0875bb224f8626a" class="i field">_cacheTree</a>.<a href="DirCacheTree.cs.html#503e3c4e0e565fcf" class="i method">write</a>(<span class="r48 r">tmp</span>, <span class="r54 r">bb</span>);
+                <span class="r54 r">bb</span>.<a href="../Util/TemporaryBuffer.cs.html#8f4eaab55462b154" class="i method">close</a>();
+
+                <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<span class="r48 r">tmp</span>, 0, <a href="#691b7b5bf59884be" class="i field">ExtTree</a>);
+                <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<span class="r48 r">tmp</span>, 4, (<b>int</b>)<span class="r54 r">bb</span>.<a href="../Util/TemporaryBuffer.cs.html#ee456d493ced625d" class="i property">Length</a>);
+                <span class="r47 r">dos</span>.<a href="../Util/DigestOutputStream.cs.html#bfe74152877a3b07" class="i method">Write</a>(<span class="r48 r">tmp</span>, 0, 8);
+                <span class="r54 r">bb</span>.<a href="../Util/TemporaryBuffer.cs.html#59cba98ac561e22d" class="i method">writeTo</a>(<span class="r47 r">dos</span>, <b>null</b>);
+            }
+            <b>var</b> <span id="r55 rd" class="r55 r">hash</span> = <span class="r46 r">foot</span>.<a href="../Util/MessageDigest.cs.html#032ba42f3411690d" class="i method">Digest</a>();
+            <span class="r45 r">os</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r55 r">hash</span>, 0, <span class="r55 r">hash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+            <span class="r45 r">os</span>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Commit this change and release the lock.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If this method fails (returns false) the lock is still released.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if the commit was successful and the file contains the new</span>
+        <span class="c">///</span><span class="c"> data; false if the commit failed and the file remains with the</span>
+        <span class="c">///</span><span class="c"> old data.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the lock is not held.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="662b6ea6bd7a242e" href="../R/662b6ea6bd7a242e.html" target="n" data-glyph="72,1" class="i method">commit</a>()
+        {
+            <a href="../LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r56 rd" class="r56 r">tmp</span> = <a href="#be92d12f1401d874" class="i field">_myLock</a>;
+            <a href="#698896b1f72eb026" class="i method">RequireLocked</a>(<span class="r56 r">tmp</span>);
+            <a href="#be92d12f1401d874" class="i field">_myLock</a> = <b>null</b>;
+            <b>if</b> (!<span class="r56 r">tmp</span>.<a href="../LockFile.cs.html#b167ec17da77c55b" class="i method">Commit</a>()) <b>return false</b>;
+            <a href="#f774be69451ab824" class="i field">_lastModified</a> = <span class="r56 r">tmp</span>.<a href="../LockFile.cs.html#2c311d9ca7a2d0d2" class="i property">CommitLastModified</a>;
+            <b>return true</b>;
+        }
+
+        <b>private void</b> <a id="698896b1f72eb026" href="../R/698896b1f72eb026.html" target="n" data-glyph="76,1" class="i method">RequireLocked</a>(<a href="../LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r57 rd" class="r57 r">tmp</span>)
+        {
+            <b>if</b> (<a href="#a222327082b2270d" class="i field">_liveFile</a> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;DirCache is not locked&quot;</span>);
+            }
+            <b>if</b> (<span class="r57 r">tmp</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;DirCache &quot;</span> + <a href="#a222327082b2270d" class="i field">_liveFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot; not locked.&quot;</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Unlock this file and abort this change.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The temporary file (if created) is deleted before returning.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="4543d33d12a76151" href="../R/4543d33d12a76151.html" target="n" data-glyph="72,1" class="i method">unlock</a>()
+        {
+            <a href="../LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r58 rd" class="r58 r">tmp</span> = <a href="#be92d12f1401d874" class="i field">_myLock</a>;
+            <b>if</b> (<span class="r58 r">tmp</span> != <b>null</b>)
+            {
+                <a href="#be92d12f1401d874" class="i field">_myLock</a> = <b>null</b>;
+                <span class="r58 r">tmp</span>.<a href="../LockFile.cs.html#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Locate the position a path&#39;s entry is at in the index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If there is at least one entry in the index for this path the position of</span>
+        <span class="c">///</span><span class="c"> the lowest stage is returned. Subsequent stages can be identified by</span>
+        <span class="c">///</span><span class="c"> testing consecutive entries until the path differs.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If no path matches the entry -(position+1) is returned, where position is</span>
+        <span class="c">///</span><span class="c"> the location it would have gone within the index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r59 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The path to search for.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> if &gt;= 0 then the return value is the position of the entry in the</span>
+        <span class="c">///</span><span class="c"> index; pass to </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#fdeb36fd779c7483" class="i method">getEntry</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to obtain the entry</span>
+        <span class="c">///</span><span class="c"> information. If </span><span class="c">&amp;gt;</span><span class="c"> 0 the entry does not exist in the index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <b>public int</b> <a id="ee247407de79caf1" href="../R/ee247407de79caf1.html" target="n" data-glyph="72,1" class="i method">findEntry</a>(<b>string</b> <span id="r59 rd" class="r59 r">path</span>)
+        {
+            <b>if</b> (<a href="#017e2f84916b207e" class="i field">_entryCnt</a> == 0)
+                <b>return</b> -1;
+            <b>byte</b>[] <span id="r60 rd" class="r60 r">p</span> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r59 r">path</span>);
+            <b>return</b> <a href="#d8272d68d897bc17" class="i method">findEntry</a>(<span class="r60 r">p</span>, <span class="r60 r">p</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+        }
+
+        <b>public int</b> <a id="d8272d68d897bc17" href="../R/d8272d68d897bc17.html" target="n" data-glyph="72,1" class="i method">findEntry</a>(<b>byte</b>[] <span id="r61 rd" class="r61 r">p</span>, <b>int</b> <span id="r62 rd" class="r62 r">pLen</span>)
+        {
+            <b>int</b> <span id="r63 rd" class="r63 r">low</span> = 0;
+            <b>int</b> <span id="r64 rd" class="r64 r">high</span> = <a href="#017e2f84916b207e" class="i field">_entryCnt</a>;
+
+            <b>while</b> (<span class="r63 r">low</span> &lt; <span class="r64 r">high</span>)
+            {
+                <a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r65 rd" class="r65 r">mid</span> = (<b>int</b>)(((<b>uint</b>)(<span class="r63 r">low</span> + <span class="r64 r">high</span>)) &gt;&gt; 1);
+                <b>int</b> <span id="r66 rd" class="r66 r">cmp</span> = <a href="#5debad0b77022673" class="i method">Compare</a>(<span class="r61 r">p</span>, <span class="r62 r">pLen</span>, <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r65 r">mid</span>]);
+                <b>if</b> (<span class="r66 r">cmp</span> &lt; 0)
+                {
+                    <span class="r64 r">high</span> = <span class="r65 r">mid</span>;
+                }
+                <b>else if</b> (<span class="r66 r">cmp</span> == 0)
+                {
+                    <b>while</b> (<span class="r65 r">mid</span> &gt; 0 &amp;&amp; <a href="#5debad0b77022673" class="i method">Compare</a>(<span class="r61 r">p</span>, <span class="r62 r">pLen</span>, <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r65 r">mid</span> - 1]) == 0)
+                    {
+                        <span class="r65 r">mid</span>--;
+                    }
+                    <b>return</b> <span class="r65 r">mid</span>;
+                }
+                <b>else</b>
+                {
+                    <span class="r63 r">low</span> = <span class="r65 r">mid</span> + 1;
+                }
+
+            }
+
+            <b>return</b> -(<span class="r63 r">low</span> + 1);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Determine the next index position past all entries with the same name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> As index entries are sorted by path name, then stage number, this method</span>
+        <span class="c">///</span><span class="c"> advances the supplied position to the first position in the index whose</span>
+        <span class="c">///</span><span class="c"> path name does not match the path name of the supplied position&#39;s entry.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r67 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> entry position of the path that should be skipped.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Position of the next entry whose path is after the input.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="0caeb84a9c6a3902" href="../R/0caeb84a9c6a3902.html" target="n" data-glyph="72,1" class="i method">nextEntry</a>(<b>int</b> <span id="r67 rd" class="r67 r">position</span>)
+        {
+            <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r68 rd" class="r68 r">last</span> = <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r67 r">position</span>];
+            <b>int</b> <span id="r69 rd" class="r69 r">nextIdx</span> = <span class="r67 r">position</span> + 1;
+            <b>while</b> (<span class="r69 r">nextIdx</span> &lt; <a href="#017e2f84916b207e" class="i field">_entryCnt</a>)
+            {
+                <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r70 rd" class="r70 r">next</span> = <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r69 r">nextIdx</span>];
+                <b>if</b> (<a href="#2d052d3d92c7f1df" class="i method">Compare</a>(<span class="r68 r">last</span>, <span class="r70 r">next</span>) != 0) <b>break</b>;
+                <span class="r68 r">last</span> = <span class="r70 r">next</span>;
+                <span class="r69 r">nextIdx</span>++;
+            }
+            <b>return</b> <span class="r69 r">nextIdx</span>;
+        }
+
+        <b>public int</b> <a id="bd48ebef80dd9f70" href="../R/bd48ebef80dd9f70.html" target="n" data-glyph="72,1" class="i method">nextEntry</a>(<b>byte</b>[] <span id="r71 rd" class="r71 r">p</span>, <b>int</b> <span id="r72 rd" class="r72 r">pLen</span>, <b>int</b> <span id="r73 rd" class="r73 r">nextIdx</span>)
+        {
+            <b>while</b> (<span class="r73 r">nextIdx</span> &lt; <a href="#017e2f84916b207e" class="i field">_entryCnt</a>)
+            {
+                <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r74 rd" class="r74 r">next</span> = <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r73 r">nextIdx</span>];
+                <b>if</b> (!<a href="DirCacheTree.cs.html#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a>.<a href="DirCacheTree.cs.html#e1df1bf4b95f28c4" class="i method">peq</a>(<span class="r71 r">p</span>, <span class="r74 r">next</span>.<a href="DirCacheEntry.cs.html#282ddf744069a51b" class="i property">Path</a>, <span class="r72 r">pLen</span>)) <b>break</b>;
+                <span class="r73 r">nextIdx</span>++;
+            }
+            <b>return</b> <span class="r73 r">nextIdx</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Total number of file entries stored in the index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This count includes unmerged stages for a file entry if the file is</span>
+        <span class="c">///</span><span class="c"> currently conflicted in a merge. This means the total number of entries</span>
+        <span class="c">///</span><span class="c"> in the index may be up to 3 times larger than the number of files in the</span>
+        <span class="c">///</span><span class="c"> working directory.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Note that this value counts only </span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">files</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Number of entries available.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#fdeb36fd779c7483" class="i method">getEntry</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">/&gt;</span>
+        <b>public int</b> <a id="14852c89cc3f63ed" href="../R/14852c89cc3f63ed.html" target="n" data-glyph="72,1" class="i method">getEntryCount</a>()
+        {
+            <b>return</b> <a href="#017e2f84916b207e" class="i field">_entryCnt</a>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get a specific entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r75 r">i</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> position of the entry to get.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> The entry at position </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r75 r">i</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <a id="fdeb36fd779c7483" href="../R/fdeb36fd779c7483.html" target="n" data-glyph="72,1" class="i method">getEntry</a>(<b>int</b> <span id="r75 rd" class="r75 r">i</span>)
+        {
+            <b>return</b> <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r75 r">i</span>];
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get a specific entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r76 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The path to search for.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The entry at position </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="i">i</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <a id="2d8b52cb1293842f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getEntry</a>(<b>string</b> <span id="r76 rd" class="r76 r">path</span>)
+        {
+            <b>int</b> <span id="r77 rd" class="r77 r">i</span> = <a href="#ee247407de79caf1" class="i method">findEntry</a>(<span class="r76 r">path</span>);
+            <b>return</b> <span class="r77 r">i</span> &lt; 0 ? <b>null</b> : <a href="#3219fbb01925add9" class="i field">_sortedEntries</a>[<span class="r77 r">i</span>];
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Recursively get all entries within a subtree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r78 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The subtree path to get all entries within.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> All entries recursively contained within the subtree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <a id="bbe870dc24b64df0" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getEntriesWithin</a>(<b>string</b> <span id="r78 rd" class="r78 r">path</span>)
+        {
+            <b>if</b> (!<span class="r78 r">path</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<span class="s">&quot;/&quot;</span>))
+            {
+                <span class="r78 r">path</span> += <span class="s">&quot;/&quot;</span>;
+            }
+
+            <b>byte</b>[] <span id="r79 rd" class="r79 r">p</span> = <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r78 r">path</span>);
+            <b>int</b> <span id="r80 rd" class="r80 r">pLen</span> = <span class="r79 r">p</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+
+            <b>int</b> <span id="r81 rd" class="r81 r">eIdx</span> = <a href="#d8272d68d897bc17" class="i method">findEntry</a>(<span class="r79 r">p</span>, <span class="r80 r">pLen</span>);
+            <b>if</b> (<span class="r81 r">eIdx</span> &lt; 0)
+            {
+                <span class="r81 r">eIdx</span> = -(<span class="r81 r">eIdx</span> + 1);
+            }
+            <b>int</b> <span id="r82 rd" class="r82 r">lastIdx</span> = <a href="#bd48ebef80dd9f70" class="i method">nextEntry</a>(<span class="r79 r">p</span>, <span class="r80 r">pLen</span>, <span class="r81 r">eIdx</span>);
+            <b>var</b> <span id="r83 rd" class="r83 r">r</span> = <b>new</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[<span class="r82 r">lastIdx</span> - <span class="r81 r">eIdx</span>];
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#3219fbb01925add9" class="i field">_sortedEntries</a>, <span class="r81 r">eIdx</span>, <span class="r83 r">r</span>, 0, <span class="r83 r">r</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+            <b>return</b> <span class="r83 r">r</span>;
+        }
+
+        <b>public void</b> <a id="e33338c2080d6264" href="../R/e33338c2080d6264.html" target="n" data-glyph="72,1" class="i method">toArray</a>(<b>int</b> <span id="r84 rd" class="r84 r">i</span>, <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>[] <span id="r85 rd" class="r85 r">dst</span>, <b>int</b> <span id="r86 rd" class="r86 r">off</span>, <b>int</b> <span id="r87 rd" class="r87 r">cnt</span>)
+        {
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#3219fbb01925add9" class="i field">_sortedEntries</a>, <span class="r84 r">i</span>, <span class="r85 r">dst</span>, <span class="r86 r">off</span>, <span class="r87 r">cnt</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain (or build) the current cache tree structure.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method can optionally recreate the cache tree, without flushing the</span>
+        <span class="c">///</span><span class="c"> tree objects themselves to disk.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r88 r">build</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> If true and the cache tree is not present in the index it will</span>
+        <span class="c">///</span><span class="c"> be generated and returned to the caller.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The cache tree; null if there is no current cache tree available</span>
+        <span class="c">///</span><span class="c"> and </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r88 r">build</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> was false.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="DirCacheTree.cs.html#42fd8bf4d7b45ea6" class="t t">DirCacheTree</a> <a id="3c27a44d445e7ab0" href="../R/3c27a44d445e7ab0.html" target="n" data-glyph="72,1" class="i method">getCacheTree</a>(<b>bool</b> <span id="r88 rd" class="r88 r">build</span>)
+        {
+            <b>if</b> (<span class="r88 r">build</span>)
+            {
+                <b>if</b> (<a href="#d0875bb224f8626a" class="i field">_cacheTree</a> == <b>null</b>)
+                {
+                    <a href="#d0875bb224f8626a" class="i field">_cacheTree</a> = <b>new</b> <a href="DirCacheTree.cs.html#4824fdae69b99447" class="t constructor">DirCacheTree</a>();
+                }
+                <a href="#d0875bb224f8626a" class="i field">_cacheTree</a>.<a href="DirCacheTree.cs.html#20952e1f0b657f63" class="i method">validate</a>(<a href="#3219fbb01925add9" class="i field">_sortedEntries</a>, <a href="#017e2f84916b207e" class="i field">_entryCnt</a>, 0, 0);
+            }
+            <b>return</b> <a href="#d0875bb224f8626a" class="i field">_cacheTree</a>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write all index trees to the object store, returning the root tree.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r89 r">ow</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The writer to use when serializing to the store.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> identity for the root tree. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/UnmergedPathException.cs.html#622b296030c894bc" class="t t">UnmergedPathException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> One or more paths contain higher-order stages (stage &gt; 0),</span>
+        <span class="c">///</span><span class="c"> which cannot be stored in a tree object.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> One or more paths contain an invalid mode which should never</span>
+        <span class="c">///</span><span class="c"> appear in a tree object.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An unexpected error occurred writing to the object store.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="081a76970c89f2c8" href="../R/081a76970c89f2c8.html" target="n" data-glyph="72,1" class="i method">writeTree</a>(<a href="../ObjectWriter.cs.html#edd7e08e5ab8145e" class="t t">ObjectWriter</a> <span id="r89 rd" class="r89 r">ow</span>)
+        {
+            <b>return</b> <a href="#3c27a44d445e7ab0" class="i method">getCacheTree</a>(<b>true</b>).<a href="DirCacheTree.cs.html#8a538eaabac830e8" class="i method">writeTree</a>(<a href="#3219fbb01925add9" class="i field">_sortedEntries</a>, 0, 0, <span class="r89 r">ow</span>);
+        }
+    }
+}</pre></td></tr></table></div></body></html>

@@ -1,0 +1,431 @@
+﻿<!DOCTYPE html>
+<html><head><title>HistogramDiffIndex.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(422);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/HistogramDiffIndex.cs" target="_top">NGit.Diff\HistogramDiffIndex.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Support</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="HistogramDiff.cs.html#91f4e52bc851cc90" class="t t">HistogramDiff</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiff</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> by computing occurrence counts of elements.</span>
+	<span class="c">///</span><span class="c"> Each element in the range being considered is put into a hash table, tracking</span>
+	<span class="c">///</span><span class="c"> the number of times that distinct element appears in the sequence. Once all</span>
+	<span class="c">///</span><span class="c"> elements have been inserted from sequence A, each element of sequence B is</span>
+	<span class="c">///</span><span class="c"> probed in the hash table and the longest common subsequence with the lowest</span>
+	<span class="c">///</span><span class="c"> occurrence count in A is used as the result.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+	<b>internal sealed class</b> <a id="59eee82ad83a29e8" href="../R/59eee82ad83a29e8.html" target="n" data-glyph="2,0" class="t t">HistogramDiffIndex</a>&lt;<span id="r0 rd t" class="r0 r t">S</span>&gt; <b>where</b> <span class="r0 r t">S</span>:<a href="Sequence.cs.html#00c47a4b39d65421" class="t t">Sequence</a>
+	{
+		<b>private const int</b> <a id="ad04b48137ca95a9" href="../R/ad04b48137ca95a9.html" target="n" data-glyph="10,1" class="i field">REC_NEXT_SHIFT</a> = 28 + 8;
+
+		<b>private const int</b> <a id="6a6c67cbbacf1ece" href="../R/6a6c67cbbacf1ece.html" target="n" data-glyph="10,1" class="i field">REC_PTR_SHIFT</a> = 8;
+
+		<b>private const int</b> <a id="b752b9f3986abc6b" href="../R/b752b9f3986abc6b.html" target="n" data-glyph="10,1" class="i field">REC_PTR_MASK</a> = (1 &lt;&lt; 28) - 1;
+
+		<b>private const int</b> <a id="a2caa554f5bdf6c1" href="../R/a2caa554f5bdf6c1.html" target="n" data-glyph="10,1" class="i field">REC_CNT_MASK</a> = (1 &lt;&lt; 8) - 1;
+
+		<b>private const int</b> <a id="864e20ab9485b4b7" href="../R/864e20ab9485b4b7.html" target="n" data-glyph="10,1" class="i field">MAX_PTR</a> = <a href="#b752b9f3986abc6b" class="i field">REC_PTR_MASK</a>;
+
+		<b>private const int</b> <a id="f9bd97a1347daebd" href="../R/f9bd97a1347daebd.html" target="n" data-glyph="10,1" class="i field">MAX_CNT</a> = (1 &lt;&lt; 8) - 1;
+
+		<b>private readonly int</b> <a id="88345d63ebfe9f24" href="../R/88345d63ebfe9f24.html" target="n" data-glyph="46,1" class="i field">maxChainLength</a>;
+
+		<b>private readonly</b> <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r0 r t">S</span>&gt; <a id="c0ad71daf9a4e21c" href="../R/c0ad71daf9a4e21c.html" target="n" data-glyph="46,1" class="i field">cmp</a>;
+
+		<b>private readonly</b> <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <a id="bdd9aa9949044223" href="../R/bdd9aa9949044223.html" target="n" data-glyph="46,1" class="i field">a</a>;
+
+		<b>private readonly</b> <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <a id="7c2414f83121a4ba" href="../R/7c2414f83121a4ba.html" target="n" data-glyph="46,1" class="i field">b</a>;
+
+		<b>private readonly</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <a id="9dbf744c85f71478" href="../R/9dbf744c85f71478.html" target="n" data-glyph="46,1" class="i field">region</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Keyed by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r1 r t">S</span>}.<a href="#33ee2a0b72e9e7a8" class="i method">Hash</a>(<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>{<span class="r1 r t">S</span>}, <b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.Hash(HashedSequence</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">, int)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> for</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r2 r t">S</span>}.<a href="#220ac17b26572913" class="i field">recs</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.recs</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly int</b>[] <a id="14e5442c09fffe88" href="../R/14e5442c09fffe88.html" target="n" data-glyph="46,1" class="i field">table</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of low bits to discard from a key to index</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r3 r t">S</span>}.<a href="#14e5442c09fffe88" class="i field">table</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.table</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly int</b> <a id="0a4cb8fa455bc9c2" href="../R/0a4cb8fa455bc9c2.html" target="n" data-glyph="46,1" class="i field">keyShift</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Describes a unique element in sequence A.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Describes a unique element in sequence A.</span>
+		<span class="c">///</span><span class="c"> The records in this table are actually 3-tuples of:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">index of next record in this table that has same hash code</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">index of first element in this occurrence chain</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">occurrence count for this element (length of locs list)</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The occurrence count is capped at</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r4 r t">S</span>}.<a href="#f9bd97a1347daebd" class="i field">MAX_CNT</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.MAX_CNT</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , as the field is only</span>
+		<span class="c">///</span><span class="c"> a few bits wide. Elements that occur more frequently will have their</span>
+		<span class="c">///</span><span class="c"> count capped.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private long</b>[] <a id="220ac17b26572913" href="../R/220ac17b26572913.html" target="n" data-glyph="46,1" class="i field">recs</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of elements in</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r5 r t">S</span>}.<a href="#220ac17b26572913" class="i field">recs</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.recs</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ; also is the unique element count.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="503eaa37370d56d1" href="../R/503eaa37370d56d1.html" target="n" data-glyph="46,1" class="i field">recCnt</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> For</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ptr</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ,</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">next[ptr - ptrShift]</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> has subsequent index.</span>
+		<span class="c">///</span><span class="c"> For the sequence element</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ptr</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , the value stored at location</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">next[ptr - ptrShift]</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is the next occurrence of the exact same</span>
+		<span class="c">///</span><span class="c"> element in the sequence.</span>
+		<span class="c">///</span><span class="c"> Chains always run from the lowest index to the largest index. Therefore</span>
+		<span class="c">///</span><span class="c"> the array will store</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">next[1] = 2</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , but never</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">next[2] = 1</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> This allows a chain to terminate with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">0</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , as</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">0</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> would never</span>
+		<span class="c">///</span><span class="c"> be a valid next element.</span>
+		<span class="c">///</span><span class="c"> The array is sized to be</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">region.getLengthA()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> and element indexes</span>
+		<span class="c">///</span><span class="c"> are converted to array indexes by subtracting</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r6 r t">S</span>}.<a href="#9dd8fc70247b5e86" class="i field">ptrShift</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.ptrShift</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , which is</span>
+		<span class="c">///</span><span class="c"> just a cached version of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">region.beginA</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b>[] <a id="15d8e60e1cf7e26e" href="../R/15d8e60e1cf7e26e.html" target="n" data-glyph="46,1" class="i field">next</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> For element</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ptr</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> in A, index of the record in</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r7 r t">S</span>}.<a href="#220ac17b26572913" class="i field">recs</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.recs</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> array.</span>
+		<span class="c">///</span><span class="c"> The record at</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">recs[recIdx[ptr - ptrShift]]</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is the record</span>
+		<span class="c">///</span><span class="c"> describing all occurrences of the element appearing in sequence A at</span>
+		<span class="c">///</span><span class="c"> position</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ptr</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . The record is needed to get the occurrence count of</span>
+		<span class="c">///</span><span class="c"> the element, or to locate all other occurrences of that element within</span>
+		<span class="c">///</span><span class="c"> sequence A. This index provides constant-time access to the record, and</span>
+		<span class="c">///</span><span class="c"> avoids needing to scan the hash chain.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b>[] <a id="ebd5d0ee24b101a6" href="../R/ebd5d0ee24b101a6.html" target="n" data-glyph="46,1" class="i field">recIdx</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Value to subtract from element indexes to key</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#59eee82ad83a29e8" class="t t">HistogramDiffIndex</a>{<span class="r8 r t">S</span>}.<a href="#15d8e60e1cf7e26e" class="i field">next</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiffIndex</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.next</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> array.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="9dd8fc70247b5e86" href="../R/9dd8fc70247b5e86.html" target="n" data-glyph="46,1" class="i field">ptrShift</a>;
+
+		<b>private</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <a id="057a7ecf6d90ccad" href="../R/057a7ecf6d90ccad.html" target="n" data-glyph="46,1" class="i field">lcs</a>;
+
+		<b>private int</b> <a id="49e99e235243af10" href="../R/49e99e235243af10.html" target="n" data-glyph="46,1" class="i field">cnt</a>;
+
+		<b>private bool</b> <a id="fecd729d9150c630" href="../R/fecd729d9150c630.html" target="n" data-glyph="46,1" class="i field">hasCommon</a>;
+
+		<b>internal</b> <a id="566661ee394a3d8c" href="../R/566661ee394a3d8c.html" target="n" data-glyph="74,1" class="i constructor">HistogramDiffIndex</a>(<b>int</b> <span id="r9 rd" class="r9 r">maxChainLength</span>, <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r10 rd" class="r10 r">cmp</span>, 
+			<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r11 rd" class="r11 r">a</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r12 rd" class="r12 r">b</span>, <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r13 rd" class="r13 r">r</span>)
+		{
+			<a href="#59eee82ad83a29e8" class="k">this</a>.<a href="#88345d63ebfe9f24" class="i field">maxChainLength</a> = <span class="r9 r">maxChainLength</span>;
+			<a href="#59eee82ad83a29e8" class="k">this</a>.<a href="#c0ad71daf9a4e21c" class="i field">cmp</a> = <span class="r10 r">cmp</span>;
+			<a href="#59eee82ad83a29e8" class="k">this</a>.<a href="#bdd9aa9949044223" class="i field">a</a> = <span class="r11 r">a</span>;
+			<a href="#59eee82ad83a29e8" class="k">this</a>.<a href="#7c2414f83121a4ba" class="i field">b</a> = <span class="r12 r">b</span>;
+			<a href="#59eee82ad83a29e8" class="k">this</a>.<a href="#9dbf744c85f71478" class="i field">region</a> = <span class="r13 r">r</span>;
+			<b>if</b> (<a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a> &gt;= <a href="#864e20ab9485b4b7" class="i field">MAX_PTR</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#4267760c6fac19b1" class="i field">sequenceTooLargeForDiffAlgorithm</a>);
+			}
+			<b>int</b> <span id="r14 rd" class="r14 r">sz</span> = <span class="r13 r">r</span>.<a href="Edit.cs.html#4615770db5f47c66" class="i method">GetLengthA</a>();
+			<b>int</b> <span id="r15 rd" class="r15 r">tableBits</span> = <a href="#e258726322a857d0" class="i method">TableBits</a>(<span class="r14 r">sz</span>);
+			<a href="#14e5442c09fffe88" class="i field">table</a> = <b>new</b> <b>int</b>[1 &lt;&lt; <span class="r15 r">tableBits</span>];
+			<a href="#0a4cb8fa455bc9c2" class="i field">keyShift</a> = 32 - <span class="r15 r">tableBits</span>;
+			<a href="#9dd8fc70247b5e86" class="i field">ptrShift</a> = <span class="r13 r">r</span>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a>;
+			<a href="#220ac17b26572913" class="i field">recs</a> = <b>new</b> <b>long</b>[<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(4, (<b>int</b>)(((<b>uint</b>)<span class="r14 r">sz</span>) &gt;&gt; 3))];
+			<a href="#15d8e60e1cf7e26e" class="i field">next</a> = <b>new</b> <b>int</b>[<span class="r14 r">sz</span>];
+			<a href="#ebd5d0ee24b101a6" class="i field">recIdx</a> = <b>new</b> <b>int</b>[<span class="r14 r">sz</span>];
+		}
+
+		<b>internal</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <a id="4bd061282a9f7b44" href="../R/4bd061282a9f7b44.html" target="n" data-glyph="74,1" class="i method">FindLongestCommonSequence</a>()
+		{
+			<b>if</b> (!<a href="#d84b9510afb30f7a" class="i method">ScanA</a>())
+			{
+				<b>return null</b>;
+			}
+			<a href="#057a7ecf6d90ccad" class="i field">lcs</a> = <b>new</b> <a href="Edit.cs.html#1258e9d35d9d476b" class="t constructor">Edit</a>(0, 0);
+			<a href="#49e99e235243af10" class="i field">cnt</a> = <a href="#88345d63ebfe9f24" class="i field">maxChainLength</a> + 1;
+			<b>for</b> (<b>int</b> <span id="r16 rd" class="r16 r">bPtr</span> = <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#24d18ab00be068c9" class="i field">beginB</a>; <span class="r16 r">bPtr</span> &lt; <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#4e5d0b16b0f6a162" class="i field">endB</a>; )
+			{
+				<span class="r16 r">bPtr</span> = <a href="#3a5894273e6ef56a" class="i method">TryLongestCommonSequence</a>(<span class="r16 r">bPtr</span>);
+			}
+			<b>return</b> <a href="#fecd729d9150c630" class="i field">hasCommon</a> &amp;&amp; <a href="#88345d63ebfe9f24" class="i field">maxChainLength</a> &lt; <a href="#49e99e235243af10" class="i field">cnt</a> ? <b>null</b> : <a href="#057a7ecf6d90ccad" class="i field">lcs</a>;
+		}
+
+		<b>private bool</b> <a id="d84b9510afb30f7a" href="../R/d84b9510afb30f7a.html" target="n" data-glyph="76,1" class="i method">ScanA</a>()
+		{
+			<span class="c">// Scan the elements backwards, inserting them into the hash table</span>
+			<span class="c">// as we go. Going in reverse places the earliest occurrence of any</span>
+			<span class="c">// element at the start of the chain, so we consider earlier matches</span>
+			<span class="c">// before later matches.</span>
+			<span class="c">//</span>
+			<b>for</b> (<b>int</b> <span id="r17 rd" class="r17 r">ptr</span> = <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a> - 1; <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a> &lt;= <span class="r17 r">ptr</span>; <span class="r17 r">ptr</span>--)
+			{
+				<b>int</b> <span id="r18 rd" class="r18 r">tIdx</span> = <a href="#33ee2a0b72e9e7a8" class="i method">Hash</a>(<a href="#bdd9aa9949044223" class="i field">a</a>, <span class="r17 r">ptr</span>);
+				<b>int</b> <span id="r19 rd" class="r19 r">chainLen</span> = 0;
+				<b>for</b> (<b>int</b> <span id="r20 rd" class="r20 r">rIdx</span> = <a href="#14e5442c09fffe88" class="i field">table</a>[<span class="r18 r">tIdx</span>]; <span class="r20 r">rIdx</span> != 0; )
+				{
+					<b>long</b> <span id="r21 rd" class="r21 r">rec</span> = <a href="#220ac17b26572913" class="i field">recs</a>[<span class="r20 r">rIdx</span>];
+					<b>if</b> (<a href="#c0ad71daf9a4e21c" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#bdd9aa9949044223" class="i field">a</a>, <a href="#94c8c8d900bd5f97" class="i method">RecPtr</a>(<span class="r21 r">rec</span>), <a href="#bdd9aa9949044223" class="i field">a</a>, <span class="r17 r">ptr</span>))
+					{
+						<span class="c">// ptr is identical to another element. Insert it onto</span>
+						<span class="c">// the front of the existing element chain.</span>
+						<span class="c">//</span>
+						<b>int</b> <span id="r22 rd" class="r22 r">newCnt</span> = <a href="#fdedbd524656cc15" class="i method">RecCnt</a>(<span class="r21 r">rec</span>) + 1;
+						<b>if</b> (<a href="#f9bd97a1347daebd" class="i field">MAX_CNT</a> &lt; <span class="r22 r">newCnt</span>)
+						{
+							<span class="r22 r">newCnt</span> = <a href="#f9bd97a1347daebd" class="i field">MAX_CNT</a>;
+						}
+						<a href="#220ac17b26572913" class="i field">recs</a>[<span class="r20 r">rIdx</span>] = <a href="#4938c25931b4c42c" class="i method">RecCreate</a>(<a href="#ec9c8df29994c56f" class="i method">RecNext</a>(<span class="r21 r">rec</span>), <span class="r17 r">ptr</span>, <span class="r22 r">newCnt</span>);
+						<a href="#15d8e60e1cf7e26e" class="i field">next</a>[<span class="r17 r">ptr</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>] = <a href="#94c8c8d900bd5f97" class="i method">RecPtr</a>(<span class="r21 r">rec</span>);
+						<a href="#ebd5d0ee24b101a6" class="i field">recIdx</a>[<span class="r17 r">ptr</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>] = <span class="r20 r">rIdx</span>;
+						<b>goto</b> <span class="i">SCAN_continue</span>;
+					}
+					<span class="r20 r">rIdx</span> = <a href="#ec9c8df29994c56f" class="i method">RecNext</a>(<span class="r21 r">rec</span>);
+					<span class="r19 r">chainLen</span>++;
+				}
+				<b>if</b> (<span class="r19 r">chainLen</span> == <a href="#88345d63ebfe9f24" class="i field">maxChainLength</a>)
+				{
+					<b>return false</b>;
+				}
+				<span class="c">// This is the first time we have ever seen this particular</span>
+				<span class="c">// element in the sequence. Construct a new chain for it.</span>
+				<span class="c">//</span>
+				<b>int</b> <span id="r23 rd" class="r23 r">rIdx_1</span> = ++<a href="#503eaa37370d56d1" class="i field">recCnt</a>;
+				<b>if</b> (<span class="r23 r">rIdx_1</span> == <a href="#220ac17b26572913" class="i field">recs</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<b>int</b> <span id="r24 rd" class="r24 r">sz</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<a href="#220ac17b26572913" class="i field">recs</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt;&lt; 1, 1 + <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#4615770db5f47c66" class="i method">GetLengthA</a>());
+					<b>long</b>[] <span id="r25 rd" class="r25 r">n</span> = <b>new</b> <b>long</b>[<span class="r24 r">sz</span>];
+					<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#220ac17b26572913" class="i field">recs</a>, 0, <span class="r25 r">n</span>, 0, <a href="#220ac17b26572913" class="i field">recs</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+					<a href="#220ac17b26572913" class="i field">recs</a> = <span class="r25 r">n</span>;
+				}
+				<a href="#220ac17b26572913" class="i field">recs</a>[<span class="r23 r">rIdx_1</span>] = <a href="#4938c25931b4c42c" class="i method">RecCreate</a>(<a href="#14e5442c09fffe88" class="i field">table</a>[<span class="r18 r">tIdx</span>], <span class="r17 r">ptr</span>, 1);
+				<a href="#ebd5d0ee24b101a6" class="i field">recIdx</a>[<span class="r17 r">ptr</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>] = <span class="r23 r">rIdx_1</span>;
+				<a href="#14e5442c09fffe88" class="i field">table</a>[<span class="r18 r">tIdx</span>] = <span class="r23 r">rIdx_1</span>;
+<span class="i">SCAN_continue</span>: ;
+			}
+<span class="i">SCAN_break</span>: ;
+			<b>return true</b>;
+		}
+
+		<b>private int</b> <a id="3a5894273e6ef56a" href="../R/3a5894273e6ef56a.html" target="n" data-glyph="76,1" class="i method">TryLongestCommonSequence</a>(<b>int</b> <span id="r26 rd" class="r26 r">bPtr</span>)
+		{
+			<b>int</b> <span id="r27 rd" class="r27 r">bNext</span> = <span class="r26 r">bPtr</span> + 1;
+			<b>int</b> <span id="r28 rd" class="r28 r">rIdx</span> = <a href="#14e5442c09fffe88" class="i field">table</a>[<a href="#33ee2a0b72e9e7a8" class="i method">Hash</a>(<a href="#7c2414f83121a4ba" class="i field">b</a>, <span class="r26 r">bPtr</span>)];
+			<b>for</b> (<b>long</b> <span id="r29 rd" class="r29 r">rec</span>; <span class="r28 r">rIdx</span> != 0; <span class="r28 r">rIdx</span> = <a href="#ec9c8df29994c56f" class="i method">RecNext</a>(<span class="r29 r">rec</span>))
+			{
+				<span class="r29 r">rec</span> = <a href="#220ac17b26572913" class="i field">recs</a>[<span class="r28 r">rIdx</span>];
+				<span class="c">// If there are more occurrences in A, don&#39;t use this chain.</span>
+				<b>if</b> (<a href="#fdedbd524656cc15" class="i method">RecCnt</a>(<span class="r29 r">rec</span>) &gt; <a href="#49e99e235243af10" class="i field">cnt</a>)
+				{
+					<b>if</b> (!<a href="#fecd729d9150c630" class="i field">hasCommon</a>)
+					{
+						<a href="#fecd729d9150c630" class="i field">hasCommon</a> = <a href="#c0ad71daf9a4e21c" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#bdd9aa9949044223" class="i field">a</a>, <a href="#94c8c8d900bd5f97" class="i method">RecPtr</a>(<span class="r29 r">rec</span>), <a href="#7c2414f83121a4ba" class="i field">b</a>, <span class="r26 r">bPtr</span>);
+					}
+					<b>continue</b>;
+				}
+				<b>int</b> <span id="r30 rd" class="r30 r">@as</span> = <a href="#94c8c8d900bd5f97" class="i method">RecPtr</a>(<span class="r29 r">rec</span>);
+				<b>if</b> (!<a href="#c0ad71daf9a4e21c" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#bdd9aa9949044223" class="i field">a</a>, <span class="r30 r">@as</span>, <a href="#7c2414f83121a4ba" class="i field">b</a>, <span class="r26 r">bPtr</span>))
+				{
+					<b>continue</b>;
+				}
+				<a href="#fecd729d9150c630" class="i field">hasCommon</a> = <b>true</b>;
+				<b>for</b> (; ; )
+				{
+					<b>int</b> <span id="r31 rd" class="r31 r">np</span> = <a href="#15d8e60e1cf7e26e" class="i field">next</a>[<span class="r30 r">@as</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>];
+					<b>int</b> <span id="r32 rd" class="r32 r">bs</span> = <span class="r26 r">bPtr</span>;
+					<b>int</b> <span id="r33 rd" class="r33 r">ae</span> = <span class="r30 r">@as</span> + 1;
+					<b>int</b> <span id="r34 rd" class="r34 r">be</span> = <span class="r32 r">bs</span> + 1;
+					<b>int</b> <span id="r35 rd" class="r35 r">rc</span> = <a href="#fdedbd524656cc15" class="i method">RecCnt</a>(<span class="r29 r">rec</span>);
+					<b>while</b> (<a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a> &lt; <span class="r30 r">@as</span> &amp;&amp; <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#24d18ab00be068c9" class="i field">beginB</a> &lt; <span class="r32 r">bs</span> &amp;&amp; <a href="#c0ad71daf9a4e21c" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#bdd9aa9949044223" class="i field">a</a>, <span class="r30 r">@as</span> - 1, <a href="#7c2414f83121a4ba" class="i field">b</a>, <span class="r32 r">bs</span> 
+						- 1))
+					{
+						<span class="r30 r">@as</span>--;
+						<span class="r32 r">bs</span>--;
+						<b>if</b> (1 &lt; <span class="r35 r">rc</span>)
+						{
+							<span class="r35 r">rc</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r35 r">rc</span>, <a href="#fdedbd524656cc15" class="i method">RecCnt</a>(<a href="#220ac17b26572913" class="i field">recs</a>[<a href="#ebd5d0ee24b101a6" class="i field">recIdx</a>[<span class="r30 r">@as</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>]]));
+						}
+					}
+					<b>while</b> (<span class="r33 r">ae</span> &lt; <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a> &amp;&amp; <span class="r34 r">be</span> &lt; <a href="#9dbf744c85f71478" class="i field">region</a>.<a href="Edit.cs.html#4e5d0b16b0f6a162" class="i field">endB</a> &amp;&amp; <a href="#c0ad71daf9a4e21c" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#bdd9aa9949044223" class="i field">a</a>, <span class="r33 r">ae</span>, <a href="#7c2414f83121a4ba" class="i field">b</a>, <span class="r34 r">be</span>))
+					{
+						<b>if</b> (1 &lt; <span class="r35 r">rc</span>)
+						{
+							<span class="r35 r">rc</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r35 r">rc</span>, <a href="#fdedbd524656cc15" class="i method">RecCnt</a>(<a href="#220ac17b26572913" class="i field">recs</a>[<a href="#ebd5d0ee24b101a6" class="i field">recIdx</a>[<span class="r33 r">ae</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>]]));
+						}
+						<span class="r33 r">ae</span>++;
+						<span class="r34 r">be</span>++;
+					}
+					<b>if</b> (<span class="r27 r">bNext</span> &lt; <span class="r34 r">be</span>)
+					{
+						<span class="r27 r">bNext</span> = <span class="r34 r">be</span>;
+					}
+					<b>if</b> (<a href="#057a7ecf6d90ccad" class="i field">lcs</a>.<a href="Edit.cs.html#4615770db5f47c66" class="i method">GetLengthA</a>() &lt; <span class="r33 r">ae</span> - <span class="r30 r">@as</span> || <span class="r35 r">rc</span> &lt; <a href="#49e99e235243af10" class="i field">cnt</a>)
+					{
+						<span class="c">// If this region is the longest, or there are less</span>
+						<span class="c">// occurrences of it in A, its now our LCS.</span>
+						<span class="c">//</span>
+						<a href="#057a7ecf6d90ccad" class="i field">lcs</a>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a> = <span class="r30 r">@as</span>;
+						<a href="#057a7ecf6d90ccad" class="i field">lcs</a>.<a href="Edit.cs.html#24d18ab00be068c9" class="i field">beginB</a> = <span class="r32 r">bs</span>;
+						<a href="#057a7ecf6d90ccad" class="i field">lcs</a>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a> = <span class="r33 r">ae</span>;
+						<a href="#057a7ecf6d90ccad" class="i field">lcs</a>.<a href="Edit.cs.html#4e5d0b16b0f6a162" class="i field">endB</a> = <span class="r34 r">be</span>;
+						<a href="#49e99e235243af10" class="i field">cnt</a> = <span class="r35 r">rc</span>;
+					}
+					<span class="c">// Because we added elements in reverse order index 0</span>
+					<span class="c">// cannot possibly be the next position. Its the first</span>
+					<span class="c">// element of the sequence and thus would have been the</span>
+					<span class="c">// value of as at the start of the TRY_LOCATIONS loop.</span>
+					<span class="c">//</span>
+					<b>if</b> (<span class="r31 r">np</span> == 0)
+					{
+						<b>goto</b> <span class="i">TRY_LOCATIONS_break</span>;
+					}
+					<b>while</b> (<span class="r31 r">np</span> &lt; <span class="r33 r">ae</span>)
+					{
+						<span class="c">// The next location to consider was actually within</span>
+						<span class="c">// the LCS we examined above. Don&#39;t reconsider it.</span>
+						<span class="c">//</span>
+						<span class="r31 r">np</span> = <a href="#15d8e60e1cf7e26e" class="i field">next</a>[<span class="r31 r">np</span> - <a href="#9dd8fc70247b5e86" class="i field">ptrShift</a>];
+						<b>if</b> (<span class="r31 r">np</span> == 0)
+						{
+							<b>goto</b> <span class="i">TRY_LOCATIONS_break</span>;
+						}
+					}
+					<span class="r30 r">@as</span> = <span class="r31 r">np</span>;
+<span class="i">TRY_LOCATIONS_continue</span>: ;
+				}
+<span class="i">TRY_LOCATIONS_break</span>: ;
+			}
+			<b>return</b> <span class="r27 r">bNext</span>;
+		}
+
+		<b>private int</b> <a id="33ee2a0b72e9e7a8" href="../R/33ee2a0b72e9e7a8.html" target="n" data-glyph="76,1" class="i method">Hash</a>(<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r36 rd" class="r36 r">s</span>, <b>int</b> <span id="r37 rd" class="r37 r">idx</span>)
+		{
+			<b>return</b> (<b>int</b>)(((<b>uint</b>)(<a href="#c0ad71daf9a4e21c" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#cda82ee0ba70d64e" class="i method">Hash</a>(<span class="r36 r">s</span>, <span class="r37 r">idx</span>) * <b>unchecked</b>((<b>int</b>)(0x9e370001)))) &gt;&gt; <a href="#0a4cb8fa455bc9c2" class="i field">keyShift</a>
+				);
+		}
+
+		<b>private static long</b> <a id="4938c25931b4c42c" href="../R/4938c25931b4c42c.html" target="n" data-glyph="76,1" class="i method">RecCreate</a>(<b>int</b> <span id="r38 rd" class="r38 r">next</span>, <b>int</b> <span id="r39 rd" class="r39 r">ptr</span>, <b>int</b> <span id="r40 rd" class="r40 r">cnt</span>)
+		{
+			<b>return</b> ((<b>long</b>)<span class="r38 r">next</span> &lt;&lt; <a href="#ad04b48137ca95a9" class="i field">REC_NEXT_SHIFT</a>) | ((<b>long</b>)<span class="r39 r">ptr</span> &lt;&lt; <a href="#6a6c67cbbacf1ece" class="i field">REC_PTR_SHIFT</a>) | <span class="r40 r">cnt</span>;
+		}
+
+		<span class="c">//</span>
+		<span class="c">//</span>
+		<b>private static int</b> <a id="ec9c8df29994c56f" href="../R/ec9c8df29994c56f.html" target="n" data-glyph="76,1" class="i method">RecNext</a>(<b>long</b> <span id="r41 rd" class="r41 r">rec</span>)
+		{
+			<b>return</b> (<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r41 r">rec</span>) &gt;&gt; <a href="#ad04b48137ca95a9" class="i field">REC_NEXT_SHIFT</a>));
+		}
+
+		<b>private static int</b> <a id="94c8c8d900bd5f97" href="../R/94c8c8d900bd5f97.html" target="n" data-glyph="76,1" class="i method">RecPtr</a>(<b>long</b> <span id="r42 rd" class="r42 r">rec</span>)
+		{
+			<b>return</b> ((<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r42 r">rec</span>) &gt;&gt; <a href="#6a6c67cbbacf1ece" class="i field">REC_PTR_SHIFT</a>))) &amp; <a href="#b752b9f3986abc6b" class="i field">REC_PTR_MASK</a>;
+		}
+
+		<b>private static int</b> <a id="fdedbd524656cc15" href="../R/fdedbd524656cc15.html" target="n" data-glyph="76,1" class="i method">RecCnt</a>(<b>long</b> <span id="r43 rd" class="r43 r">rec</span>)
+		{
+			<b>return</b> ((<b>int</b>)<span class="r43 r">rec</span>) &amp; <a href="#a2caa554f5bdf6c1" class="i field">REC_CNT_MASK</a>;
+		}
+
+		<b>private static int</b> <a id="e258726322a857d0" href="../R/e258726322a857d0.html" target="n" data-glyph="76,1" class="i method">TableBits</a>(<b>int</b> <span id="r44 rd" class="r44 r">sz</span>)
+		{
+			<b>int</b> <span id="r45 rd" class="r45 r">bits</span> = 31 - <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#6150b1fcbf061254" class="i method">NumberOfLeadingZeros</a>(<span class="r44 r">sz</span>);
+			<b>if</b> (<span class="r45 r">bits</span> == 0)
+			{
+				<span class="r45 r">bits</span> = 1;
+			}
+			<b>if</b> (1 &lt;&lt; <span class="r45 r">bits</span> &lt; <span class="r44 r">sz</span>)
+			{
+				<span class="r45 r">bits</span>++;
+			}
+			<b>return</b> <span class="r45 r">bits</span>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

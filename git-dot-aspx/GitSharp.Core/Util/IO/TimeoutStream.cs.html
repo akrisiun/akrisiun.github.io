@@ -1,0 +1,374 @@
+﻿<!DOCTYPE html>
+<html><head><title>TimeoutStream.cs</title><link rel="stylesheet" href="../../../styles.css"><script src="../../../scripts.js"></script></head>
+<body class="cB" onload="i(365);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/IO/TimeoutStream.cs" target="_top">Util\IO\TimeoutStream.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2009, Google Inc.
+ * Copyright (C) 2010, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * This program and the accompanying materials are made available
+ * under the terms of the Eclipse Distribution License v1.0 which
+ * accompanies this distribution, is reproduced below, and is
+ * available at http://www.eclipse.org/org/documents/edl-v10.php
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Eclipse Foundation, Inc. nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Timers</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>
+{
+
+	<span class="c">//Note: [henon] this is a unified port of jgit&#39;s TimoutInputStream and TimeoutOutputStream</span>
+
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c">  Stream with a configurable timeout.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="5da663ac32c3036d" href="../../R/5da663ac32c3036d.html" target="n" data-glyph="0,0" class="t t">TimeoutStream</a> : <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>
+	{
+
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="3e621b911842a317" href="../../R/3e621b911842a317.html" target="n" data-glyph="46,1" class="i field">_stream</a>;
+		<span class="c">// private InterruptTimer myTimer;</span>
+		<b>private readonly</b> <a href="@0@System/A.html#897683f27faba082" class="t t">Timer</a> <a id="174563f5117df1cc" href="../../R/174563f5117df1cc.html" target="n" data-glyph="46,1" class="i field">_read_timer</a> = <b>new</b> <a href="@0@System/A.html#d8263c5c8d4ec7ac" class="t constructor">Timer</a>();
+		<b>private readonly</b> <a href="@0@System/A.html#897683f27faba082" class="t t">Timer</a> <a id="297f78ab9d0fef9d" href="../../R/297f78ab9d0fef9d.html" target="n" data-glyph="46,1" class="i field">_write_timer</a> = <b>new</b> <a href="@0@System/A.html#d8263c5c8d4ec7ac" class="t constructor">Timer</a>();
+
+		<span class="c">//private int timeout;</span>
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Wrap an input stream with a timeout on all read operations.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">src</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">base input stream (to read from). The stream must be</span>
+		<span class="c">///</span><span class="c">            interruptible (most socket streams are).</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="e19983ec9accb0f6" href="../../R/e19983ec9accb0f6.html" target="n" data-glyph="72,1" class="i constructor">TimeoutStream</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r0 rd" class="r0 r">src</span>)
+			: <a href="@0@mscorlib/A.html#b182cfbb62b0b52f" class="k">base</a>()
+		{
+			<span class="c">//myTimer = timer;</span>
+			<a href="#3e621b911842a317" class="i field">_stream</a> = <span class="r0 r">src</span>;
+			<a href="#174563f5117df1cc" class="i field">_read_timer</a>.<a href="@0@System/A.html#73523a84ac7c0509" class="i">Elapsed</a> += <a href="#45c813b1c1c1e78a" class="i method">OnTimout</a>;
+			<a href="#297f78ab9d0fef9d" class="i field">_write_timer</a>.<a href="@0@System/A.html#73523a84ac7c0509" class="i">Elapsed</a> += <a href="#45c813b1c1c1e78a" class="i method">OnTimout</a>;
+		}
+
+		<b>private void</b> <a id="45c813b1c1c1e78a" href="../../R/45c813b1c1c1e78a.html" target="n" data-glyph="76,1" class="i method">OnTimout</a>(<b>object</b> <span id="r1 rd" class="r1 r">sender</span>, <a href="@0@System/A.html#fa59a445f56b7851" class="t t">ElapsedEventArgs</a> <span id="r2 rd" class="r2 r">e</span>)
+		{
+			<a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c"> return number of milliseconds before aborting a read. </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="141afee52ad4aff5" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getTimeout</a>()
+		{
+			<b>return</b> (<b>int</b>)<a href="#174563f5117df1cc" class="i field">_read_timer</a>.<a href="@0@System/A.html#64cabc52e5840e7b" class="i property">Interval</a>;
+		}
+
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">millis</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> number of milliseconds before aborting a read. Must be &gt; 0.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="e86ab85ae95b750d" href="../../R/e86ab85ae95b750d.html" target="n" data-glyph="72,1" class="i method">setTimeout</a>(<b>int</b> <span id="r3 rd" class="r3 r">millis</span>)
+		{
+			<b>if</b> (<span class="r3 r">millis</span> &lt; 0)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid timeout: &quot;</span> + <span class="r3 r">millis</span>);
+			<a href="#174563f5117df1cc" class="i field">_read_timer</a>.<a href="@0@System/A.html#64cabc52e5840e7b" class="i property">Interval</a> = <span class="r3 r">millis</span>;
+			<a href="#297f78ab9d0fef9d" class="i field">_write_timer</a>.<a href="@0@System/A.html#64cabc52e5840e7b" class="i property">Interval</a> = <span class="r3 r">millis</span>;
+		}
+
+		<b>public override int</b> <a id="80edc2c3df48a9f1" href="../../R/80edc2c3df48a9f1.html" target="n" data-glyph="72,1" class="i method">ReadByte</a>()
+		{
+			<b>try</b>
+			{
+				<a href="#b3228fd6eee1fcda" class="i method">beginRead</a>();
+				<b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#e3d1c266c6c45782" class="i method">readTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#ff8097f677fd6b18" class="i method">endRead</a>();
+			}
+		}
+
+
+		<b>public override int</b> <a id="7eb6d2de86317037" href="../../R/7eb6d2de86317037.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r4 rd" class="r4 r">buffer</span>, <b>int</b> <span id="r5 rd" class="r5 r">offset</span>, <b>int</b> <span id="r6 rd" class="r6 r">count</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#b3228fd6eee1fcda" class="i method">beginRead</a>();
+				<b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r4 r">buffer</span>, <span class="r5 r">offset</span>, <span class="r6 r">count</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#e3d1c266c6c45782" class="i method">readTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#ff8097f677fd6b18" class="i method">endRead</a>();
+			}
+		}
+
+		<b>public long</b> <a id="82d716a068fedfdf" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Skip</a>(<b>long</b> <span id="r7 rd" class="r7 r">cnt</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#b3228fd6eee1fcda" class="i method">beginRead</a>();
+				<b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#eb5599035c4388ce" class="i method">Seek</a>(<span class="r7 r">cnt</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a>.<a href="@0@mscorlib/A.html#efa75a72affe543f" class="i field">Current</a>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#e3d1c266c6c45782" class="i method">readTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#ff8097f677fd6b18" class="i method">endRead</a>();
+			}
+		}
+
+		<b>private void</b> <a id="b3228fd6eee1fcda" href="../../R/b3228fd6eee1fcda.html" target="n" data-glyph="76,1" class="i method">beginRead</a>()
+		{
+			<a href="#174563f5117df1cc" class="i field">_read_timer</a>.<a href="@0@System/A.html#d8d4c6fbc471f649" class="i method">Start</a>();
+		}
+
+		<b>private void</b> <a id="ff8097f677fd6b18" href="../../R/ff8097f677fd6b18.html" target="n" data-glyph="76,1" class="i method">endRead</a>()
+		{
+			<a href="#174563f5117df1cc" class="i field">_read_timer</a>.<a href="@0@System/A.html#13997d146b1fcf28" class="i method">Stop</a>();
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#43e40a96805cc4df" class="t t">TimeoutException</a> <a id="e3d1c266c6c45782" href="../../R/e3d1c266c6c45782.html" target="n" data-glyph="76,1" class="i method">readTimedOut</a>()
+		{
+			<b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#eedbd59d0faf42ed" class="t constructor">TimeoutException</a>(<span class="s">&quot;Read timed out&quot;</span>);
+		}
+
+		<b>public override void</b> <a id="a1ae2f7aa5619907" href="../../R/a1ae2f7aa5619907.html" target="n" data-glyph="72,1" class="i method">WriteByte</a>(<b>byte</b> <span id="r8 rd" class="r8 r">value</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#6157638035df1464" class="i method">beginWrite</a>();
+				<a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>(<span class="r8 r">value</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#c0215d03fa750915" class="i method">writeTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#40e637e858655287" class="i method">endWrite</a>();
+			}
+		}
+
+		<b>public void</b> <a id="842d5111f5a33c71" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>byte</b>[] <span id="r9 rd" class="r9 r">buf</span>)
+		{
+			<a href="#cea2df96fbc98e82" class="i method">Write</a>(<span class="r9 r">buf</span>, 0, <span class="r9 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+
+		<b>public override void</b> <a id="cea2df96fbc98e82" href="../../R/cea2df96fbc98e82.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>byte</b>[] <span id="r10 rd" class="r10 r">buf</span>, <b>int</b> <span id="r11 rd" class="r11 r">off</span>, <b>int</b> <span id="r12 rd" class="r12 r">len</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#6157638035df1464" class="i method">beginWrite</a>();
+				<a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r10 r">buf</span>, <span class="r11 r">off</span>, <span class="r12 r">len</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#c0215d03fa750915" class="i method">writeTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#40e637e858655287" class="i method">endWrite</a>();
+			}
+		}
+
+		<b>public override void</b> <a id="9e81d1af808eeda8" href="../../R/9e81d1af808eeda8.html" target="n" data-glyph="72,1" class="i method">Flush</a>()
+		{
+			<b>try</b>
+			{
+				<a href="#6157638035df1464" class="i method">beginWrite</a>();
+				<a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#1bd99e8a41c68d21" class="i method">Flush</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#c0215d03fa750915" class="i method">writeTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#40e637e858655287" class="i method">endWrite</a>();
+			}
+		}
+
+		<b>public override void</b> <a id="243c5cf41577bcc0" href="../../R/243c5cf41577bcc0.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+		{
+			<b>try</b>
+			{
+				<a href="#6157638035df1464" class="i method">beginWrite</a>();
+				<a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#50f5efda2e1b8af8" class="t t">ObjectDisposedException</a>)
+			{
+				<b>throw</b> <a href="#c0215d03fa750915" class="i method">writeTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#40e637e858655287" class="i method">endWrite</a>();
+			}
+		}
+
+		<b>private void</b> <a id="6157638035df1464" href="../../R/6157638035df1464.html" target="n" data-glyph="76,1" class="i method">beginWrite</a>()
+		{
+			<a href="#297f78ab9d0fef9d" class="i field">_write_timer</a>.<a href="@0@System/A.html#d8d4c6fbc471f649" class="i method">Start</a>();
+		}
+
+		<b>private void</b> <a id="40e637e858655287" href="../../R/40e637e858655287.html" target="n" data-glyph="76,1" class="i method">endWrite</a>()
+		{
+			<a href="#297f78ab9d0fef9d" class="i field">_write_timer</a>.<a href="@0@System/A.html#13997d146b1fcf28" class="i method">Stop</a>();
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#43e40a96805cc4df" class="t t">TimeoutException</a> <a id="c0215d03fa750915" href="../../R/c0215d03fa750915.html" target="n" data-glyph="76,1" class="i method">writeTimedOut</a>()
+		{
+			<b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#eedbd59d0faf42ed" class="t constructor">TimeoutException</a>(<span class="s">&quot;Write timed out&quot;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, gets a value indicating whether the current stream supports reading.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the stream supports reading; otherwise, false.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override bool</b> <a id="f9fa136d36fe81d4" href="../../R/f9fa136d36fe81d4.html" target="n" data-glyph="102,1" class="i property">CanRead</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#9d92fb3890523d38" class="i property">CanRead</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, gets a value indicating whether the current stream supports seeking.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the stream supports seeking; otherwise, false.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override bool</b> <a id="23e0edbbe92aecae" href="../../R/23e0edbbe92aecae.html" target="n" data-glyph="102,1" class="i property">CanSeek</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#73e4413d240b4cee" class="i property">CanSeek</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, gets a value indicating whether the current stream supports writing.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the stream supports writing; otherwise, false.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override bool</b> <a id="bed850c588584b96" href="../../R/bed850c588584b96.html" target="n" data-glyph="102,1" class="i property">CanWrite</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#ebab682837a70146" class="i property">CanWrite</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, gets the length in bytes of the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A long value representing the length of the stream in bytes.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A class derived from Stream does not support seeking. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="c301004fcc7d939c" href="../../R/c301004fcc7d939c.html" target="n" data-glyph="102,1" class="i property">Length</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#48b7e39cfd844dc5" class="i property">Length</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, gets or sets the position within the current stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The current position within the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support seeking. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="dddbf1cba074a667" href="../../R/dddbf1cba074a667.html" target="n" data-glyph="102,1" class="i property">Position</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#35112b2a53fb536a" class="i property">Position</a>; }
+			<b>set</b> { <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#35112b2a53fb536a" class="i property">Position</a> = <b>value</b>; }
+		}
+
+		<b>public int</b> <a id="b42490559b7b331a" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r13 rd" class="r13 r">buf</span>)
+		{
+			<b>return</b> <a href="#7eb6d2de86317037" class="i method">Read</a>(<span class="r13 r">buf</span>, 0, <span class="r13 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, sets the position within the current stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The new position within the current stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A byte offset relative to the </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">origin</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> parameter. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">origin</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A value of type </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.SeekOrigin</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> indicating the reference point used to obtain the new position. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support seeking, such as if the stream is constructed from a pipe or console output. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="0519513db65d9487" href="../../R/0519513db65d9487.html" target="n" data-glyph="72,1" class="i method">Seek</a>(<b>long</b> <span id="r14 rd" class="r14 r">offset</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a> <span id="r15 rd" class="r15 r">origin</span>)
+		{
+			<b>return</b> <a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#eb5599035c4388ce" class="i method">Seek</a>(<span class="r14 r">offset</span>, <span class="r15 r">origin</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When overridden in a derived class, sets the length of the current stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">value</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The desired length of the current stream in bytes. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support both writing and seeking, such as if the stream is constructed from a pipe or console output. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span>
+		<span class="c">///</span><span class="c">                 </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">2</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override void</b> <a id="af321a0325673ea7" href="../../R/af321a0325673ea7.html" target="n" data-glyph="72,1" class="i method">SetLength</a>(<b>long</b> <span id="r16 rd" class="r16 r">value</span>)
+		{
+			<a href="#3e621b911842a317" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#70f6f69c124200cc" class="i method">SetLength</a>(<span class="r16 r">value</span>);
+		}
+
+	}
+}
+</pre></td></tr></table></div></body></html>

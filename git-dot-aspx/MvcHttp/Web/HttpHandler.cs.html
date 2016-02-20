@@ -1,0 +1,519 @@
+﻿<!DOCTYPE html>
+<html><head><title>HttpHandler.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(510);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#MvcHttp/Web/HttpHandler.cs" target="_top">Web\HttpHandler.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#MvcHttp" target="_top">MvcHttp\MvcHttp.csproj</a> (MvcHttp)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Server 2008 route fix handler</span>
+
+<b>using</b> <span class="i n">AiLib</span>.<span class="i n">Web</span>;
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Specialized</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Configuration</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Principal</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Routing</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">SessionState</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">UI</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+
+<b>namespace</b> <span class="i n">AiLib</span>.<span class="i n">Web</span>
+{
+    <b>public enum</b> <a id="0da30e8916aa5e0b" href="../R/0da30e8916aa5e0b.html" target="n" data-glyph="18,0" class="t t"><span id="00a4bcc62c78135b">RequestProcessState</span></a> { <a id="901410ee80e5e51f" href="../R/901410ee80e5e51f.html" target="n" data-glyph="24,1" class="i field">Processed</a>, <a id="e2ef6a7082dafd24" href="../R/e2ef6a7082dafd24.html" target="n" data-glyph="24,1" class="i field">Error</a>, <a id="4753e88dbf8d70b6" href="../R/4753e88dbf8d70b6.html" target="n" data-glyph="24,1" class="i field">Unprocessed</a> }
+    <b>public enum</b> <a id="2a41fa169323a3bd" href="../R/2a41fa169323a3bd.html" target="n" data-glyph="18,0" class="t t"><span id="afd3a7e0aaca7bea">RequestEvent</span></a> { <a id="89c60336135d2905" href="../R/89c60336135d2905.html" target="n" data-glyph="24,1" class="i field">BeginRequest</a>, <a id="c28fd3c820e41ad1" href="../R/c28fd3c820e41ad1.html" target="n" data-glyph="24,1" class="i field">PreRequestHandlerExecute</a> }
+
+    <span class="c">/* Web.Config:
+        &lt;system.webServer&gt;
+            &lt;modules runAllManagedModulesForAllRequests=&quot;true&quot;&gt;
+              &lt;remove name=&quot;SxHttpHandlerModule&quot; /&gt;
+              &lt;add name=&quot;SxHttpHandlerModule&quot; type=&quot;AiLib.Render.HandlerModule, AiLib.MVC&quot; /&gt;
+            &lt;/modules&gt;
+            &lt;validation validateIntegratedModeConfiguration=&quot;false&quot; /&gt;
+        &lt;system.web&gt;
+          &lt;httpHandlers&gt;
+          &lt;clear /&gt;
+              &lt;add verb=&quot;*&quot; path=&quot;routes.axd&quot; type=&quot;AttributeRouting.Web.Logging.LogRoutesHandler, AttributeRouting.Web&quot; /&gt;
+              &lt;add type=&quot;AiLib.Render.HandlerModule, AiLib.MVC&quot; verb=&quot;GET&quot; 
+                   path=&quot;SX.ashx&quot; validate=&quot;false&quot; /&gt;
+    */</span>
+
+    <span class="c">// IHttpHandler for ProcessRequest(HttpContext context) and IsReusable { get; }</span>
+    <span class="c">// IHttpModule  for void Init(HttpApplication context)</span>
+
+    <b>public interface</b> <a id="c13c1a072bb5b2f7" href="../R/c13c1a072bb5b2f7.html" target="n" data-glyph="48,0" class="t t">IRequestHttpHandler</a> : <a href="@0@System.Web/A.html#2352844b030631b2" class="t t">IHttpModule</a>, <a href="@0@System.Web/A.html#62c4e10ee7e6cd36" class="t t">IHttpHandler</a>, <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+    {
+        <b>void</b> <a id="c246e5634104c4a6" href="../R/c246e5634104c4a6.html" target="n" data-glyph="72,1" class="i method">AppRequestPrepare</a>();
+        <b>bool</b> <a id="a36b1bf4ebebc805" href="../R/a36b1bf4ebebc805.html" target="n" data-glyph="72,1" class="i method">ProcessRequestCore</a>(<a href="#2a41fa169323a3bd" class="t t">RequestEvent</a> <span id="r0 rd" class="r0 r">requestEvent</span>);
+        <a href="#0da30e8916aa5e0b" class="t t">RequestProcessState</a> <a id="aadbf8bf0d117845" href="../R/aadbf8bf0d117845.html" target="n" data-glyph="102,1" class="i property">RequestProcessState</a> { <b>get</b>; }
+    }
+
+    <b>public class</b> <a id="196280eab96bfdac" href="../R/196280eab96bfdac.html" target="n" data-glyph="0,0" class="t t"><span id="463f0439656313a1">HttpHandler</span></a> : <a href="#c13c1a072bb5b2f7" class="t t">IRequestHttpHandler</a>
+    {
+        <b>static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#aaf7fcabb2122585" class="t t">IHttpModuleSubscriber</a>&gt; <a id="4632bf2da7e563e2" href="../R/4632bf2da7e563e2.html" target="n" data-glyph="46,1" class="i field">subscribers</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#aaf7fcabb2122585" class="t t">IHttpModuleSubscriber</a>&gt;();
+        <b>static</b> <a id="614e7f28d153420f" href="../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">HttpHandler</a>() { }
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> App static
+
+        <b>public static void</b> <a id="b660d6a2b992dda3" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">AppCheck</a>(<a href="@0@System.Web/A.html#46c4f0aa7cd268fe" class="t t">HttpApplication</a> <span id="r1 rd" class="r1 r">appObj</span> = <b>null</b>)
+        {
+            <span class="c">// var app = appObj ?? System.Web.HttpContext.Current.ApplicationInstance;</span>
+        }
+
+        <b>static dynamic</b> <a id="7ac83623e7a4bd2d" href="../R/7ac83623e7a4bd2d.html" target="n" data-glyph="106,1" class="i property">Request</a>
+        {
+            [<a href="@0@mscorlib/A.html#15085db4bf5c94f0" class="t constructor">DebuggerStepThrough</a>]   <span class="c">// Step over</span>
+            <b>get</b>
+            { <b>return</b> <a href="HttpStatic.cs.html#dc32c2cfc2749249" class="t t">HttpStatic</a>.<a href="HttpStatic.cs.html#7efded907d82802e" class="i property">Request</a>; }
+        }
+        <b>static dynamic</b> <a id="ef63075c1e2a43d7" href="../R/ef63075c1e2a43d7.html" target="n" data-glyph="106,1" class="i property">Response</a>
+        {
+            [<a href="@0@mscorlib/A.html#15085db4bf5c94f0" class="t constructor">DebuggerStepThrough</a>]   <span class="c">// Step over</span>
+            <b>get</b>
+            { <b>return</b> <a href="HttpStatic.cs.html#dc32c2cfc2749249" class="t t">HttpStatic</a>.<a href="HttpStatic.cs.html#6d40050fe90ca76f" class="i property">Response</a>; }
+        }
+        <b>static dynamic</b> <a id="310e4583f72458e6" href="../R/310e4583f72458e6.html" target="n" data-glyph="106,1" class="i property">Server</a>
+        {
+            [<a href="@0@mscorlib/A.html#15085db4bf5c94f0" class="t constructor">DebuggerStepThrough</a>]   <span class="c">// Step over</span>
+            <b>get</b>
+            { <b>return</b> <a href="HttpStatic.cs.html#dc32c2cfc2749249" class="t t">HttpStatic</a>.<a href="HttpStatic.cs.html#80db86e680d92a91" class="i property">Server</a>; }
+        }
+
+        <b>public static void</b> <a id="087e5bc4b903bf1a" href="../R/087e5bc4b903bf1a.html" target="n" data-glyph="72,1" class="i method">AppError</a>(<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r2 rd" class="r2 r">error</span> = <b>null</b>)
+        {
+            <b>string</b> <span id="r3 rd" class="r3 r">reqUrl</span> = <a href="#7ac83623e7a4bd2d" class="i property">Request</a> == <b>null</b> ? <span class="s">&quot;-&quot;</span> : <a href="#7ac83623e7a4bd2d" class="i property">Request</a>.<span class="i">Url</span>.<span class="i">ToString</span>();
+            <b>if</b> (!<span class="r3 r">reqUrl</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<span class="s">&quot;.aspx&quot;</span>))
+                <a href="../Log.cs.html#a3e8993478f4ef54" class="t t">Log</a>.<a href="../Log.cs.html#6f2248a9a1e33162" class="i method">Write</a>(<span class="s">&quot;Global (MvcHttp) Application_Error: url=&quot;</span> + <span class="r3 r">reqUrl</span>);
+
+            <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="k">var</a> <span id="r4 rd" class="r4 r">err</span> = <span class="r2 r">error</span> ?? <a href="HttpStatic.cs.html#dc32c2cfc2749249" class="t t">HttpStatic</a>.<a href="HttpStatic.cs.html#80db86e680d92a91" class="i property">Server</a>.<a href="@0@System.Web/A.html#c0a387a7c22557d3" class="i method">GetLastError</a>();
+            <b>var</b> <span id="r5 rd" class="r5 r">req</span> = <a href="#7ac83623e7a4bd2d" class="i property">Request</a>;
+            <b>if</b> (<span class="r4 r">err</span> == <b>null</b> || <a href="Segment.cs.html#701d093cab6c6ef4" class="t t">Segment</a>.<a href="Segment.cs.html#293d0a86ce2b0d20" class="i field">Instance</a>.<a href="Segment.cs.html#eabd146f7f354d09" class="i method">IgnoreError</a>(<span class="r2 r">error</span>, <span class="r5 r">req</span>))
+                <b>return</b>;
+
+            <b>string</b> <span id="r6 rd" class="r6 r">strError</span> = <span class="r4 r">err</span>.<a href="@0@mscorlib/A.html#e2e19f4ed8da81aa" class="i method">ToString</a>();
+            <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="k">var</a> <span id="r7 rd" class="r7 r">baseEx</span> = <span class="r4 r">err</span>.<a href="@0@mscorlib/A.html#afeecbe8989570cf" class="i method">GetBaseException</a>();
+            <b>string</b> <span id="r8 rd" class="r8 r">baseExText</span> = <b>null</b>;
+            <b>if</b> (<span class="r7 r">baseEx</span> != <b>null</b>)
+            {
+                <span class="r6 r">strError</span> += <span class="s">&quot;\n &quot;</span> + <span class="r7 r">baseEx</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>;
+                <span class="r8 r">baseExText</span> = <span class="r7 r">baseEx</span>.<a href="@0@mscorlib/A.html#950d763693dd32d3" class="i property">StackTrace</a>.<a href="@0@mscorlib/A.html#efa5e6c14683e022" class="i method">ToString</a>();
+            }
+
+            <a href="../Log.cs.html#a3e8993478f4ef54" class="t t">Log</a>.<a href="../Log.cs.html#6f2248a9a1e33162" class="i method">Write</a>(<span class="s">&quot;Error details &quot;</span> + <span class="r6 r">strError</span>
+                    + <span class="s">&quot;: \n ip=&quot;</span> + <a href="#7ac83623e7a4bd2d" class="i property">Request</a>.<span class="i">UserHostAddress</span> + <span class="s">&quot; refer=&quot;</span> + <a href="#7ac83623e7a4bd2d" class="i property">Request</a>.<span class="i">UrlReferrer</span>
+                      + (<span class="s">&quot;\n&quot;</span> + <span class="r8 r">baseExText</span> ?? <span class="s">&quot;&quot;</span>));
+
+            <b>if</b> (<span class="r2 r">error</span> == <b>null</b>)
+            {
+                <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">Write</span>(<span class="s">&quot;&lt;br/&gt;&lt;span class=\&quot;error\&quot;&gt;&lt;pre&gt;Xml Error: &quot;</span>
+                               + <span class="r6 r">strError</span>.<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;: error&quot;</span>, <span class="s">&quot;:&lt;br/&gt;&lt;b&gt; error&lt;/b&gt;&quot;</span>) + <span class="s">&quot;&lt;/pre&gt;&lt;/span&gt;&quot;</span>);
+                <a href="#310e4583f72458e6" class="i property">Server</a>.<span class="i">ClearError</span>();
+            }
+        }
+        <b>public static void</b> <a id="f7feded35fbba5f8" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">AppEndRequest</a>()
+        {
+            <b>if</b> (<a href="#ef63075c1e2a43d7" class="i property">Response</a> == <b>null</b>)
+                <b>return</b>;
+
+            <b>if</b> (<a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">StatusCode</span> &gt;= 400) <span class="c">// == 404)</span>
+            {
+                <b>var</b> <span id="r9 rd" class="r9 r">exception</span> = <a href="#310e4583f72458e6" class="i property">Server</a>.<span class="i">GetLastError</span>();
+
+                <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">Clear</span>();
+                <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">Write</span>(<span class="s">&quot;Status=&quot;</span> + <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">StatusCode</span>);
+                <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">Write</span>(<span class="s">&quot; Url=&quot;</span> + <a href="#7ac83623e7a4bd2d" class="i property">Request</a>.<span class="i">Url</span>);
+
+                <b>if</b> (<span class="r9 r">exception</span> != <b>null</b>)
+                {
+                    <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">Write</span>(<span class="s">&quot;Error &quot;</span> + <span class="r9 r">exception</span>.<span class="i">Message</span>);
+                    <a href="#ef63075c1e2a43d7" class="i property">Response</a>.<span class="i">Write</span>(<span class="s">&quot;&lt;br&gt;&quot;</span> + <span class="r9 r">exception</span>.<span class="i">StackTrace</span>);
+                }
+
+                <a href="#310e4583f72458e6" class="i property">Server</a>.<span class="i">ClearError</span>();
+            }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="c">// for PreRequestHandlerExecuteHandler</span>
+        <b>public virtual void</b> <a id="2e5497b43033662a" href="../R/2e5497b43033662a.html" target="n" data-glyph="72,1" class="i method">AppRequestPrepare</a>()
+        {
+            <b>if</b> (<span class="i n">AiLib</span>.<span class="i n">Web</span>.<a href="Segment.cs.html#701d093cab6c6ef4" class="t t">Segment</a>.<a href="Segment.cs.html#293d0a86ce2b0d20" class="i field">Instance</a> != <b>null</b>)
+            {
+                <a href="Segment.cs.html#dfbcdaf9936acc03" class="k">var</a> <span id="r10 rd" class="r10 r">instance</span> = <span class="i n">AiLib</span>.<span class="i n">Web</span>.<a href="Segment.cs.html#701d093cab6c6ef4" class="t t">Segment</a>.<a href="Segment.cs.html#293d0a86ce2b0d20" class="i field">Instance</a>;
+                <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r11 rd" class="r11 r">request</span> = <a href="#7ac83623e7a4bd2d" class="i property">Request</a>;
+                <span class="r10 r">instance</span>.<a href="Segment.cs.html#e0cf2010036d2978" class="i method">RequestPrepare</a>(<span class="r11 r">request</span>);
+            }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> HttpApplication Context Events
+
+        <b>protected virtual void</b> <a id="7be2d690ca5d681c" href="../R/7be2d690ca5d681c.html" target="n" data-glyph="75,1" class="i method">Init</a>(<a href="@0@System.Web/A.html#46c4f0aa7cd268fe" class="t t">HttpApplication</a> <span id="r12 rd" class="r12 r">context</span>)
+        {
+            <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>.<a href="@0@System.Web/A.html#44a3829d7b2094e0" class="i property">Application</a><a href="@0@System.Web/A.html#16934d33fd23eb9f">[</a><a href="#abdba99392a0d0a4" class="i field">HandlerRegistrationFlag</a>] = <b>true</b>;
+
+            <span class="r12 r">context</span>.<a href="@0@System.Web/A.html#3c4cbd833af41b7d" class="i">PreSendRequestHeaders</a> += <b>new</b> <span class="t">EventHandler</span>(<a href="#e71b80bfd3899adc" class="i method">PreSendRequestHeadersHandler</a>);
+            <span class="r12 r">context</span>.<a href="@0@System.Web/A.html#e838919ed3b66389" class="i">BeginRequest</a> += <b>new</b> <span class="t">EventHandler</span>(<a href="#ebcc15d6460cca6f" class="i method">BeginRequestHandler</a>);
+            <span class="r12 r">context</span>.<a href="@0@System.Web/A.html#04ded2d9f4c5418b" class="i">PreRequestHandlerExecute</a> += <b>new</b> <span class="t">EventHandler</span>(<a href="#0d874ef760254026" class="i method">PreRequestHandlerExecuteHandler</a>);
+
+            <span class="c">// Occurs when a security module has established the identity of the user.</span>
+            <span class="r12 r">context</span>.<a href="@0@System.Web/A.html#5d86f5ff43f7a57f" class="i">Error</a> += <b>new</b> <span class="t">EventHandler</span>(<a href="#833a70c0c8067562" class="i method">OnError</a>);
+
+            <a href="SegmentLang.cs.html#1560d52eea3e70e5" class="t t">SegmentLang</a>.<a href="SegmentLang.cs.html#217ca99a5e7e96ae" class="i field">Instance</a>.<a href="SegmentLang.cs.html#e9bee8616049ed4c" class="i method">InitHandler</a>(<span class="r12 r">context</span>, <a href="#196280eab96bfdac" class="k">this</a>);
+        }
+
+        <span class="c">/* https://support.microsoft.com/en-us/kb/307985/en-us
+
+        An HttpApplication class provides a number of events with which modules can synchronize. 
+        The following events are available for modules to synchronize with on each request. 
+        These events are listed in sequential order: 
+        1.BeginRequest
+        2.AuthenticateRequest
+        3.AuthorizeRequest
+        4.ResolveRequestCache
+        5.AcquireRequestState
+        6.PreRequestHandlerExecute
+        7.PostRequestHandlerExecute
+        8.ReleaseRequestState
+        9.UpdateRequestCache
+        10.EndRequest
+
+        The following events are available for modules to synchronize with for each request transmission. 
+        The order of these events is non-deterministic. 
+         
+        •PreSendRequestHeaders
+        •PreSendRequestContent
+        •Error
+        */</span>
+
+        <b>protected virtual void</b> <a id="833a70c0c8067562" href="../R/833a70c0c8067562.html" target="n" data-glyph="75,1" class="i method">OnError</a>(<b>object</b> <span id="r13 rd" class="r13 r">sender</span>, <a href="@0@mscorlib/A.html#9a1496aa60befd10" class="t t">EventArgs</a> <span id="r14 rd" class="r14 r">args</span>)
+        {
+            <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r15 rd" class="r15 r">err</span> = <a href="#310e4583f72458e6" class="i property">Server</a> == <b>null</b> ? <b>null</b> : <a href="#310e4583f72458e6" class="i property">Server</a>.<span class="i">GetLastError</span>();
+            <a href="#087e5bc4b903bf1a" class="i method">AppError</a>(<span class="r15 r">err</span>);
+        }
+
+        <b>protected virtual void</b> <a id="e71b80bfd3899adc" href="../R/e71b80bfd3899adc.html" target="n" data-glyph="75,1" class="i method">PreSendRequestHeadersHandler</a>(<b>object</b> <span id="r16 rd" class="r16 r">sender</span>, <a href="@0@mscorlib/A.html#9a1496aa60befd10" class="t t">EventArgs</a> <span id="r17 rd" class="r17 r">args</span>)
+        {
+            <b>if</b> (<a href="#9c146a1ca3cb9c94" class="i property">RequestProcessState</a> == <a href="#0da30e8916aa5e0b" class="t t">RequestProcessState</a>.<a href="#e2ef6a7082dafd24" class="i field">Error</a>)
+                <b>return</b>;
+
+            <a href="#196280eab96bfdac" class="k">this</a>.<a href="#449fe81a0e2165cd" class="i field">requestProcessState</a> = <a href="#0da30e8916aa5e0b" class="t t">RequestProcessState</a>.<a href="#901410ee80e5e51f" class="i field">Processed</a>;
+            <a href="@0@System.Web/A.html#46c4f0aa7cd268fe" class="t t">HttpApplication</a> <span id="r18 rd" class="r18 r">app</span> = (<a href="@0@System.Web/A.html#46c4f0aa7cd268fe" class="t t">HttpApplication</a>)<span class="r16 r">sender</span>;
+            <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <span id="r19 rd" class="r19 r">response</span> = <span class="r18 r">app</span>.<a href="@0@System.Web/A.html#c3280c8eaa9532f7" class="i property">Response</a>;
+            <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r20 rd" class="r20 r">request</span> = <span class="r18 r">app</span>.<a href="@0@System.Web/A.html#83536523be3c6bcc" class="i property">Request</a>;
+
+            <b>if</b> (<span class="r19 r">response</span>.<a href="@0@System.Web/A.html#191d897314399aea" class="i property">IsRequestBeingRedirected</a>)
+                <b>return</b>;
+
+            <span class="c">//if (response.StatusCode == 403 &amp;&amp; request.Url.PathAndQuery == &quot;/&quot;)</span>
+            <span class="c">//{</span>
+            <span class="c">//    response.Redirect(&quot;?&quot;);</span>
+            <span class="c">//    return;</span>
+            <span class="c">//}</span>
+
+            <b>if</b> (<a href="#0da196dc24f595b4" class="i method">IsCallBack</a>(<span class="r20 r">request</span>))
+            {
+                <b>if</b> (<a href="#84d475e66ffa6b8f" class="i method">IsErrorCode</a>(<span class="r19 r">response</span>.<a href="@0@System.Web/A.html#e55cd826672fb06a" class="i property">StatusCode</a>))
+                {
+                    <span class="r19 r">response</span>.<a href="@0@System.Web/A.html#0c0a4ebef2d2c8d5" class="i property">Output</a>.<a href="@0@mscorlib/A.html#67512bb1436e97cf" class="i method">Write</a>(<span class="s">&quot;Error code {0} {1}&quot;</span>, <span class="r19 r">response</span>.<a href="@0@System.Web/A.html#e55cd826672fb06a" class="i property">StatusCode</a>, <span class="r19 r">response</span>);
+                }
+            }
+        }
+
+        <b>protected virtual void</b> <a id="ebcc15d6460cca6f" href="../R/ebcc15d6460cca6f.html" target="n" data-glyph="75,1" class="i method">BeginRequestHandler</a>(<b>object</b> <span id="r21 rd" class="r21 r">sender</span>, <a href="@0@mscorlib/A.html#9a1496aa60befd10" class="t t">EventArgs</a> <span id="r22 rd" class="r22 r">e</span>)
+        {
+            <b>bool</b> <span id="r23 rd" class="r23 r">requestProcessed</span> = (<a href="#196280eab96bfdac" class="k">this</a> <b>as</b> <a href="#c13c1a072bb5b2f7" class="t t">IRequestHttpHandler</a>).<a href="#a36b1bf4ebebc805" class="i method">ProcessRequestCore</a>(<a href="#2a41fa169323a3bd" class="t t">RequestEvent</a>.<a href="#89c60336135d2905" class="i field">BeginRequest</a>);
+            <span class="c">//if(!requestProcessed &amp;&amp; UploadProgressManager.IsProcessRequestAllowed()) </span>
+            <span class="c">//    UploadProgressManager.ProcessRequest(ref requestProcessState);</span>
+        }
+
+        <b>protected virtual void</b> <a id="0d874ef760254026" href="../R/0d874ef760254026.html" target="n" data-glyph="75,1" class="i method">PreRequestHandlerExecuteHandler</a>(<b>object</b> <span id="r24 rd" class="r24 r">sender</span>, <a href="@0@mscorlib/A.html#9a1496aa60befd10" class="t t">EventArgs</a> <span id="r25 rd" class="r25 r">e</span>)
+        {
+            <a href="#2e5497b43033662a" class="i method">AppRequestPrepare</a>();
+            (<a href="#196280eab96bfdac" class="k">this</a> <b>as</b> <a href="#c13c1a072bb5b2f7" class="t t">IRequestHttpHandler</a>).<a href="#a36b1bf4ebebc805" class="i method">ProcessRequestCore</a>(<a href="#2a41fa169323a3bd" class="t t">RequestEvent</a>.<a href="#c28fd3c820e41ad1" class="i field">PreRequestHandlerExecute</a>);
+        }
+
+        <a href="#0da30e8916aa5e0b" class="t t">RequestProcessState</a> <a id="449fe81a0e2165cd" href="../R/449fe81a0e2165cd.html" target="n" data-glyph="46,1" class="i field">requestProcessState</a> = <a href="#0da30e8916aa5e0b" class="t t">RequestProcessState</a>.<a href="#4753e88dbf8d70b6" class="i field">Unprocessed</a>;
+        <b>public</b> <a href="#0da30e8916aa5e0b" class="t t">RequestProcessState</a> <a id="9c146a1ca3cb9c94" href="../R/9c146a1ca3cb9c94.html" target="n" data-glyph="102,1" class="i property">RequestProcessState</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#449fe81a0e2165cd" class="i field">requestProcessState</a>; }
+        }
+        <b>public const string</b> <a id="abdba99392a0d0a4" href="../R/abdba99392a0d0a4.html" target="n" data-glyph="6,1" class="i field">HandlerRegistrationFlag</a> = <span class="s">&quot;HttpHandlerModuleRegistered&quot;</span>;
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Methods
+
+        <b>bool</b> <a href="#c13c1a072bb5b2f7" class="t t">IRequestHttpHandler</a>.<a href="#a36b1bf4ebebc805" class="i method">ProcessRequestCore</a>(<a href="#2a41fa169323a3bd" class="t t">RequestEvent</a> <span id="r26 rd" class="r26 r">requestEvent</span>)
+        {
+            <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r27 rd" class="r27 r">request</span> = <span class="c">// HttpUtils.GetRequest();</span>
+                        (<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a> != <b>null</b>) ? <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a> : <b>null</b>;
+
+            <b>foreach</b> (<a href="#aaf7fcabb2122585" class="t t">IHttpModuleSubscriber</a> <span id="r28 rd" class="r28 r">subscriber</span> <b>in</b> <a href="#4632bf2da7e563e2" class="i field">subscribers</a>)
+            {
+                <b>if</b> (<span class="r28 r">subscriber</span>.<a href="#9c91505f8351a5e6" class="i method">RequestRecipient</a>(<span class="r27 r">request</span>, <span class="r26 r">requestEvent</span>))
+                {
+                    <span class="r28 r">subscriber</span>.<a href="#9ea4cdcc37b2880f" class="i method">ProcessRequest</a>();
+                    <b>return true</b>;
+                }
+            }
+            <b>return false</b>;
+        }
+
+        <b>protected virtual bool</b> <a id="0da196dc24f595b4" href="../R/0da196dc24f595b4.html" target="n" data-glyph="75,1" class="i method">IsCallBack</a>(<a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r29 rd" class="r29 r">request</span>)
+        {
+            <b>if</b> (<span class="r29 r">request</span>.<a href="@0@System.Web/A.html#8c81295d9d2f6486" class="i property">HttpMethod</a> == <span class="s">&quot;GET&quot;</span>)
+                <b>return false</b>;
+            <b>bool</b> <span id="r30 rd" class="r30 r">hasParam</span> = <b>false</b>;
+
+            <span class="c">//try</span>
+            <span class="c">//{</span>
+            <span class="c">//    hasParam = !string.IsNullOrEmpty(HttpUtils.GetValueFromRequest(</span>
+            <span class="c">//        request, RenderUtils.CallbackControlIDParamName));</span>
+            <span class="c">//}</span>
+            <span class="c">//catch (HttpRequestValidationException)</span>
+            <span class="c">//{</span>
+            <span class="c">//    hasParam = !string.IsNullOrEmpty(HttpUtils.GetValueFromRequest(</span>
+            <span class="c">//        request, RenderUtils.CallbackControlIDParamName));</span>
+            <span class="c">//}</span>
+            <b>return</b> <span class="r30 r">hasParam</span>;
+            <span class="c">//|| MvcUtils.IsCallback();</span>
+        }
+
+        <b>protected bool</b> <a id="84d475e66ffa6b8f" href="../R/84d475e66ffa6b8f.html" target="n" data-glyph="75,1" class="i method">IsErrorCode</a>(<b>int</b> <span id="r31 rd" class="r31 r">code</span>)
+        {
+            <b>if</b> (<span class="r31 r">code</span> == 404 || <span class="r31 r">code</span> == 500)
+                <b>return true</b>;
+            <b>return false</b>;
+        }
+
+        <b>protected virtual void</b> <a id="8bfca2d7fd7aa88d" href="../R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">PrepareContent</a>(<b>ref</b> <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <span id="r32 rd" class="r32 r">response</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="@0@System.Web/A.html#3e0e69ff980cf748" class="t t">HttpCookie</a>&gt; <span id="r33 rd" class="r33 r">cookies</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="@0@System.Web/A.html#3e0e69ff980cf748" class="t t">HttpCookie</a>&gt;(<span class="r32 r">response</span>.<a href="@0@System.Web/A.html#5168357d8d389e38" class="i property">Cookies</a>.<a href="@0@System/A.html#fbd562ca3c55ec32" class="i property">Count</a>);
+            <b>for</b> (<b>int</b> <span id="r34 rd" class="r34 r">i</span> = 0; <span class="r34 r">i</span> &lt; <span class="r32 r">response</span>.<a href="@0@System.Web/A.html#5168357d8d389e38" class="i property">Cookies</a>.<a href="@0@System/A.html#fbd562ca3c55ec32" class="i property">Count</a>; <span class="r34 r">i</span>++)
+                <span class="r33 r">cookies</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r32 r">response</span>.<a href="@0@System.Web/A.html#5168357d8d389e38" class="i property">Cookies</a><a href="@0@System.Web/A.html#97368da3f591f7b0">[</a><span class="r34 r">i</span>]);
+
+            <span class="r32 r">response</span>.<a href="@0@System.Web/A.html#f214144fec673e84" class="i method">ClearHeaders</a>();
+            <span class="r32 r">response</span>.<a href="@0@System.Web/A.html#4af6efed88875b45" class="i method">ClearContent</a>();
+            <span class="r32 r">response</span>.<a href="@0@System.Web/A.html#c3523c37f657e0de" class="i property">ContentType</a> = <span class="s">&quot;text/html&quot;</span>;
+            <b>for</b> (<b>int</b> <span id="r35 rd" class="r35 r">i</span> = 0; <span class="r35 r">i</span> &lt; <span class="r33 r">cookies</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r35 r">i</span>++)
+                <span class="r32 r">response</span>.<a href="@0@System.Web/A.html#9d07a5c7c72ff0bf" class="i method">AppendCookie</a>(<span class="r33 r">cookies</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r35 r">i</span>]);
+            <span class="r32 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#d5b27ee5ba11b9c7" class="i method">SetCacheability</a>(<a href="@0@System.Web/A.html#68d73f11cf2008ca" class="t t">HttpCacheability</a>.<a href="@0@System.Web/A.html#a2c80f4ad066e890" class="i field">NoCache</a>);
+        }
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <b>protected virtual void</b> <a id="cdf6b5cf6723eeee" href="../R/cdf6b5cf6723eeee.html" target="n" data-glyph="75,1" class="i method">Dispose</a>(<b>bool</b> <span id="r36 rd" class="r36 r">isDispose</span>) { }
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> IHttpModule
+        <b>void</b> <a href="@0@System.Web/A.html#2352844b030631b2" class="t t">IHttpModule</a>.<a href="@0@System.Web/A.html#cf68af04371264f5" class="i method">Init</a>(<a href="@0@System.Web/A.html#46c4f0aa7cd268fe" class="t t">HttpApplication</a> <span id="r37 rd" class="r37 r">context</span>)
+        {
+            <a href="#7be2d690ca5d681c" class="i method">Init</a>(<span class="r37 r">context</span>);
+        }
+        <b>void</b> <a href="@0@System.Web/A.html#2352844b030631b2" class="t t">IHttpModule</a>.<a href="@0@System.Web/A.html#c235eebb80dc2fe4" class="i method">Dispose</a>()
+        {
+            <a href="#cdf6b5cf6723eeee" class="i method">Dispose</a>(<b>true</b>);
+        }
+        <b>bool</b> <a href="@0@System.Web/A.html#62c4e10ee7e6cd36" class="t t">IHttpHandler</a>.<a href="@0@System.Web/A.html#2a6a6e0f471f8282" class="i property">IsReusable</a>
+        {
+            <b>get</b> { <b>return true</b>; }
+        }
+
+        <span class="c">// void IHttpHandler.ProcessRequest(HttpContext context)</span>
+        <b>public virtual void</b> <a id="110e18151d715a8f" href="../R/110e18151d715a8f.html" target="n" data-glyph="72,1" class="i method">ProcessRequest</a>(<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a> <span id="r38 rd" class="r38 r">context</span>)
+        {
+            <a href="#9f1b38bf16d775bc" class="t t">CustomCssJsManager</a>.<a href="#aa4fe152c9b9810c" class="i method">ProcessRequest</a>();
+        }
+
+        <b>void</b> <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>.<a href="@0@mscorlib/A.html#4e23fed29bd598fa" class="i method">Dispose</a>() { <a href="#196280eab96bfdac" class="k">this</a>.<a href="#cdf6b5cf6723eeee" class="i method">Dispose</a>(<b>true</b>); }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+    }
+
+    <span class="k preprocess">#</span><span class="k preprocess">region</span> Dx Utils
+
+    <b>public static class</b> <a id="9f1b38bf16d775bc" href="../R/9f1b38bf16d775bc.html" target="n" data-glyph="0,0" class="t t">CustomCssJsManager</a>
+    {
+        <b>const string</b>
+            <a id="6a9629edb0955fee" href="../R/6a9629edb0955fee.html" target="n" data-glyph="10,1" class="i field">CssFolderParameterName</a> = <span class="s">&quot;cssfolder&quot;</span>,
+            <a id="7009f2d96e0dca6d" href="../R/7009f2d96e0dca6d.html" target="n" data-glyph="10,1" class="i field">CssFileParameterName</a> = <span class="s">&quot;cssfile&quot;</span>,
+            <a id="bb3bd7d2e1a40af2" href="../R/bb3bd7d2e1a40af2.html" target="n" data-glyph="10,1" class="i field">JsFolderParameterName</a> = <span class="s">&quot;jsfolder&quot;</span>,
+            <a id="85e1c117efb6ec4d" href="../R/85e1c117efb6ec4d.html" target="n" data-glyph="10,1" class="i field">JsFileParameterName</a> = <span class="s">&quot;jsfile&quot;</span>,
+            <a id="46df61b800309a75" href="../R/46df61b800309a75.html" target="n" data-glyph="10,1" class="i field">JsFileSetParameterName</a> = <span class="s">&quot;jsfileset&quot;</span>,
+            <a id="24c981486cff282c" href="../R/24c981486cff282c.html" target="n" data-glyph="10,1" class="i field">CssMimeType</a> = <span class="s">&quot;text/css&quot;</span>,
+            <a id="ed23dc26e7fab18b" href="../R/../../0000000000.html" target="n" data-glyph="10,1" class="i field">JsMimeType</a> = <span class="s">&quot;text/javascript&quot;</span>,
+            <a id="26b1061c5ac2206a" href="../R/26b1061c5ac2206a.html" target="n" data-glyph="10,1" class="i field">CssFileExtension</a> = <span class="s">&quot;.css&quot;</span>,
+            <a id="511912ab0f2199b4" href="../R/511912ab0f2199b4.html" target="n" data-glyph="10,1" class="i field">JsFileExtension</a> = <span class="s">&quot;.js&quot;</span>;
+
+        <b>static void</b> <a id="67276321cb91ebab" href="../R/67276321cb91ebab.html" target="n" data-glyph="76,1" class="i method">SetCaching</a>()
+        {
+            <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <span id="r39 rd" class="r39 r">response</span> = <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#7248779190f09826" class="i method">GetResponse</a>();
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#7a6a9fdeb0c0409a" class="i property">VaryByParams</a><a href="@0@System.Web/A.html#662c04b658ec4fa0">[</a><a href="#6a9629edb0955fee" class="i field">CssFolderParameterName</a>] = <b>true</b>;
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#7a6a9fdeb0c0409a" class="i property">VaryByParams</a><a href="@0@System.Web/A.html#662c04b658ec4fa0">[</a><a href="#7009f2d96e0dca6d" class="i field">CssFileParameterName</a>] = <b>true</b>;
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#7a6a9fdeb0c0409a" class="i property">VaryByParams</a><a href="@0@System.Web/A.html#662c04b658ec4fa0">[</a><a href="#bb3bd7d2e1a40af2" class="i field">JsFolderParameterName</a>] = <b>true</b>;
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#7a6a9fdeb0c0409a" class="i property">VaryByParams</a><a href="@0@System.Web/A.html#662c04b658ec4fa0">[</a><a href="#85e1c117efb6ec4d" class="i field">JsFileParameterName</a>] = <b>true</b>;
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#7a6a9fdeb0c0409a" class="i property">VaryByParams</a><a href="@0@System.Web/A.html#662c04b658ec4fa0">[</a><a href="#46df61b800309a75" class="i field">JsFileSetParameterName</a>] = <b>true</b>;
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#d5b27ee5ba11b9c7" class="i method">SetCacheability</a>(<a href="@0@System.Web/A.html#68d73f11cf2008ca" class="t t">HttpCacheability</a>.<a href="@0@System.Web/A.html#1acd342a074a2ee3" class="i field">ServerAndPrivate</a>);
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#80a0b5a3e086f729" class="i method">SetOmitVaryStar</a>(<b>true</b>);
+            <span class="r39 r">response</span>.<a href="@0@System.Web/A.html#5bd782bcf9b03a2c" class="i property">Cache</a>.<a href="@0@System.Web/A.html#cebaa743e8198acc" class="i method">SetLastModifiedFromFileDependencies</a>();
+        }
+
+        <b>public static void</b> <a id="aa4fe152c9b9810c" href="../R/aa4fe152c9b9810c.html" target="n" data-glyph="72,1" class="i method">ProcessRequest</a>()
+        {
+            <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <span id="r40 rd" class="r40 r">response</span> = <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#7248779190f09826" class="i method">GetResponse</a>();
+            <span class="r40 r">response</span>.<a href="@0@System.Web/A.html#aec2274e15229c21" class="i method">Clear</a>();
+            <b>try</b>
+            {
+                <a href="#e3da7ddcb1d60aa5" class="i method">MakeResponse</a>();
+                <a href="#67276321cb91ebab" class="i method">SetCaching</a>();
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r41 rd" class="r41 r">ex</span>)
+            {
+                <span class="r40 r">response</span>.<a href="@0@System.Web/A.html#aec2274e15229c21" class="i method">Clear</a>();
+                <span class="r40 r">response</span>.<a href="@0@System.Web/A.html#e55cd826672fb06a" class="i property">StatusCode</a> = 500;
+                <span class="r40 r">response</span>.<a href="@0@System.Web/A.html#6a946f5c51c77e42" class="i property">StatusDescription</a> = <span class="r41 r">ex</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>;
+            }
+        }
+
+        <b>static void</b> <a id="e3da7ddcb1d60aa5" href="../R/e3da7ddcb1d60aa5.html" target="n" data-glyph="76,1" class="i method">MakeResponse</a>()
+        {
+            <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r42 rd" class="r42 r">request</span> = <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#d2cb5f789034ffea" class="i method">GetRequest</a>();
+            <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <span id="r43 rd" class="r43 r">response</span> = <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#7248779190f09826" class="i method">GetResponse</a>();
+            <b>string</b> <span id="r44 rd" class="r44 r">cssFolderParameter</span> = <span class="r42 r">request</span>.<a href="@0@System.Web/A.html#b2ccd250d87c70c7" class="i property">QueryString</a><a href="@0@System/A.html#b33fdfa0b2d0a3ad">[</a><a href="#6a9629edb0955fee" class="i field">CssFolderParameterName</a>];
+            <b>if</b> (!<b>string</b>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r44 r">cssFolderParameter</span>))
+            {
+                <span class="r43 r">response</span>.<a href="@0@System.Web/A.html#c3523c37f657e0de" class="i property">ContentType</a> = <a href="#24c981486cff282c" class="i field">CssMimeType</a>;
+                <a href="#39441fd7ec2606ac" class="i method">WriteFolderToResponse</a>(<span class="r44 r">cssFolderParameter</span>, <a href="#26b1061c5ac2206a" class="i field">CssFileExtension</a>);
+            }
+        }
+
+        <b>public static bool</b> <a id="563dcf839d8d3ae3" href="../R/563dcf839d8d3ae3.html" target="n" data-glyph="72,1" class="i method">IsAppRelativePath</a>(<b>string</b> <span id="r45 rd" class="r45 r">path</span>)
+        {
+            <b>if</b> ((<span class="r45 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0) &amp;&amp; (<span class="r45 r">path</span>[0] == <span class="s">&#39;~&#39;</span>))
+                <b>return</b> (<span class="r45 r">path</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 1) || <a href="#bade44067f5e6957" class="i method">IsRooted</a>(<span class="r45 r">path</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1));
+            <b>else
+                return false</b>;
+        }
+
+        <b>static bool</b> <a id="bade44067f5e6957" href="../R/bade44067f5e6957.html" target="n" data-glyph="76,1" class="i method">IsRooted</a>(<b>string</b> <span id="r46 rd" class="r46 r">basepath</span>)
+        {
+            <b>return</b> !<b>string</b>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r46 r">basepath</span>) &amp;&amp; ((<span class="r46 r">basepath</span>[0] == <span class="s">&#39;\\&#39;</span>) || (<span class="r46 r">basepath</span>[0] == <span class="s">&#39;/&#39;</span>));
+        }
+
+        <b>static string</b> <a id="f0f23ea63e6ba7f9" href="../R/f0f23ea63e6ba7f9.html" target="n" data-glyph="76,1" class="i method">GetPhysicalPath</a>(<b>string</b> <span id="r47 rd" class="r47 r">path</span>)
+        {
+            <span class="c">//if (UrlUtils.IsAbsolutePhysicalPath(path))</span>
+            <span class="c">//    throw new Exception(</span>
+            <span class="c">//    @&quot;An absolute physical path is not allowed. Use a virtual path instead, e.g., &quot;&quot;~\scripts\file1.js&quot;&quot;.&quot;);</span>
+
+            <b>if</b> (!<a href="#563dcf839d8d3ae3" class="i method">IsAppRelativePath</a>(<span class="r47 r">path</span>))
+                <span class="r47 r">path</span> = <span class="s">&quot;~/&quot;</span> + <span class="r47 r">path</span>;
+            <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r48 rd" class="r48 r">request</span> = <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#d2cb5f789034ffea" class="i method">GetRequest</a>();
+            <b>string</b> <span id="r49 rd" class="r49 r">physicalPath</span> = <span class="r48 r">request</span>.<a href="@0@System.Web/A.html#e79e6f1634d984df" class="i method">MapPath</a>(<span class="r47 r">path</span>);
+            <b>if</b> (!<span class="r49 r">physicalPath</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r48 r">request</span>.<a href="@0@System.Web/A.html#0a523fdfdccc3183" class="i property">PhysicalApplicationPath</a>))
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#df2d82d91ca29e40" class="t constructor">Exception</a>(<span class="s">@&quot;Cannot use the specified path to exit above the application directory&quot;</span>);
+            <b>return</b> <span class="r49 r">physicalPath</span>;
+        }
+
+        <b>static void</b> <a id="510d7ae80554fc3f" href="../R/510d7ae80554fc3f.html" target="n" data-glyph="76,1" class="i method">WriteFileToResponse</a>(<b>string</b> <span id="r50 rd" class="r50 r">fileName</span>, <b>string</b> <span id="r51 rd" class="r51 r">allowedExtension</span>)
+        {
+            <b>if</b> (<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#f424e433705aeb09" class="i method">GetExtension</a>(<span class="r50 r">fileName</span>).<a href="@0@mscorlib/A.html#2d51c212cb09178e" class="i method">ToLowerInvariant</a>() != <span class="r51 r">allowedExtension</span>) <b>return</b>;
+            <b>string</b> <span id="r52 rd" class="r52 r">content</span> = <a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#8a84c56a62fd8d45" class="i method">ReadAllText</a>(<span class="r50 r">fileName</span>);
+            <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <span id="r53 rd" class="r53 r">response</span> = <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#7248779190f09826" class="i method">GetResponse</a>();
+            <span class="r53 r">response</span>.<a href="@0@System.Web/A.html#355af38c52cf2f71" class="i method">Write</a>(<span class="r52 r">content</span>);
+            <span class="r53 r">response</span>.<a href="@0@System.Web/A.html#586e8fa34970916e" class="i method">AddFileDependency</a>(<span class="r50 r">fileName</span>);
+        }
+
+        <b>static void</b> <a id="39441fd7ec2606ac" href="../R/39441fd7ec2606ac.html" target="n" data-glyph="76,1" class="i method">WriteFolderToResponse</a>(<b>string</b> <span id="r54 rd" class="r54 r">directoryPath</span>, <b>string</b> <span id="r55 rd" class="r55 r">fileExtension</span>)
+        {
+            <b>const char</b> <span id="r56 rd" class="r56 r">AllFilesMaskToken</span> = <span class="s">&#39;*&#39;</span>;
+            <b>string</b> <span id="r57 rd" class="r57 r">physicalPath</span> = <a href="#f0f23ea63e6ba7f9" class="i method">GetPhysicalPath</a>(<span class="r54 r">directoryPath</span>);
+            <b>string</b>[] <span id="r58 rd" class="r58 r">fileNames</span> = <a href="@0@mscorlib/A.html#b3ad5f0ba800bb28" class="t t">Directory</a>.<a href="@0@mscorlib/A.html#89fc2d5bb99786b7" class="i method">GetFiles</a>(<span class="r57 r">physicalPath</span>, <span class="r56 r">AllFilesMaskToken</span> + <span class="r55 r">fileExtension</span>);
+            <b>foreach</b> (<b>string</b> <span id="r59 rd" class="r59 r">fileName</span> <b>in</b> <span class="r58 r">fileNames</span>)
+                <a href="#510d7ae80554fc3f" class="i method">WriteFileToResponse</a>(<span class="r59 r">fileName</span>, <span class="r55 r">fileExtension</span>);
+            <a href="#ce157bbab0df02a4" class="t t">HttpUtils</a>.<a href="#7248779190f09826" class="i method">GetResponse</a>().<a href="@0@System.Web/A.html#586e8fa34970916e" class="i method">AddFileDependency</a>(<span class="r57 r">physicalPath</span>);
+        }
+        <b>static void</b> <a id="4a9c8a9a55780f2f" href="../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">WriteJsFileSetToResponse</a>(<b>string</b> <span id="r60 rd" class="r60 r">fileSetParam</span>)
+        {
+            <b>const char</b> <span id="r61 rd" class="r61 r">FileNameSeparator</span> = <span class="s">&#39;;&#39;</span>;
+            <b>string</b>[] <span id="r62 rd" class="r62 r">fileNames</span> = <span class="r60 r">fileSetParam</span>.<a href="@0@mscorlib/A.html#1c4a9dc78ba38999" class="i method">Split</a>(<span class="r61 r">FileNameSeparator</span>);
+            <b>foreach</b> (<b>string</b> <span id="r63 rd" class="r63 r">fileName</span> <b>in</b> <span class="r62 r">fileNames</span>)
+                <a href="#510d7ae80554fc3f" class="i method">WriteFileToResponse</a>(<a href="#f0f23ea63e6ba7f9" class="i method">GetPhysicalPath</a>(<span class="r63 r">fileName</span>), <a href="#511912ab0f2199b4" class="i field">JsFileExtension</a>);
+        }
+
+    }
+
+    <b>public static class</b> <a id="ce157bbab0df02a4" href="../R/ce157bbab0df02a4.html" target="n" data-glyph="0,0" class="t t">HttpUtils</a>
+    {
+        <b>public const string</b> <a id="ee825bcfe650b3c4" href="../R/../../0000000000.html" target="n" data-glyph="6,1" class="i field">HttpHandlerModuleName</a> = <span class="s">&quot;HttpHandlerModule&quot;</span>;
+
+        <b>public static</b> <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <a id="d2cb5f789034ffea" href="../R/d2cb5f789034ffea.html" target="n" data-glyph="72,1" class="i method">GetRequest</a>()
+        {
+            <b>if</b> (<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a> != <b>null</b>)
+                <b>return</b> <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>;
+            <b>return null</b>;
+        }
+
+        <b>public static</b> <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <a id="7ee18eae3278dcc9" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetRequest</a>(<a href="@0@System.Web/A.html#87dbac93d9749fa2" class="t t">Control</a> <span id="r64 rd" class="r64 r">control</span>)
+        {
+            <b>return</b> <a href="#8c328a8e0c2f15e5" class="i method">GetRequest</a>(<span class="r64 r">control</span>.<a href="@0@System.Web/A.html#4241b2a206ba1eb6" class="i property">Page</a>);
+        }
+        <b>public static</b> <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <a id="8c328a8e0c2f15e5" href="../R/8c328a8e0c2f15e5.html" target="n" data-glyph="72,1" class="i method">GetRequest</a>(<a href="@0@System.Web/A.html#a7e11608d83dac42" class="t t">Page</a> <span id="r65 rd" class="r65 r">page</span>)
+        {
+            <b>if</b> (<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a> != <b>null</b>)
+                <b>return</b> <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>.<a href="@0@System.Web/A.html#1ef28ccd612d621c" class="i property">Request</a>;
+            <b>else if</b> (<span class="r65 r">page</span> != <b>null</b>)
+                <b>return</b> <span class="r65 r">page</span>.<a href="@0@System.Web/A.html#c0088d692477446d" class="i property">Request</a>;
+            <b>else
+                return null</b>;
+        }
+
+
+        <b>public static</b> <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <a id="7248779190f09826" href="../R/7248779190f09826.html" target="n" data-glyph="72,1" class="i method">GetResponse</a>()
+        {
+            <b>return</b> <a href="#7fc76b3792464130" class="i method">GetResponse</a>((<a href="@0@System.Web/A.html#a7e11608d83dac42" class="t t">Page</a>)<b>null</b>);
+        }
+        <b>public static</b> <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <a id="44b6af23968110f4" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetResponse</a>(<a href="@0@System.Web/A.html#87dbac93d9749fa2" class="t t">Control</a> <span id="r66 rd" class="r66 r">control</span>)
+        {
+            <b>return</b> <a href="#7fc76b3792464130" class="i method">GetResponse</a>(<span class="r66 r">control</span>.<a href="@0@System.Web/A.html#4241b2a206ba1eb6" class="i property">Page</a>);
+        }
+        <b>public static</b> <a href="@0@System.Web/A.html#e0024ceb56a35b12" class="t t">HttpResponse</a> <a id="7fc76b3792464130" href="../R/7fc76b3792464130.html" target="n" data-glyph="72,1" class="i method">GetResponse</a>(<a href="@0@System.Web/A.html#a7e11608d83dac42" class="t t">Page</a> <span id="r67 rd" class="r67 r">page</span>)
+        {
+            <b>if</b> (<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a> != <b>null</b>)
+                <b>return</b> <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>.<a href="@0@System.Web/A.html#f5621f312ad2934e" class="i property">Response</a>;
+            <b>else if</b> (<span class="r67 r">page</span> != <b>null</b>)
+                <b>return</b> <span class="r67 r">page</span>.<a href="@0@System.Web/A.html#10eeb8163b6fbfb8" class="i property">Response</a>;
+            <b>else
+                return null</b>;
+        }
+        <b>public static</b> <a href="@0@System/A.html#43778f3f0bc795d4" class="t t">NameValueCollection</a> <a id="73f01def5d66c0af" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetQuery</a>()
+        {
+            <b>return</b> <a href="#0036fb18e1141114" class="i method">GetQuery</a>((<a href="@0@System.Web/A.html#a7e11608d83dac42" class="t t">Page</a>)<b>null</b>);
+        }
+        <b>public static</b> <a href="@0@System/A.html#43778f3f0bc795d4" class="t t">NameValueCollection</a> <a id="d36b49fbbd740bb9" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetQuery</a>(<a href="@0@System.Web/A.html#87dbac93d9749fa2" class="t t">Control</a> <span id="r68 rd" class="r68 r">control</span>)
+        {
+            <b>return</b> <a href="#0036fb18e1141114" class="i method">GetQuery</a>(<span class="r68 r">control</span>.<a href="@0@System.Web/A.html#4241b2a206ba1eb6" class="i property">Page</a>);
+        }
+        <b>public static</b> <a href="@0@System/A.html#43778f3f0bc795d4" class="t t">NameValueCollection</a> <a id="0036fb18e1141114" href="../R/0036fb18e1141114.html" target="n" data-glyph="72,1" class="i method">GetQuery</a>(<a href="@0@System.Web/A.html#a7e11608d83dac42" class="t t">Page</a> <span id="r69 rd" class="r69 r">page</span>)
+        {
+            <a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r70 rd" class="r70 r">request</span> = <a href="#8c328a8e0c2f15e5" class="i method">GetRequest</a>(<span class="r69 r">page</span>);
+            <b>return</b> <span class="r70 r">request</span> != <b>null</b> ? <span class="r70 r">request</span>.<a href="@0@System.Web/A.html#b2ccd250d87c70c7" class="i property">QueryString</a> : <b>null</b>;
+        }
+    }
+
+    <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+    <b>public interface</b> <a id="aaf7fcabb2122585" href="../R/aaf7fcabb2122585.html" target="n" data-glyph="48,0" class="t t">IHttpModuleSubscriber</a>
+    {
+        <b>bool</b> <a id="9c91505f8351a5e6" href="../R/9c91505f8351a5e6.html" target="n" data-glyph="72,1" class="i method">RequestRecipient</a>(<a href="@0@System.Web/A.html#313dbe954e552d25" class="t t">HttpRequest</a> <span id="r71 rd" class="r71 r">request</span>, <a href="#2a41fa169323a3bd" class="t t">RequestEvent</a> <span id="r72 rd" class="r72 r">requestEvent</span>);
+        <b>void</b> <a id="9ea4cdcc37b2880f" href="../R/9ea4cdcc37b2880f.html" target="n" data-glyph="72,1" class="i method">ProcessRequest</a>();
+    }
+
+}
+</pre></td></tr></table></div></body></html>

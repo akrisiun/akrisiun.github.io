@@ -1,0 +1,659 @@
+﻿<!DOCTYPE html>
+<html><head><title>EndianBinaryReader.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(650);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/EndianBinaryReader.cs" target="_top">Util\EndianBinaryReader.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+&quot;Miscellaneous Utility Library&quot; Software Licence
+
+Version 1.0
+
+Copyright (c) 2004-2008 Jon Skeet and Marc Gravell.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+3. The end-user documentation included with the redistribution, if
+any, must include the following acknowledgment:
+
+&quot;This product includes software developed by Jon Skeet
+and Marc Gravell. Contact skeet@pobox.com, or see 
+http://www.pobox.com/~skeet/).&quot;
+
+Alternately, this acknowledgment may appear in the software itself,
+if and wherever such third-party acknowledgments normally appear.
+
+4. The name &quot;Miscellaneous Utility Library&quot; must not be used to endorse 
+or promote products derived from this software without prior written 
+permission. For written permission, please contact skeet@pobox.com.
+
+5. Products derived from this software may not be called 
+&quot;Miscellaneous Utility Library&quot;, nor may &quot;Miscellaneous Utility Library&quot;
+appear in their name, without prior written permission of Jon Skeet.
+
+THIS SOFTWARE IS PROVIDED &quot;AS IS&quot; AND ANY EXPRESSED OR IMPLIED
+WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL JON SKEET BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE. 
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">MiscUtil</span>.<span class="i n">Conversion</span>;
+
+<b>namespace</b> <span class="i n">MiscUtil</span>.<span class="i n">IO</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Equivalent of System.IO.BinaryReader, but with either endianness, depending on</span>
+	<span class="c">///</span><span class="c"> the EndianBitConverter it is constructed with. No data is buffered in the</span>
+	<span class="c">///</span><span class="c"> reader; the client may seek within the stream at will.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="14a62468d2339817" href="../R/14a62468d2339817.html" target="n" data-glyph="0,0" class="t t">EndianBinaryReader</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+	{
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Fields not directly related to properties
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Whether or not this reader has been disposed yet.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>bool</b> <a id="d9759d60c81e68eb" href="../R/d9759d60c81e68eb.html" target="n" data-glyph="46,1" class="i field">disposed</a>=<b>false</b>;
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Decoder to use for string conversions.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<a href="@0@mscorlib/A.html#58f76257700c46fa" class="t t">Decoder</a> <a id="2328b850fee93846" href="../R/2328b850fee93846.html" target="n" data-glyph="46,1" class="i field">decoder</a>;
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Buffer used for temporary storage before conversion into primitives</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>byte</b>[] <a id="7f6f9e9e8c7e7e95" href="../R/7f6f9e9e8c7e7e95.html" target="n" data-glyph="46,1" class="i field">buffer</a> = <b>new</b> <b>byte</b>[16];
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Buffer used for temporary storage when reading a single character</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>char</b>[] <a id="a348c49f1b097e57" href="../R/a348c49f1b097e57.html" target="n" data-glyph="46,1" class="i field">charBuffer</a> = <b>new</b> <b>char</b>[1];
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Minimum number of bytes used to encode a character</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>int</b> <a id="75c6c96ac06301fb" href="../R/75c6c96ac06301fb.html" target="n" data-glyph="46,1" class="i field">minBytesPerChar</a>;
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Constructors
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Equivalent of System.IO.BinaryWriter, but with either endianness, depending on</span>
+		<span class="c">///</span><span class="c"> the EndianBitConverter it is constructed with.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">bitConverter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Converter to use when reading data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">stream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Stream to read data from</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="3a70d2444f63260c" href="../R/3a70d2444f63260c.html" target="n" data-glyph="72,1" class="i constructor">EndianBinaryReader</a> (<a href="EndianBitConverter.cs.html#40e8a081a5b0fa1d" class="t t">EndianBitConverter</a> <span id="r0 rd" class="r0 r">bitConverter</span>,
+								   <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r1 rd" class="r1 r">stream</span>) : <a href="#6d3f8751b9f7d5c5" class="k">this</a> (<span class="r0 r">bitConverter</span>, <span class="r1 r">stream</span>, <a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a>.<a href="@0@mscorlib/A.html#a10eb90a3d884500" class="i property">UTF8</a>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Constructs a new binary reader with the given bit converter, reading</span>
+		<span class="c">///</span><span class="c"> to the given stream, using the given encoding.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">bitConverter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Converter to use when reading data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">stream</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Stream to read data from</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">encoding</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Encoding to use when reading character data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="6d3f8751b9f7d5c5" href="../R/6d3f8751b9f7d5c5.html" target="n" data-glyph="72,1" class="i constructor">EndianBinaryReader</a> (<a href="EndianBitConverter.cs.html#40e8a081a5b0fa1d" class="t t">EndianBitConverter</a> <span id="r2 rd" class="r2 r">bitConverter</span>,	<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r3 rd" class="r3 r">stream</span>, <a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a> <span id="r4 rd" class="r4 r">encoding</span>)
+		{
+			<b>if</b> (<span class="r2 r">bitConverter</span>==<b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;bitConverter&quot;</span>);
+			}
+			<b>if</b> (<span class="r3 r">stream</span>==<b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;stream&quot;</span>);
+			}
+			<b>if</b> (<span class="r4 r">encoding</span>==<b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;encoding&quot;</span>);
+			}
+			<b>if</b> (!<span class="r3 r">stream</span>.<a href="@0@mscorlib/A.html#9d92fb3890523d38" class="i property">CanRead</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<span class="s">&quot;Stream isn&#39;t writable&quot;</span>, <span class="s">&quot;stream&quot;</span>);
+			}
+			<a href="#14a62468d2339817" class="k">this</a>.<a href="#45f1a67173dd808e" class="i field">stream</a> = <span class="r3 r">stream</span>;
+			<a href="#14a62468d2339817" class="k">this</a>.<a href="#3437872870bde683" class="i field">bitConverter</a> = <span class="r2 r">bitConverter</span>;
+			<a href="#14a62468d2339817" class="k">this</a>.<a href="#167f2e77c1269b37" class="i field">encoding</a> = <span class="r4 r">encoding</span>;
+			<a href="#14a62468d2339817" class="k">this</a>.<a href="#2328b850fee93846" class="i field">decoder</a> = <span class="r4 r">encoding</span>.<a href="@0@mscorlib/A.html#e697d5c058df69e8" class="i method">GetDecoder</a>();
+			<a href="#14a62468d2339817" class="k">this</a>.<a href="#75c6c96ac06301fb" class="i field">minBytesPerChar</a> = 1;
+
+			<b>if</b> (<span class="r4 r">encoding</span> <b>is</b> <a href="@0@mscorlib/A.html#e5fafda2334b6553" class="t t">UnicodeEncoding</a>)
+			{
+				<a href="#75c6c96ac06301fb" class="i field">minBytesPerChar</a> = 2;
+			}
+		}
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Properties
+		<a href="EndianBitConverter.cs.html#40e8a081a5b0fa1d" class="t t">EndianBitConverter</a> <a id="3437872870bde683" href="../R/3437872870bde683.html" target="n" data-glyph="46,1" class="i field">bitConverter</a>;
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The bit converter used to read values from the stream</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a href="EndianBitConverter.cs.html#40e8a081a5b0fa1d" class="t t">EndianBitConverter</a> <a id="53a861ef221da7e2" href="../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">BitConverter</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>; }
+		}
+
+		<a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a> <a id="167f2e77c1269b37" href="../R/167f2e77c1269b37.html" target="n" data-glyph="46,1" class="i field">encoding</a>;
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The encoding used to read strings</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a> <a id="5d8e3e6c57090090" href="../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">Encoding</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#167f2e77c1269b37" class="i field">encoding</a>; }
+		}
+
+		<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="45f1a67173dd808e" href="../R/45f1a67173dd808e.html" target="n" data-glyph="46,1" class="i field">stream</a>;
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets the underlying stream of the EndianBinaryReader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="e8a227bf3f5ddf69" href="../R/e8a227bf3f5ddf69.html" target="n" data-glyph="102,1" class="i property">BaseStream</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#45f1a67173dd808e" class="i field">stream</a>; }
+		}
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Public methods
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Closes the reader, including the underlying stream..</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="d6f67ff80eb18cc1" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+		{
+			<a href="#5bea98636d6e63c2" class="i method">Dispose</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Seeks within the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Offset to seek to.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">origin</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Origin of seek operation.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="12dcc9f6dbe43b54" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Seek</a> (<b>int</b> <span id="r5 rd" class="r5 r">offset</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a> <span id="r6 rd" class="r6 r">origin</span>)
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+			<a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#eb5599035c4388ce" class="i method">Seek</a> (<span class="r5 r">offset</span>, <span class="r6 r">origin</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a single byte from the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The byte read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public byte</b> <a id="a5ecb7d28a5eeaab" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadByte</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 1);
+			<b>return</b> <a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>[0];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a single signed byte from the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The byte read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public sbyte</b> <a id="8bc5558a53d78080" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadSByte</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 1);
+			<b>return unchecked</b>((<b>sbyte</b>)<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>[0]);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a boolean from the stream. 1 byte is read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The boolean read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="c39fd186008cc5de" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadBoolean</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 1);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#5eb36ac66988747e" class="i method">ToBoolean</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 16-bit signed integer from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 2 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 16-bit integer read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public short</b> <a id="a8bce88cec4dfcd1" href="../R/a8bce88cec4dfcd1.html" target="n" data-glyph="72,1" class="i method">ReadInt16</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 2);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#8bb70c9a6493161b" class="i method">ToInt16</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 32-bit signed integer from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 4 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 32-bit integer read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="1bd480c76a594a67" href="../R/1bd480c76a594a67.html" target="n" data-glyph="72,1" class="i method">ReadInt32</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 4);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#daad4e16c29e4fd5" class="i method">ToInt32</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 64-bit signed integer from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 8 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 64-bit integer read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public long</b> <a id="3f98fbb1d121a966" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadInt64</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 8);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#397264dd95603d4f" class="i method">ToInt64</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 16-bit unsigned integer from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 2 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 16-bit unsigned integer read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public ushort</b> <a id="624b734f86304332" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadUInt16</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 2);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#664cc59708e89592" class="i method">ToUInt16</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 32-bit unsigned integer from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 4 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 32-bit unsigned integer read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public uint</b> <a id="cffcb981ccbb76d6" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadUInt32</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 4);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#075d1068a192f038" class="i method">ToUInt32</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 64-bit unsigned integer from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 8 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 64-bit unsigned integer read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public ulong</b> <a id="cbbc5e47245fa911" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadUInt64</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 8);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#6528d76705a52749" class="i method">ToUInt64</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a single-precision floating-point value from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 4 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The floating point value read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public float</b> <a id="433d0d5a30009348" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadSingle</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 4);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#58f93b69e29d80d6" class="i method">ToSingle</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a double-precision floating-point value from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 8 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The floating point value read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public double</b> <a id="f6dfffc95eebd3d7" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadDouble</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 8);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#df97983753a5fd05" class="i method">ToDouble</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a decimal value from the stream, using the bit converter</span>
+		<span class="c">///</span><span class="c"> for this reader. 16 bytes are read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The decimal value read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public decimal</b> <a id="f3525af7c7f7105b" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadDecimal</a>()
+		{
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 16);
+			<b>return</b> <a href="#3437872870bde683" class="i field">bitConverter</a>.<a href="EndianBitConverter.cs.html#2d971d3f85208600" class="i method">ToDecimal</a>(<a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>, 0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a single character from the stream, using the character encoding for</span>
+		<span class="c">///</span><span class="c"> this reader. If no characters have been fully read by the time the stream ends,</span>
+		<span class="c">///</span><span class="c"> -1 is returned.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The character read, or -1 for end of stream.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="c0007ff1e7964d7c" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Read</a>()
+		{
+			<b>int</b> <span id="r7 rd" class="r7 r">charsRead</span> = <a href="#bb862064a345cedf" class="i method">Read</a>(<a href="#a348c49f1b097e57" class="i field">charBuffer</a>, 0, 1);
+			<b>if</b> (<span class="r7 r">charsRead</span>==0)
+			{
+				<b>return</b> -1;
+			}
+			<b>else</b>
+			{
+				<b>return</b> <a href="#a348c49f1b097e57" class="i field">charBuffer</a>[0];
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads the specified number of characters into the given buffer, starting at</span>
+		<span class="c">///</span><span class="c"> the given index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The buffer to copy data into</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">index</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The first index to copy data into</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The number of characters to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The number of characters actually read. This will only be less than</span>
+		<span class="c">///</span><span class="c"> the requested number of characters if the end of the stream is reached.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="bb862064a345cedf" href="../R/bb862064a345cedf.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>char</b>[] <span id="r8 rd" class="r8 r">data</span>, <b>int</b> <span id="r9 rd" class="r9 r">index</span>, <b>int</b> <span id="r10 rd" class="r10 r">count</span>)
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+			<b>if</b> (<span class="r8 r">data</span>==<b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;data&quot;</span>);
+			}
+			<b>if</b> (<span class="r9 r">index</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5fec5e06371b1f6c" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;index&quot;</span>);
+			}
+			<b>if</b> (<span class="r10 r">count</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5fec5e06371b1f6c" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;index&quot;</span>);
+			}
+			<b>if</b> (<span class="r10 r">count</span>+<span class="r9 r">index</span> &gt; <span class="r8 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>
+					(<span class="s">&quot;Not enough space in buffer for specified number of characters starting at specified index&quot;</span>);
+			}
+
+			<b>int</b> <span id="r11 rd" class="r11 r">read</span>=0;
+			<b>bool</b> <span id="r12 rd" class="r12 r">firstTime</span>=<b>true</b>;
+
+			<span class="c">// Use the normal buffer if we&#39;re only reading a small amount, otherwise</span>
+			<span class="c">// use at most 4K at a time.</span>
+			<b>byte</b>[] <span id="r13 rd" class="r13 r">byteBuffer</span> = <a href="#7f6f9e9e8c7e7e95" class="i field">buffer</a>;
+
+			<b>if</b> (<span class="r13 r">byteBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <span class="r10 r">count</span>*<a href="#75c6c96ac06301fb" class="i field">minBytesPerChar</a>)
+			{
+				<span class="r13 r">byteBuffer</span> = <b>new</b> <b>byte</b>[4096];
+			}
+
+			<b>while</b> (<span class="r11 r">read</span> &lt; <span class="r10 r">count</span>)
+			{
+				<b>int</b> <span id="r14 rd" class="r14 r">amountToRead</span>;
+				<span class="c">// First time through we know we haven&#39;t previously read any data</span>
+				<b>if</b> (<span class="r12 r">firstTime</span>)
+				{
+					<span class="r14 r">amountToRead</span> = <span class="r10 r">count</span>*<a href="#75c6c96ac06301fb" class="i field">minBytesPerChar</a>;
+					<span class="r12 r">firstTime</span>=<b>false</b>;
+				}
+				<span class="c">// After that we can only assume we need to fully read &quot;chars left -1&quot; characters</span>
+				<span class="c">// and a single byte of the character we may be in the middle of</span>
+				<b>else</b>
+				{
+					<span class="r14 r">amountToRead</span> = ((<span class="r10 r">count</span>-<span class="r11 r">read</span>-1)*<a href="#75c6c96ac06301fb" class="i field">minBytesPerChar</a>)+1;
+				}
+				<b>if</b> (<span class="r14 r">amountToRead</span> &gt; <span class="r13 r">byteBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<span class="r14 r">amountToRead</span> = <span class="r13 r">byteBuffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+				}
+				<b>int</b> <span id="r15 rd" class="r15 r">bytesRead</span> = <a href="#53b13d960b29563d" class="i method">TryReadInternal</a>(<span class="r13 r">byteBuffer</span>, <span class="r14 r">amountToRead</span>);
+				<b>if</b> (<span class="r15 r">bytesRead</span>==0)
+				{
+					<b>return</b> <span class="r11 r">read</span>;
+				}
+				<b>int</b> <span id="r16 rd" class="r16 r">decoded</span> = <a href="#2328b850fee93846" class="i field">decoder</a>.<a href="@0@mscorlib/A.html#2372c1fefee5a6e3" class="i method">GetChars</a>(<span class="r13 r">byteBuffer</span>, 0, <span class="r15 r">bytesRead</span>, <span class="r8 r">data</span>, <span class="r9 r">index</span>);
+				<span class="r11 r">read</span> += <span class="r16 r">decoded</span>;
+				<span class="r9 r">index</span> += <span class="r16 r">decoded</span>;
+			}
+			<b>return</b> <span class="r11 r">read</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads the specified number of bytes into the given buffer, starting at</span>
+		<span class="c">///</span><span class="c"> the given index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">buffer</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The buffer to copy data into</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">index</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The first index to copy data into</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The number of bytes to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The number of bytes actually read. This will only be less than</span>
+		<span class="c">///</span><span class="c"> the requested number of bytes if the end of the stream is reached.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="f6b0b119bd8e5e84" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r17 rd" class="r17 r">buffer</span>, <b>int</b> <span id="r18 rd" class="r18 r">index</span>, <b>int</b> <span id="r19 rd" class="r19 r">count</span>)
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+			<b>if</b> (<span class="r17 r">buffer</span>==<b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;buffer&quot;</span>);
+			}
+			<b>if</b> (<span class="r18 r">index</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5fec5e06371b1f6c" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;index&quot;</span>);
+			}
+			<b>if</b> (<span class="r19 r">count</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5fec5e06371b1f6c" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;index&quot;</span>);
+			}
+			<b>if</b> (<span class="r19 r">count</span>+<span class="r18 r">index</span> &gt; <span class="r17 r">buffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>
+					(<span class="s">&quot;Not enough space in buffer for specified number of bytes starting at specified index&quot;</span>);
+			}
+			<b>int</b> <span id="r20 rd" class="r20 r">read</span>=0;
+			<b>while</b> (<span class="r19 r">count</span> &gt; 0)
+			{
+				<b>int</b> <span id="r21 rd" class="r21 r">block</span> = <a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r17 r">buffer</span>, <span class="r18 r">index</span>, <span class="r19 r">count</span>);
+				<b>if</b> (<span class="r21 r">block</span>==0)
+				{
+					<b>return</b> <span class="r20 r">read</span>;
+				}
+				<span class="r18 r">index</span> += <span class="r21 r">block</span>;
+				<span class="r20 r">read</span> += <span class="r21 r">block</span>;
+				<span class="r19 r">count</span> -= <span class="r21 r">block</span>;
+			}
+			<b>return</b> <span class="r20 r">read</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads the specified number of bytes, returning them in a new byte array.</span>
+		<span class="c">///</span><span class="c"> If not enough bytes are available before the end of the stream, this</span>
+		<span class="c">///</span><span class="c"> method will return what is available.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The number of bytes to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The bytes read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public byte</b>[] <a id="ca2ee0b744c42e28" href="../R/ca2ee0b744c42e28.html" target="n" data-glyph="72,1" class="i method">ReadBytes</a>(<b>int</b> <span id="r22 rd" class="r22 r">count</span>)
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+			<b>if</b> (<span class="r22 r">count</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5fec5e06371b1f6c" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;count&quot;</span>);
+			}
+			<b>byte</b>[] <span id="r23 rd" class="r23 r">ret</span> = <b>new</b> <b>byte</b>[<span class="r22 r">count</span>];
+			<b>int</b> <span id="r24 rd" class="r24 r">index</span>=0;
+			<b>while</b> (<span class="r24 r">index</span> &lt; <span class="r22 r">count</span>)
+			{
+				<b>int</b> <span id="r25 rd" class="r25 r">read</span> = <a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r23 r">ret</span>, <span class="r24 r">index</span>, <span class="r22 r">count</span>-<span class="r24 r">index</span>);
+				<span class="c">// Stream has finished half way through. That&#39;s fine, return what we&#39;ve got.</span>
+				<b>if</b> (<span class="r25 r">read</span>==0)
+				{
+					<b>byte</b>[] <span id="r26 rd" class="r26 r">copy</span> = <b>new</b> <b>byte</b>[<span class="r24 r">index</span>];
+					<a href="@0@mscorlib/A.html#570e88af5685d024" class="t t">Buffer</a>.<a href="@0@mscorlib/A.html#1fbec67d6ee92203" class="i method">BlockCopy</a>(<span class="r23 r">ret</span>, 0, <span class="r26 r">copy</span>, 0, <span class="r24 r">index</span>);
+					<b>return</b> <span class="r26 r">copy</span>;
+				}
+				<span class="r24 r">index</span> += <span class="r25 r">read</span>;
+			}
+			<b>return</b> <span class="r23 r">ret</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads the specified number of bytes, returning them in a new byte array.</span>
+		<span class="c">///</span><span class="c"> If not enough bytes are available before the end of the stream, this</span>
+		<span class="c">///</span><span class="c"> method will throw an IOException.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The number of bytes to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The bytes read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public byte</b>[] <a id="be3c5cdc70aa4b3b" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadBytesOrThrow</a>(<b>int</b> <span id="r27 rd" class="r27 r">count</span>)
+		{
+			<b>byte</b>[] <span id="r28 rd" class="r28 r">ret</span> = <b>new</b> <b>byte</b>[<span class="r27 r">count</span>];
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<span class="r28 r">ret</span>, <span class="r27 r">count</span>);
+			<b>return</b> <span class="r28 r">ret</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 7-bit encoded integer from the stream. This is stored with the least significant</span>
+		<span class="c">///</span><span class="c"> information first, with 7 bits of information per byte of value, and the top</span>
+		<span class="c">///</span><span class="c"> bit as a continuation flag. This method is not affected by the endianness</span>
+		<span class="c">///</span><span class="c"> of the bit converter.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 7-bit encoded integer read from the stream.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="df68af0f00b0764c" href="../R/df68af0f00b0764c.html" target="n" data-glyph="72,1" class="i method">Read7BitEncodedInt</a>()
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+
+			<b>int</b> <span id="r29 rd" class="r29 r">ret</span>=0;
+			<b>for</b> (<b>int</b> <span id="r30 rd" class="r30 r">shift</span> = 0; <span class="r30 r">shift</span> &lt; 35; <span class="r30 r">shift</span>+=7)
+			{
+				<b>int</b> <span id="r31 rd" class="r31 r">b</span> = <a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>();
+				<b>if</b> (<span class="r31 r">b</span>==-1)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#7756c0c56c3035a1" class="t constructor">EndOfStreamException</a>();
+				}
+				<span class="r29 r">ret</span> = <span class="r29 r">ret</span> | ((<span class="r31 r">b</span>&amp;0x7f) &lt;&lt; <span class="r30 r">shift</span>);
+				<b>if</b> ((<span class="r31 r">b</span> &amp; 0x80) == 0)
+				{
+					<b>return</b> <span class="r29 r">ret</span>;
+				}
+			}
+			<span class="c">// Still haven&#39;t seen a byte with the high bit unset? Dodgy data.</span>
+			<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Invalid 7-bit encoded integer in stream.&quot;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a 7-bit encoded integer from the stream. This is stored with the most significant</span>
+		<span class="c">///</span><span class="c"> information first, with 7 bits of information per byte of value, and the top</span>
+		<span class="c">///</span><span class="c"> bit as a continuation flag. This method is not affected by the endianness</span>
+		<span class="c">///</span><span class="c"> of the bit converter.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The 7-bit encoded integer read from the stream.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="22a4ebc7d5e741f7" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadBigEndian7BitEncodedInt</a>()
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+
+			<b>int</b> <span id="r32 rd" class="r32 r">ret</span>=0;
+			<b>for</b> (<b>int</b> <span id="r33 rd" class="r33 r">i</span>=0; <span class="r33 r">i</span> &lt; 5; <span class="r33 r">i</span>++)
+			{
+				<b>int</b> <span id="r34 rd" class="r34 r">b</span> = <a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>();
+				<b>if</b> (<span class="r34 r">b</span>==-1)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#7756c0c56c3035a1" class="t constructor">EndOfStreamException</a>();
+				}
+				<span class="r32 r">ret</span> = (<span class="r32 r">ret</span> &lt;&lt; 7) | (<span class="r34 r">b</span>&amp;0x7f);
+				<b>if</b> ((<span class="r34 r">b</span> &amp; 0x80) == 0)
+				{
+					<b>return</b> <span class="r32 r">ret</span>;
+				}
+			}
+			<span class="c">// Still haven&#39;t seen a byte with the high bit unset? Dodgy data.</span>
+			<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Invalid 7-bit encoded integer in stream.&quot;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads a length-prefixed string from the stream, using the encoding for this reader.</span>
+		<span class="c">///</span><span class="c"> A 7-bit encoded integer is first read, which specifies the number of bytes </span>
+		<span class="c">///</span><span class="c"> to read from the stream. These bytes are then converted into a string with</span>
+		<span class="c">///</span><span class="c"> the encoding for this reader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The string read from the stream.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public string</b> <a id="124f731987cb7d2d" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ReadString</a>()
+		{
+			<b>int</b> <span id="r35 rd" class="r35 r">bytesToRead</span> = <a href="#df68af0f00b0764c" class="i method">Read7BitEncodedInt</a>();
+
+			<b>byte</b>[] <span id="r36 rd" class="r36 r">data</span> = <b>new</b> <b>byte</b>[<span class="r35 r">bytesToRead</span>];
+			<a href="#0fdb0f246796ec5c" class="i method">ReadInternal</a>(<span class="r36 r">data</span>, <span class="r35 r">bytesToRead</span>);
+			<b>return</b> <a href="#167f2e77c1269b37" class="i field">encoding</a>.<a href="@0@mscorlib/A.html#233647d04fbec0c0" class="i method">GetString</a>(<span class="r36 r">data</span>, 0, <span class="r36 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Private methods
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Checks whether or not the reader has been disposed, throwing an exception if so.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>void</b> <a id="6ac6cb36c0225334" href="../R/6ac6cb36c0225334.html" target="n" data-glyph="76,1" class="i method">CheckDisposed</a>()
+		{
+			<b>if</b> (<a href="#d9759d60c81e68eb" class="i field">disposed</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#53515c848f859933" class="t constructor">ObjectDisposedException</a>(<span class="s">&quot;EndianBinaryReader&quot;</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads the given number of bytes from the stream, throwing an exception</span>
+		<span class="c">///</span><span class="c"> if they can&#39;t all be read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Buffer to read into</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">size</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Number of bytes to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>void</b> <a id="0fdb0f246796ec5c" href="../R/0fdb0f246796ec5c.html" target="n" data-glyph="76,1" class="i method">ReadInternal</a> (<b>byte</b>[] <span id="r37 rd" class="r37 r">data</span>, <b>int</b> <span id="r38 rd" class="r38 r">size</span>)
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+			<b>int</b> <span id="r39 rd" class="r39 r">index</span>=0;
+			<b>while</b> (<span class="r39 r">index</span> &lt; <span class="r38 r">size</span>)
+			{
+				<b>int</b> <span id="r40 rd" class="r40 r">read</span> = <a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r37 r">data</span>, <span class="r39 r">index</span>, <span class="r38 r">size</span>-<span class="r39 r">index</span>);
+				<b>if</b> (<span class="r40 r">read</span>==0)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#da81e2a33d64e827" class="t constructor">EndOfStreamException</a>
+						(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#7432dab173fae5fc" class="i method">Format</a>(<span class="s">&quot;End of stream reached with {0} byte{1} left to read.&quot;</span>, <span class="r38 r">size</span>-<span class="r39 r">index</span>,
+						<span class="r38 r">size</span>-<span class="r39 r">index</span>==1 ? <span class="s">&quot;s&quot;</span> : <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>));
+				}
+				<span class="r39 r">index</span> += <span class="r40 r">read</span>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Reads the given number of bytes from the stream if possible, returning</span>
+		<span class="c">///</span><span class="c"> the number of bytes actually read, which may be less than requested if</span>
+		<span class="c">///</span><span class="c"> (and only if) the end of the stream is reached.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r41 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Buffer to read into</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r42 r">size</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Number of bytes to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Number of bytes actually read</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>int</b> <a id="53b13d960b29563d" href="../R/53b13d960b29563d.html" target="n" data-glyph="76,1" class="i method">TryReadInternal</a> (<b>byte</b>[] <span id="r41 rd" class="r41 r">data</span>, <b>int</b> <span id="r42 rd" class="r42 r">size</span>)
+		{
+			<a href="#6ac6cb36c0225334" class="i method">CheckDisposed</a>();
+			<b>int</b> <span id="r43 rd" class="r43 r">index</span>=0;
+			<b>while</b> (<span class="r43 r">index</span> &lt; <span class="r42 r">size</span>)
+			{
+				<b>int</b> <span id="r44 rd" class="r44 r">read</span> = <a href="#45f1a67173dd808e" class="i field">stream</a>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r41 r">data</span>, <span class="r43 r">index</span>, <span class="r42 r">size</span>-<span class="r43 r">index</span>);
+				<b>if</b> (<span class="r44 r">read</span>==0)
+				{
+					<b>return</b> <span class="r43 r">index</span>;
+				}
+				<span class="r43 r">index</span> += <span class="r44 r">read</span>;
+			}
+			<b>return</b> <span class="r43 r">index</span>;
+		}
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> IDisposable Members
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Disposes of the underlying stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="5bea98636d6e63c2" href="../R/5bea98636d6e63c2.html" target="n" data-glyph="72,1" class="i method">Dispose</a>()
+		{
+			<b>if</b> (!<a href="#d9759d60c81e68eb" class="i field">disposed</a>)
+			{
+				<a href="#d9759d60c81e68eb" class="i field">disposed</a> = <b>true</b>;
+				((<a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>)<a href="#45f1a67173dd808e" class="i field">stream</a>).<a href="@0@mscorlib/A.html#4e23fed29bd598fa" class="i method">Dispose</a>();
+			}
+		}
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+}
+</pre></td></tr></table></div></body></html>

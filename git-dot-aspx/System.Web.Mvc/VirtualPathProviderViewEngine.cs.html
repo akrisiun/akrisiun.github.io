@@ -1,0 +1,401 @@
+﻿<!DOCTYPE html>
+<html><head><title>VirtualPathProviderViewEngine.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(392);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/VirtualPathProviderViewEngine.cs" target="_top">VirtualPathProviderViewEngine.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Hosting</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">WebPages</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    <b>public abstract class</b> <a id="b16f0231272e40a7" href="R/b16f0231272e40a7.html" target="n" data-glyph="0,0" class="t t"><span id="84818c44c2105bd1">VirtualPathProviderViewEngine</span></a> : <a href="IViewEngine.cs.html#344744e8f44ba7ab" class="t t">IViewEngine</a>
+    {
+        <span class="c">// format is &quot;:ViewCacheEntry:{cacheType}:{prefix}:{name}:{controllerName}:{areaName}:&quot;</span>
+        <b>private const string</b> <a id="b7db924828a6e200" href="R/b7db924828a6e200.html" target="n" data-glyph="10,1" class="i field">CacheKeyFormat</a> = <span class="s">&quot;:ViewCacheEntry:{0}:{1}:{2}:{3}:{4}:&quot;</span>;
+        <b>private const string</b> <a id="16c6a61476afffa3" href="R/16c6a61476afffa3.html" target="n" data-glyph="10,1" class="i field">CacheKeyPrefixMaster</a> = <span class="s">&quot;Master&quot;</span>;
+        <b>private const string</b> <a id="65833ba758520347" href="R/65833ba758520347.html" target="n" data-glyph="10,1" class="i field">CacheKeyPrefixPartial</a> = <span class="s">&quot;Partial&quot;</span>;
+        <b>private const string</b> <a id="c76f7fbf89db3fe1" href="R/c76f7fbf89db3fe1.html" target="n" data-glyph="10,1" class="i field">CacheKeyPrefixView</a> = <span class="s">&quot;View&quot;</span>;
+        <b>private static readonly string</b>[] <a id="863033939bb039a1" href="R/863033939bb039a1.html" target="n" data-glyph="46,1" class="i field">_emptyLocations</a> = <b>new</b> <b>string</b>[0];
+        <b>private</b> <a href="/System.Web.WebPages/A.html#2eb154a04334e613" class="t t">DisplayModeProvider</a> <a id="9b5d21de051333e8" href="R/9b5d21de051333e8.html" target="n" data-glyph="46,1" class="i field">_displayModeProvider</a>;
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a>&gt; <a id="7bcac5a41ef6804b" href="R/7bcac5a41ef6804b.html" target="n" data-glyph="46,1" class="i field">_vppFunc</a> = () =&gt; <a href="@0@System.Web/A.html#f12b2fb72be7982c" class="t t">HostingEnvironment</a>.<a href="@0@System.Web/A.html#cca6f22dc3bcba2a" class="i property">VirtualPathProvider</a>;
+        <b>internal</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<b>string</b>, <b>string</b>&gt; <a id="849eecf94500921e" href="R/849eecf94500921e.html" target="n" data-glyph="44,1" class="i field">GetExtensionThunk</a> = <a href="@0@System.Web/A.html#2b829f9059f552ca" class="t t">VirtualPathUtility</a>.<a href="@0@System.Web/A.html#233119ca4aaaf6bd" class="i method">GetExtension</a>;
+        <b>private</b> <a href="IViewLocationCache.cs.html#b158bb9ad7a69996" class="t t">IViewLocationCache</a> <a id="38bd37480e296205" href="R/38bd37480e296205.html" target="n" data-glyph="46,1" class="i field">_viewLocationCache</a>;
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="978e90b3db649476" href="R/978e90b3db649476.html" target="n" data-glyph="102,1" class="i property">AreaMasterLocationFormats</a> { <b>get</b>; <b>set</b>; }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="a07776cb6ab506a0" href="R/a07776cb6ab506a0.html" target="n" data-glyph="102,1" class="i property">AreaPartialViewLocationFormats</a> { <b>get</b>; <b>set</b>; }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="f52b542db331af14" href="R/f52b542db331af14.html" target="n" data-glyph="102,1" class="i property">AreaViewLocationFormats</a> { <b>get</b>; <b>set</b>; }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="6de361fd57e69bb0" href="R/6de361fd57e69bb0.html" target="n" data-glyph="102,1" class="i property">FileExtensions</a> { <b>get</b>; <b>set</b>; }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="cbef0edf09510579" href="R/cbef0edf09510579.html" target="n" data-glyph="102,1" class="i property">MasterLocationFormats</a> { <b>get</b>; <b>set</b>; }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="8fbdb2680969e2f6" href="R/8fbdb2680969e2f6.html" target="n" data-glyph="102,1" class="i property">PartialViewLocationFormats</a> { <b>get</b>; <b>set</b>; }
+ 
+        <span class="c">// Neither DefaultViewLocationCache.Null nor a DefaultViewLocationCache instance maintain internal state. Fine</span>
+        <span class="c">// if multiple threads race to initialize _viewLocationCache.</span>
+        <b>public</b> <a href="IViewLocationCache.cs.html#b158bb9ad7a69996" class="t t">IViewLocationCache</a> <a id="b6a2f0531222602c" href="R/b6a2f0531222602c.html" target="n" data-glyph="102,1" class="i property">ViewLocationCache</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#38bd37480e296205" class="i field">_viewLocationCache</a> == <b>null</b>)
+                {
+                    <b>if</b> (<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a> == <b>null</b> || <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>.<a href="@0@System.Web/A.html#22cd4bae305c030c" class="i property">IsDebuggingEnabled</a>)
+                    {
+                        <a href="#38bd37480e296205" class="i field">_viewLocationCache</a> = <a href="DefaultViewLocationCache.cs.html#7a2cce75a9ddd667" class="t t">DefaultViewLocationCache</a>.<a href="DefaultViewLocationCache.cs.html#bc6a7bdb888f9279" class="i field">Null</a>;
+                    }
+                    <b>else</b>
+                    {
+                        <a href="#38bd37480e296205" class="i field">_viewLocationCache</a> = <b>new</b> <a href="DefaultViewLocationCache.cs.html#bfd4ebda006a0825" class="t constructor">DefaultViewLocationCache</a>();
+                    }
+                }
+ 
+                <b>return</b> <a href="#38bd37480e296205" class="i field">_viewLocationCache</a>;
+            }
+            <b>set</b>
+            {
+                <b>if</b> (<b>value</b> == <b>null</b>)
+                {
+                    <b>throw</b> <a href="Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="Error.cs.html#f1948c77593bc958" class="i method">ArgumentNull</a>(<span class="s">&quot;value&quot;</span>);
+                }
+ 
+                <a href="#38bd37480e296205" class="i field">_viewLocationCache</a> = <b>value</b>;
+            }
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1819:PropertiesShouldNotReturnArrays&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is a shipped API&quot;</span>)]
+        <b>public string</b>[] <a id="a5a6de9b54f60344" href="R/a5a6de9b54f60344.html" target="n" data-glyph="102,1" class="i property">ViewLocationFormats</a> { <b>get</b>; <b>set</b>; }
+ 
+        <span class="c">// Likely exists for testing only</span>
+        <b>protected</b> <a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a> <a id="b9395b7bf7d04165" href="R/b9395b7bf7d04165.html" target="n" data-glyph="105,1" class="i property">VirtualPathProvider</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#7bcac5a41ef6804b" class="i field">_vppFunc</a>(); }
+            <b>set</b>
+            {
+                <b>if</b> (<b>value</b> == <b>null</b>)
+                {
+                    <b>throw</b> <a href="Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="Error.cs.html#f1948c77593bc958" class="i method">ArgumentNull</a>(<span class="s">&quot;value&quot;</span>);
+                }
+ 
+                <a href="#7bcac5a41ef6804b" class="i field">_vppFunc</a> = () =&gt; <b>value</b>;
+            }
+        }
+ 
+        <span class="c">// Provided for testing only; setter used in BuildManagerViewEngine but only for test scenarios</span>
+        <b>internal</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Web/A.html#ff29b11e67e8abe2" class="t t">VirtualPathProvider</a>&gt; <a id="58a202b192d88658" href="R/58a202b192d88658.html" target="n" data-glyph="104,1" class="i property">VirtualPathProviderFunc</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#7bcac5a41ef6804b" class="i field">_vppFunc</a>; }
+            <b>set</b>
+            {
+                <b>if</b> (<b>value</b> == <b>null</b>)
+                {
+                    <b>throw</b> <a href="Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="Error.cs.html#f1948c77593bc958" class="i method">ArgumentNull</a>(<span class="s">&quot;value&quot;</span>);
+                }
+ 
+                <a href="#7bcac5a41ef6804b" class="i field">_vppFunc</a> = <b>value</b>;
+            }
+        }
+ 
+        <b>protected internal</b> <a href="/System.Web.WebPages/A.html#2eb154a04334e613" class="t t">DisplayModeProvider</a> <a id="db4694bf824c2c9b" href="R/db4694bf824c2c9b.html" target="n" data-glyph="105,1" class="i property">DisplayModeProvider</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#9b5d21de051333e8" class="i field">_displayModeProvider</a> ?? <a href="/System.Web.WebPages/A.html#2eb154a04334e613" class="t t">DisplayModeProvider</a>.<a href="/System.Web.WebPages/A.html#cf72c154011c1d85" class="i property">Instance</a>; }
+            <b>set</b> { <a href="#9b5d21de051333e8" class="i field">_displayModeProvider</a> = <b>value</b>; }
+        }
+ 
+        <b>internal virtual string</b> <a id="d3f6651680067fae" href="R/d3f6651680067fae.html" target="n" data-glyph="74,1" class="i method">CreateCacheKey</a>(<b>string</b> <span id="r0 rd" class="r0 r">prefix</span>, <b>string</b> <span id="r1 rd" class="r1 r">name</span>, <b>string</b> <span id="r2 rd" class="r2 r">controllerName</span>, <b>string</b> <span id="r3 rd" class="r3 r">areaName</span>)
+        {
+            <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <a href="#b7db924828a6e200" class="i field">CacheKeyFormat</a>,
+                                 <a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#760775dbd11fb354" class="i property">AssemblyQualifiedName</a>, <span class="r0 r">prefix</span>, <span class="r1 r">name</span>, <span class="r2 r">controllerName</span>, <span class="r3 r">areaName</span>);
+        }
+ 
+        <b>internal static string</b> <a id="717b1d1d7a0a17b8" href="R/717b1d1d7a0a17b8.html" target="n" data-glyph="74,1" class="i method">AppendDisplayModeToCacheKey</a>(<b>string</b> <span id="r4 rd" class="r4 r">cacheKey</span>, <b>string</b> <span id="r5 rd" class="r5 r">displayMode</span>)
+        {
+            <span class="c">// key format is &quot;:ViewCacheEntry:{cacheType}:{prefix}:{name}:{controllerName}:{areaName}:&quot;</span>
+            <span class="c">// so append &quot;{displayMode}:&quot; to the key</span>
+            <b>return</b> <span class="r4 r">cacheKey</span> + <span class="r5 r">displayMode</span> + <span class="s">&quot;:&quot;</span>;
+        }
+ 
+        <b>protected abstract</b> <a href="IView.cs.html#82f8cb446948d3d5" class="t t">IView</a> <a id="b33fd7d8ba4ce032" href="R/b33fd7d8ba4ce032.html" target="n" data-glyph="75,1" class="i method">CreatePartialView</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r6 rd" class="r6 r">controllerContext</span>, <b>string</b> <span id="r7 rd" class="r7 r">partialPath</span>);
+ 
+        <b>protected abstract</b> <a href="IView.cs.html#82f8cb446948d3d5" class="t t">IView</a> <a id="d827948637aa33b0" href="R/d827948637aa33b0.html" target="n" data-glyph="75,1" class="i method">CreateView</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r8 rd" class="r8 r">controllerContext</span>, <b>string</b> <span id="r9 rd" class="r9 r">viewPath</span>, <b>string</b> <span id="r10 rd" class="r10 r">masterPath</span>);
+ 
+        <b>protected virtual bool</b> <a id="942f5e4fdfbfb138" href="R/942f5e4fdfbfb138.html" target="n" data-glyph="75,1" class="i method">FileExists</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r11 rd" class="r11 r">controllerContext</span>, <b>string</b> <span id="r12 rd" class="r12 r">virtualPath</span>)
+        {
+            <b>return</b> <a href="#b9395b7bf7d04165" class="i property">VirtualPathProvider</a>.<a href="@0@System.Web/A.html#acd31758c7857a62" class="i method">FileExists</a>(<span class="r12 r">virtualPath</span>);
+        }
+ 
+        <b>public virtual</b> <a href="ViewEngineResult.cs.html#54f8c78b809da7cd" class="t t">ViewEngineResult</a> <a id="3ee3da6e5febaf7d" href="R/3ee3da6e5febaf7d.html" target="n" data-glyph="72,1" class="i method">FindPartialView</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r13 rd" class="r13 r">controllerContext</span>, <b>string</b> <span id="r14 rd" class="r14 r">partialViewName</span>, <b>bool</b> <span id="r15 rd" class="r15 r">useCache</span>)
+        {
+            <b>if</b> (<span class="r13 r">controllerContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerContext&quot;</span>);
+            }
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r14 r">partialViewName</span>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#b811ee329004b31f" class="i property">Common_NullOrEmpty</a>, <span class="s">&quot;partialViewName&quot;</span>);
+            }
+ 
+            <b>string</b>[] <span id="r16 rd" class="r16 r">searched</span>;
+            <b>string</b> <span id="r17 rd" class="r17 r">controllerName</span> = <span class="r13 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a>.<a href="@0@System.Web/A.html#53e98bd9e4c39be5" class="i method">GetRequiredString</a>(<span class="s">&quot;controller&quot;</span>);
+            <b>string</b> <span id="r18 rd" class="r18 r">partialPath</span> = <a href="#8e2d96d4320987b3" class="i method">GetPath</a>(<span class="r13 r">controllerContext</span>, <a href="#8fbdb2680969e2f6" class="i property">PartialViewLocationFormats</a>, <a href="#a07776cb6ab506a0" class="i property">AreaPartialViewLocationFormats</a>, <span class="s">&quot;PartialViewLocationFormats&quot;</span>, <span class="r14 r">partialViewName</span>, <span class="r17 r">controllerName</span>, <a href="#65833ba758520347" class="i field">CacheKeyPrefixPartial</a>, <span class="r15 r">useCache</span>, <b>out</b> <span class="r16 r">searched</span>);
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r18 r">partialPath</span>))
+            {
+                <b>return</b> <b>new</b> <a href="ViewEngineResult.cs.html#7ccdf04f7cd584ee" class="t constructor">ViewEngineResult</a>(<span class="r16 r">searched</span>);
+            }
+ 
+            <b>return</b> <b>new</b> <a href="ViewEngineResult.cs.html#e298db72a326b5ff" class="t constructor">ViewEngineResult</a>(<a href="#b33fd7d8ba4ce032" class="i method">CreatePartialView</a>(<span class="r13 r">controllerContext</span>, <span class="r18 r">partialPath</span>), <a href="#b16f0231272e40a7" class="k">this</a>);
+        }
+ 
+        <b>public virtual</b> <a href="ViewEngineResult.cs.html#54f8c78b809da7cd" class="t t">ViewEngineResult</a> <a id="86fce51b0e7bc2a6" href="R/86fce51b0e7bc2a6.html" target="n" data-glyph="72,1" class="i method">FindView</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r19 rd" class="r19 r">controllerContext</span>, <b>string</b> <span id="r20 rd" class="r20 r">viewName</span>, <b>string</b> <span id="r21 rd" class="r21 r">masterName</span>, <b>bool</b> <span id="r22 rd" class="r22 r">useCache</span>)
+        {
+            <b>if</b> (<span class="r19 r">controllerContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerContext&quot;</span>);
+            }
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r20 r">viewName</span>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#b811ee329004b31f" class="i property">Common_NullOrEmpty</a>, <span class="s">&quot;viewName&quot;</span>);
+            }
+ 
+            <b>string</b>[] <span id="r23 rd" class="r23 r">viewLocationsSearched</span>;
+            <b>string</b>[] <span id="r24 rd" class="r24 r">masterLocationsSearched</span>;
+ 
+            <b>string</b> <span id="r25 rd" class="r25 r">controllerName</span> = <span class="r19 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a>.<a href="@0@System.Web/A.html#53e98bd9e4c39be5" class="i method">GetRequiredString</a>(<span class="s">&quot;controller&quot;</span>);
+            <b>string</b> <span id="r26 rd" class="r26 r">viewPath</span> = <a href="#8e2d96d4320987b3" class="i method">GetPath</a>(<span class="r19 r">controllerContext</span>, <a href="#a5a6de9b54f60344" class="i property">ViewLocationFormats</a>, <a href="#f52b542db331af14" class="i property">AreaViewLocationFormats</a>, <span class="s">&quot;ViewLocationFormats&quot;</span>, <span class="r20 r">viewName</span>, <span class="r25 r">controllerName</span>, <a href="#c76f7fbf89db3fe1" class="i field">CacheKeyPrefixView</a>, <span class="r22 r">useCache</span>, <b>out</b> <span class="r23 r">viewLocationsSearched</span>);
+            <b>string</b> <span id="r27 rd" class="r27 r">masterPath</span> = <a href="#8e2d96d4320987b3" class="i method">GetPath</a>(<span class="r19 r">controllerContext</span>, <a href="#cbef0edf09510579" class="i property">MasterLocationFormats</a>, <a href="#978e90b3db649476" class="i property">AreaMasterLocationFormats</a>, <span class="s">&quot;MasterLocationFormats&quot;</span>, <span class="r21 r">masterName</span>, <span class="r25 r">controllerName</span>, <a href="#16c6a61476afffa3" class="i field">CacheKeyPrefixMaster</a>, <span class="r22 r">useCache</span>, <b>out</b> <span class="r24 r">masterLocationsSearched</span>);
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r26 r">viewPath</span>) || (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r27 r">masterPath</span>) &amp;&amp; !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r21 r">masterName</span>)))
+            {
+                <b>return</b> <b>new</b> <a href="ViewEngineResult.cs.html#7ccdf04f7cd584ee" class="t constructor">ViewEngineResult</a>(<span class="r23 r">viewLocationsSearched</span>.<a href="@0@System.Core/A.html#f46b208108fc16dd" class="i method">Union</a>(<span class="r24 r">masterLocationsSearched</span>));
+            }
+ 
+            <b>return</b> <b>new</b> <a href="ViewEngineResult.cs.html#e298db72a326b5ff" class="t constructor">ViewEngineResult</a>(<a href="#d827948637aa33b0" class="i method">CreateView</a>(<span class="r19 r">controllerContext</span>, <span class="r26 r">viewPath</span>, <span class="r27 r">masterPath</span>), <a href="#b16f0231272e40a7" class="k">this</a>);
+        }
+ 
+        <b>private string</b> <a id="8e2d96d4320987b3" href="R/8e2d96d4320987b3.html" target="n" data-glyph="76,1" class="i method">GetPath</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r28 rd" class="r28 r">controllerContext</span>, <b>string</b>[] <span id="r29 rd" class="r29 r">locations</span>, <b>string</b>[] <span id="r30 rd" class="r30 r">areaLocations</span>, <b>string</b> <span id="r31 rd" class="r31 r">locationsPropertyName</span>, <b>string</b> <span id="r32 rd" class="r32 r">name</span>, <b>string</b> <span id="r33 rd" class="r33 r">controllerName</span>, <b>string</b> <span id="r34 rd" class="r34 r">cacheKeyPrefix</span>, <b>bool</b> <span id="r35 rd" class="r35 r">useCache</span>, <b>out string</b>[] <span id="r36 rd" class="r36 r">searchedLocations</span>)
+        {
+            <span class="r36 r">searchedLocations</span> = <a href="#863033939bb039a1" class="i field">_emptyLocations</a>;
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r32 r">name</span>))
+            {
+                <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+            }
+ 
+            <b>string</b> <span id="r37 rd" class="r37 r">areaName</span> = <a href="AreaHelpers.cs.html#89f54cc83e655864" class="t t">AreaHelpers</a>.<a href="AreaHelpers.cs.html#659714454c61a6ee" class="i method">GetAreaName</a>(<span class="r28 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a>);
+            <b>bool</b> <span id="r38 rd" class="r38 r">usingAreas</span> = !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r37 r">areaName</span>);
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a>&gt; <span id="r39 rd" class="r39 r">viewLocations</span> = <a href="#e755c326ae31df6a" class="i method">GetViewLocations</a>(<span class="r29 r">locations</span>, (<span class="r38 r">usingAreas</span>) ? <span class="r30 r">areaLocations</span> : <b>null</b>);
+ 
+            <b>if</b> (<span class="r39 r">viewLocations</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 0)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>,
+                                                                  <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#40ec259e119fbe5b" class="i property">Common_PropertyCannotBeNullOrEmpty</a>, <span class="r31 r">locationsPropertyName</span>));
+            }
+ 
+            <b>bool</b> <span id="r40 rd" class="r40 r">nameRepresentsPath</span> = <a href="#00d0386fe44896df" class="i method">IsSpecificPath</a>(<span class="r32 r">name</span>);
+            <b>string</b> <span id="r41 rd" class="r41 r">cacheKey</span> = <a href="#d3f6651680067fae" class="i method">CreateCacheKey</a>(<span class="r34 r">cacheKeyPrefix</span>, <span class="r32 r">name</span>, (<span class="r40 r">nameRepresentsPath</span>) ? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a> : <span class="r33 r">controllerName</span>, <span class="r37 r">areaName</span>);
+ 
+            <b>if</b> (<span class="r35 r">useCache</span>)
+            {
+                <span class="c">// Only look at cached display modes that can handle the context.</span>
+                <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="/System.Web.WebPages/A.html#730772cfc8197b12" class="t t">IDisplayMode</a>&gt; <span id="r42 rd" class="r42 r">possibleDisplayModes</span> = <a href="#db4694bf824c2c9b" class="i property">DisplayModeProvider</a>.<a href="/System.Web.WebPages/A.html#f19d52aa2f73bb88" class="i method">GetAvailableDisplayModesForContext</a>(<span class="r28 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <span class="r28 r">controllerContext</span>.<a href="ControllerContext.cs.html#88f6ba1d8998ef56" class="i property">DisplayMode</a>);
+                <b>foreach</b> (<a href="/System.Web.WebPages/A.html#730772cfc8197b12" class="t t">IDisplayMode</a> <span id="r43 rd" class="r43 r">displayMode</span> <b>in</b> <span class="r42 r">possibleDisplayModes</span>)
+                {
+                    <b>string</b> <span id="r44 rd" class="r44 r">cachedLocation</span> = <a href="#b6a2f0531222602c" class="i property">ViewLocationCache</a>.<a href="IViewLocationCache.cs.html#736094a6afd830fd" class="i method">GetViewLocation</a>(<span class="r28 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <a href="#717b1d1d7a0a17b8" class="i method">AppendDisplayModeToCacheKey</a>(<span class="r41 r">cacheKey</span>, <span class="r43 r">displayMode</span>.<a href="/System.Web.WebPages/A.html#2159b7a096acdde3" class="i property">DisplayModeId</a>));
+ 
+                    <b>if</b> (<span class="r44 r">cachedLocation</span> == <b>null</b>)
+                    {
+                        <span class="c">// If any matching display mode location is not in the cache, fall back to the uncached behavior, which will repopulate all of our caches.</span>
+                        <b>return null</b>;
+                    }
+ 
+                    <span class="c">// A non-empty cachedLocation indicates that we have a matching file on disk. Return that result.</span>
+                    <b>if</b> (<span class="r44 r">cachedLocation</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+                    {
+                        <b>if</b> (<span class="r28 r">controllerContext</span>.<a href="ControllerContext.cs.html#88f6ba1d8998ef56" class="i property">DisplayMode</a> == <b>null</b>)
+                        {
+                            <span class="r28 r">controllerContext</span>.<a href="ControllerContext.cs.html#88f6ba1d8998ef56" class="i property">DisplayMode</a> = <span class="r43 r">displayMode</span>;
+                        }
+ 
+                        <b>return</b> <span class="r44 r">cachedLocation</span>;
+                    }
+                    <span class="c">// An empty cachedLocation value indicates that we don&#39;t have a matching file on disk. Keep going down the list of possible display modes.</span>
+                }
+ 
+                <span class="c">// GetPath is called again without using the cache.</span>
+                <b>return null</b>;
+            }
+            <b>else</b>
+            {
+                <b>return</b> <span class="r40 r">nameRepresentsPath</span>
+                    ? <a href="#4c21eb9b4439d4fd" class="i method">GetPathFromSpecificName</a>(<span class="r28 r">controllerContext</span>, <span class="r32 r">name</span>, <span class="r41 r">cacheKey</span>, <b>ref</b> <span class="r36 r">searchedLocations</span>)
+                    : <a href="#5965e4dc81c09543" class="i method">GetPathFromGeneralName</a>(<span class="r28 r">controllerContext</span>, <span class="r39 r">viewLocations</span>, <span class="r32 r">name</span>, <span class="r33 r">controllerName</span>, <span class="r37 r">areaName</span>, <span class="r41 r">cacheKey</span>, <b>ref</b> <span class="r36 r">searchedLocations</span>);
+            }
+        }
+ 
+        <b>private string</b> <a id="5965e4dc81c09543" href="R/5965e4dc81c09543.html" target="n" data-glyph="76,1" class="i method">GetPathFromGeneralName</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r45 rd" class="r45 r">controllerContext</span>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a>&gt; <span id="r46 rd" class="r46 r">locations</span>, <b>string</b> <span id="r47 rd" class="r47 r">name</span>, <b>string</b> <span id="r48 rd" class="r48 r">controllerName</span>, <b>string</b> <span id="r49 rd" class="r49 r">areaName</span>, <b>string</b> <span id="r50 rd" class="r50 r">cacheKey</span>, <b>ref string</b>[] <span id="r51 rd" class="r51 r">searchedLocations</span>)
+        {
+            <b>string</b> <span id="r52 rd" class="r52 r">result</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+            <span class="r51 r">searchedLocations</span> = <b>new</b> <b>string</b>[<span class="r46 r">locations</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>];
+ 
+            <b>for</b> (<b>int</b> <span id="r53 rd" class="r53 r">i</span> = 0; <span class="r53 r">i</span> &lt; <span class="r46 r">locations</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r53 r">i</span>++)
+            {
+                <a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a> <span id="r54 rd" class="r54 r">location</span> = <span class="r46 r">locations</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r53 r">i</span>];
+                <b>string</b> <span id="r55 rd" class="r55 r">virtualPath</span> = <span class="r54 r">location</span>.<a href="#6cecf1c098a00064" class="i method">Format</a>(<span class="r47 r">name</span>, <span class="r48 r">controllerName</span>, <span class="r49 r">areaName</span>);
+                <a href="/System.Web.WebPages/A.html#766e8d0f655ee0a6" class="t t">DisplayInfo</a> <span id="r56 rd" class="r56 r">virtualPathDisplayInfo</span> = <a href="#db4694bf824c2c9b" class="i property">DisplayModeProvider</a>.<a href="/System.Web.WebPages/A.html#4c386d4b3d919af5" class="i method">GetDisplayInfoForVirtualPath</a>(<span class="r55 r">virtualPath</span>, <span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <span id="r57 rd" class="r57 r">path</span> =&gt; <a href="#942f5e4fdfbfb138" class="i method">FileExists</a>(<span class="r45 r">controllerContext</span>, <span class="r57 r">path</span>), <span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#88f6ba1d8998ef56" class="i property">DisplayMode</a>);
+ 
+                <b>if</b> (<span class="r56 r">virtualPathDisplayInfo</span> != <b>null</b>)
+                {
+                    <b>string</b> <span id="r58 rd" class="r58 r">resolvedVirtualPath</span> = <span class="r56 r">virtualPathDisplayInfo</span>.<a href="/System.Web.WebPages/A.html#8d5dc4d9ef5038ea" class="i property">FilePath</a>;
+ 
+                    <span class="r51 r">searchedLocations</span> = <a href="#863033939bb039a1" class="i field">_emptyLocations</a>;
+                    <span class="r52 r">result</span> = <span class="r58 r">resolvedVirtualPath</span>;
+                    <a href="#b6a2f0531222602c" class="i property">ViewLocationCache</a>.<a href="IViewLocationCache.cs.html#9110de0f8c7af733" class="i method">InsertViewLocation</a>(<span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <a href="#717b1d1d7a0a17b8" class="i method">AppendDisplayModeToCacheKey</a>(<span class="r50 r">cacheKey</span>, <span class="r56 r">virtualPathDisplayInfo</span>.<a href="/System.Web.WebPages/A.html#06bc3e849b0c3e53" class="i property">DisplayMode</a>.<a href="/System.Web.WebPages/A.html#2159b7a096acdde3" class="i property">DisplayModeId</a>), <span class="r52 r">result</span>);
+ 
+                    <b>if</b> (<span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#88f6ba1d8998ef56" class="i property">DisplayMode</a> == <b>null</b>)
+                    {
+                        <span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#88f6ba1d8998ef56" class="i property">DisplayMode</a> = <span class="r56 r">virtualPathDisplayInfo</span>.<a href="/System.Web.WebPages/A.html#06bc3e849b0c3e53" class="i property">DisplayMode</a>;
+                    }
+ 
+                    <span class="c">// Populate the cache for all other display modes. We want to cache both file system hits and misses so that we can distinguish</span>
+                    <span class="c">// in future requests whether a file&#39;s status was evicted from the cache (null value) or if the file doesn&#39;t exist (empty string).</span>
+                    <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="/System.Web.WebPages/A.html#730772cfc8197b12" class="t t">IDisplayMode</a>&gt; <span id="r59 rd" class="r59 r">allDisplayModes</span> = <a href="#db4694bf824c2c9b" class="i property">DisplayModeProvider</a>.<a href="/System.Web.WebPages/A.html#fff330b117b760a6" class="i property">Modes</a>;
+                    <b>foreach</b> (<a href="/System.Web.WebPages/A.html#730772cfc8197b12" class="t t">IDisplayMode</a> <span id="r60 rd" class="r60 r">displayMode</span> <b>in</b> <span class="r59 r">allDisplayModes</span>)
+                    {
+                        <b>if</b> (<span class="r60 r">displayMode</span>.<a href="/System.Web.WebPages/A.html#2159b7a096acdde3" class="i property">DisplayModeId</a> != <span class="r56 r">virtualPathDisplayInfo</span>.<a href="/System.Web.WebPages/A.html#06bc3e849b0c3e53" class="i property">DisplayMode</a>.<a href="/System.Web.WebPages/A.html#2159b7a096acdde3" class="i property">DisplayModeId</a>)
+                        {
+                            <a href="/System.Web.WebPages/A.html#766e8d0f655ee0a6" class="t t">DisplayInfo</a> <span id="r61 rd" class="r61 r">displayInfoToCache</span> = <span class="r60 r">displayMode</span>.<a href="/System.Web.WebPages/A.html#c1bff47a62bea6d6" class="i method">GetDisplayInfo</a>(<span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <span class="r55 r">virtualPath</span>, <span class="r62 r">virtualPathExists</span>: <span id="r63 rd" class="r63 r">path</span> =&gt; <a href="#942f5e4fdfbfb138" class="i method">FileExists</a>(<span class="r45 r">controllerContext</span>, <span class="r63 r">path</span>));
+ 
+                            <b>string</b> <span id="r64 rd" class="r64 r">cacheValue</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+                            <b>if</b> (<span class="r61 r">displayInfoToCache</span> != <b>null</b> &amp;&amp; <span class="r61 r">displayInfoToCache</span>.<a href="/System.Web.WebPages/A.html#8d5dc4d9ef5038ea" class="i property">FilePath</a> != <b>null</b>)
+                            {
+                                <span class="r64 r">cacheValue</span> = <span class="r61 r">displayInfoToCache</span>.<a href="/System.Web.WebPages/A.html#8d5dc4d9ef5038ea" class="i property">FilePath</a>;
+                            }
+                            <a href="#b6a2f0531222602c" class="i property">ViewLocationCache</a>.<a href="IViewLocationCache.cs.html#9110de0f8c7af733" class="i method">InsertViewLocation</a>(<span class="r45 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <a href="#717b1d1d7a0a17b8" class="i method">AppendDisplayModeToCacheKey</a>(<span class="r50 r">cacheKey</span>, <span class="r60 r">displayMode</span>.<a href="/System.Web.WebPages/A.html#2159b7a096acdde3" class="i property">DisplayModeId</a>), <span class="r64 r">cacheValue</span>);
+                        }
+                    }
+                    <b>break</b>;
+                }
+ 
+                <span class="r51 r">searchedLocations</span>[<span class="r53 r">i</span>] = <span class="r55 r">virtualPath</span>;
+            }
+ 
+            <b>return</b> <span class="r52 r">result</span>;
+        }
+ 
+        <b>private string</b> <a id="4c21eb9b4439d4fd" href="R/4c21eb9b4439d4fd.html" target="n" data-glyph="76,1" class="i method">GetPathFromSpecificName</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r65 rd" class="r65 r">controllerContext</span>, <b>string</b> <span id="r66 rd" class="r66 r">name</span>, <b>string</b> <span id="r67 rd" class="r67 r">cacheKey</span>, <b>ref string</b>[] <span id="r68 rd" class="r68 r">searchedLocations</span>)
+        {
+            <b>string</b> <span id="r69 rd" class="r69 r">result</span> = <span class="r66 r">name</span>;
+ 
+            <b>if</b> (!(<a href="#d6a3c3af049ca268" class="i method">FilePathIsSupported</a>(<span class="r66 r">name</span>) &amp;&amp; <a href="#942f5e4fdfbfb138" class="i method">FileExists</a>(<span class="r65 r">controllerContext</span>, <span class="r66 r">name</span>)))
+            {
+                <span class="r69 r">result</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+                <span class="r68 r">searchedLocations</span> = <b>new</b>[] { <span class="r66 r">name</span> };
+            }
+ 
+            <a href="#b6a2f0531222602c" class="i property">ViewLocationCache</a>.<a href="IViewLocationCache.cs.html#9110de0f8c7af733" class="i method">InsertViewLocation</a>(<span class="r65 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>, <span class="r67 r">cacheKey</span>, <span class="r69 r">result</span>);
+            <b>return</b> <span class="r69 r">result</span>;
+        }
+ 
+        <b>private bool</b> <a id="d6a3c3af049ca268" href="R/d6a3c3af049ca268.html" target="n" data-glyph="76,1" class="i method">FilePathIsSupported</a>(<b>string</b> <span id="r70 rd" class="r70 r">virtualPath</span>)
+        {
+            <b>if</b> (<a href="#6de361fd57e69bb0" class="i property">FileExtensions</a> == <b>null</b>)
+            {
+                <span class="c">// legacy behavior for custom ViewEngine that might not set the FileExtensions property</span>
+                <b>return true</b>;
+            }
+            <b>else</b>
+            {
+                <span class="c">// get rid of the &#39;.&#39; because the FileExtensions property expects extensions withouth a dot.</span>
+                <b>string</b> <span id="r71 rd" class="r71 r">extension</span> = <a href="#849eecf94500921e" class="i field">GetExtensionThunk</a>(<span class="r70 r">virtualPath</span>).<a href="@0@mscorlib/A.html#5137a6065a1c1234" class="i method">TrimStart</a>(<span class="s">&#39;.&#39;</span>);
+                <b>return</b> <a href="#6de361fd57e69bb0" class="i property">FileExtensions</a>.<a href="@0@System.Core/A.html#d1530e4eed8b26b3" class="i method">Contains</a>(<span class="r71 r">extension</span>, <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+            }
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a>&gt; <a id="e755c326ae31df6a" href="R/e755c326ae31df6a.html" target="n" data-glyph="76,1" class="i method">GetViewLocations</a>(<b>string</b>[] <span id="r72 rd" class="r72 r">viewLocationFormats</span>, <b>string</b>[] <span id="r73 rd" class="r73 r">areaViewLocationFormats</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a>&gt; <span id="r74 rd" class="r74 r">allLocations</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a>&gt;();
+ 
+            <b>if</b> (<span class="r73 r">areaViewLocationFormats</span> != <b>null</b>)
+            {
+                <b>foreach</b> (<b>string</b> <span id="r75 rd" class="r75 r">areaViewLocationFormat</span> <b>in</b> <span class="r73 r">areaViewLocationFormats</span>)
+                {
+                    <span class="r74 r">allLocations</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="#04a0b5e1689d3dbb" class="t constructor">AreaAwareViewLocation</a>(<span class="r75 r">areaViewLocationFormat</span>));
+                }
+            }
+ 
+            <b>if</b> (<span class="r72 r">viewLocationFormats</span> != <b>null</b>)
+            {
+                <b>foreach</b> (<b>string</b> <span id="r76 rd" class="r76 r">viewLocationFormat</span> <b>in</b> <span class="r72 r">viewLocationFormats</span>)
+                {
+                    <span class="r74 r">allLocations</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="#e7f2179dc66848de" class="t constructor">ViewLocation</a>(<span class="r76 r">viewLocationFormat</span>));
+                }
+            }
+ 
+            <b>return</b> <span class="r74 r">allLocations</span>;
+        }
+ 
+        <b>private static bool</b> <a id="00d0386fe44896df" href="R/00d0386fe44896df.html" target="n" data-glyph="76,1" class="i method">IsSpecificPath</a>(<b>string</b> <span id="r77 rd" class="r77 r">name</span>)
+        {
+            <b>char</b> <span id="r78 rd" class="r78 r">c</span> = <span class="r77 r">name</span>[0];
+            <b>return</b> (<span class="r78 r">c</span> == <span class="s">&#39;~&#39;</span> || <span class="r78 r">c</span> == <span class="s">&#39;/&#39;</span>);
+        }
+ 
+        <b>public virtual void</b> <a id="ae31ce2ec1bcf67f" href="R/ae31ce2ec1bcf67f.html" target="n" data-glyph="72,1" class="i method">ReleaseView</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r79 rd" class="r79 r">controllerContext</span>, <a href="IView.cs.html#82f8cb446948d3d5" class="t t">IView</a> <span id="r80 rd" class="r80 r">view</span>)
+        {
+            <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a> <span id="r81 rd" class="r81 r">disposable</span> = <span class="r80 r">view</span> <b>as</b> <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>;
+            <b>if</b> (<span class="r81 r">disposable</span> != <b>null</b>)
+            {
+                <span class="r81 r">disposable</span>.<a href="@0@mscorlib/A.html#4e23fed29bd598fa" class="i method">Dispose</a>();
+            }
+        }
+ 
+        <b>private class</b> <a id="efbfa7670f967cb8" href="R/efbfa7670f967cb8.html" target="n" data-glyph="4,1" class="t t">AreaAwareViewLocation</a> : <a href="#3f63f852d0c84bbb" class="t t">ViewLocation</a>
+        {
+            <b>public</b> <a id="04a0b5e1689d3dbb" href="R/04a0b5e1689d3dbb.html" target="n" data-glyph="72,2" class="i constructor">AreaAwareViewLocation</a>(<b>string</b> <span id="r82 rd" class="r82 r">virtualPathFormatString</span>)
+                : <a href="#e7f2179dc66848de" class="k">base</a>(<span class="r82 r">virtualPathFormatString</span>)
+            {
+            }
+ 
+            <b>public override string</b> <a id="a9671885bfbbeeab" href="R/a9671885bfbbeeab.html" target="n" data-glyph="72,2" class="i method">Format</a>(<b>string</b> <span id="r83 rd" class="r83 r">viewName</span>, <b>string</b> <span id="r84 rd" class="r84 r">controllerName</span>, <b>string</b> <span id="r85 rd" class="r85 r">areaName</span>)
+            {
+                <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <a href="#965fe4c052836682" class="i field">_virtualPathFormatString</a>, <span class="r83 r">viewName</span>, <span class="r84 r">controllerName</span>, <span class="r85 r">areaName</span>);
+            }
+        }
+ 
+        <b>private class</b> <a id="3f63f852d0c84bbb" href="R/3f63f852d0c84bbb.html" target="n" data-glyph="4,1" class="t t">ViewLocation</a>
+        {
+            <b>protected string</b> <a id="965fe4c052836682" href="R/965fe4c052836682.html" target="n" data-glyph="45,2" class="i field">_virtualPathFormatString</a>;
+ 
+            <b>public</b> <a id="e7f2179dc66848de" href="R/e7f2179dc66848de.html" target="n" data-glyph="72,2" class="i constructor">ViewLocation</a>(<b>string</b> <span id="r86 rd" class="r86 r">virtualPathFormatString</span>)
+            {
+                <a href="#965fe4c052836682" class="i field">_virtualPathFormatString</a> = <span class="r86 r">virtualPathFormatString</span>;
+            }
+ 
+            <b>public virtual string</b> <a id="6cecf1c098a00064" href="R/6cecf1c098a00064.html" target="n" data-glyph="72,2" class="i method">Format</a>(<b>string</b> <span id="r87 rd" class="r87 r">viewName</span>, <b>string</b> <span id="r88 rd" class="r88 r">controllerName</span>, <b>string</b> <span id="r89 rd" class="r89 r">areaName</span>)
+            {
+                <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <a href="#965fe4c052836682" class="i field">_virtualPathFormatString</a>, <span class="r87 r">viewName</span>, <span class="r88 r">controllerName</span>);
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

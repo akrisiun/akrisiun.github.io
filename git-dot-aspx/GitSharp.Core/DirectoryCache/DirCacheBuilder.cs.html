@@ -1,0 +1,277 @@
+﻿<!DOCTYPE html>
+<html><head><title>DirCacheBuilder.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(268);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/DirectoryCache/DirCacheBuilder.cs" target="_top">DirectoryCache\DirCacheBuilder.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">TreeWalk</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">DirectoryCache</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Updates a </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> by adding individual </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">s.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> A builder always starts from a clean slate and appends in every single</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> which the final updated index must have to reflect</span>
+    <span class="c">///</span><span class="c"> its new content.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> For maximum performance applications should add entries in path name order.</span>
+    <span class="c">///</span><span class="c"> Adding entries out of order is permitted, however a final sorting pass will</span>
+    <span class="c">///</span><span class="c"> be implicitly performed during </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#9ce6c8bee7c08585" class="i method">finish</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to correct any out-of-order</span>
+    <span class="c">///</span><span class="c"> entries. Duplicate detection is also delayed until the sorting is complete.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCacheEditor.cs.html#30303a7cd5ec58f3" class="t t">DirCacheEditor</a><span class="c">&quot;</span><span class="c">/&gt;</span>
+    <b>public class</b> <a id="262e9b3e8be58d73" href="../R/262e9b3e8be58d73.html" target="n" data-glyph="0,0" class="t t">DirCacheBuilder</a> : <a href="BaseDirCacheEditor.cs.html#b363d4dc4308af04" class="t t">BaseDirCacheEditor</a>
+    {
+        <b>private bool</b> <a id="bde5baaf4a174c29" href="../R/bde5baaf4a174c29.html" target="n" data-glyph="46,1" class="i field">_sorted</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct a new builder.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">dc</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the cache this builder will eventually update.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">ecnt</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Estimated number of entries the builder will have upon</span>
+        <span class="c">///</span><span class="c"> completion. This sizes the initial entry table.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="8d0c9e6e207d276f" href="../R/8d0c9e6e207d276f.html" target="n" data-glyph="72,1" class="i constructor">DirCacheBuilder</a>(<a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a> <span id="r0 rd" class="r0 r">dc</span>, <b>int</b> <span id="r1 rd" class="r1 r">ecnt</span>)
+            : <a href="BaseDirCacheEditor.cs.html#b8a771aab37572d1" class="k">base</a>(<span class="r0 r">dc</span>, <span class="r1 r">ecnt</span>)
+        {
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Append one entry into the resulting entry list.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The entry is placed at the end of the entry list. If the entry causes the</span>
+        <span class="c">///</span><span class="c"> list to now be incorrectly sorted a final sorting phase will be</span>
+        <span class="c">///</span><span class="c"> automatically enabled within </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#9ce6c8bee7c08585" class="i method">finish</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The internal entry table is automatically expanded if there is</span>
+        <span class="c">///</span><span class="c"> insufficient space for the new addition.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">newEntry</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new entry to add.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="f8a3415e164a77c4" href="../R/f8a3415e164a77c4.html" target="n" data-glyph="72,1" class="i method">add</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r2 rd" class="r2 r">newEntry</span>)
+        {
+            <b>if</b> (<span class="r2 r">newEntry</span>.<a href="DirCacheEntry.cs.html#8c4ee444ad1d2dc8" class="i method">getRawMode</a>() == 0)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;FileMode not set for path &quot;</span>
+                    + <span class="r2 r">newEntry</span>.<a href="DirCacheEntry.cs.html#7ee987977b56640f" class="i method">getPathString</a>());
+            }
+
+            <a href="#238170f81926825f" class="i method">BeforeAdd</a>(<span class="r2 r">newEntry</span>);
+            <a href="BaseDirCacheEditor.cs.html#f9d7d0ff5d1169a0" class="i method">FastAdd</a>(<span class="r2 r">newEntry</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add a range of existing entries from the destination cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The entries are placed at the end of the entry list. If any of the</span>
+        <span class="c">///</span><span class="c"> entries causes the list to now be incorrectly sorted a final sorting</span>
+        <span class="c">///</span><span class="c"> phase will be automatically enabled within </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#9ce6c8bee7c08585" class="i method">finish</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method copies from the destination cache, which has not yet been</span>
+        <span class="c">///</span><span class="c"> updated with this editor&#39;s new table. So all offsets into the destination</span>
+        <span class="c">///</span><span class="c"> cache are not affected by any updates that may be currently taking place</span>
+        <span class="c">///</span><span class="c"> in this editor.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The internal entry table is automatically expanded if there is</span>
+        <span class="c">///</span><span class="c"> insufficient space for the new additions.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">pos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> First entry to copy from the destination cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">cnt</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Number of entries to copy.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="ef9c20394511e110" href="../R/ef9c20394511e110.html" target="n" data-glyph="72,1" class="i method">keep</a>(<b>int</b> <span id="r3 rd" class="r3 r">pos</span>, <b>int</b> <span id="r4 rd" class="r4 r">cnt</span>)
+        {
+            <a href="#238170f81926825f" class="i method">BeforeAdd</a>(<a href="BaseDirCacheEditor.cs.html#bb2d8344333889f1" class="i property">Cache</a>.<a href="DirCache.cs.html#fdeb36fd779c7483" class="i method">getEntry</a>(<span class="r3 r">pos</span>));
+            <a href="BaseDirCacheEditor.cs.html#6628485c8431c03e" class="i method">FastKeep</a>(<span class="r3 r">pos</span>, <span class="r4 r">cnt</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Recursively add an entire tree into this builder.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If pathPrefix is &quot;a/b&quot; and the tree contains file &quot;c&quot; then the resulting</span>
+        <span class="c">///</span><span class="c"> DirCacheEntry will have the path &quot;a/b/c&quot;.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> All entries are inserted at stage 0, therefore assuming that the</span>
+        <span class="c">///</span><span class="c"> application will not insert any other paths with the same pathPrefix.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">pathPrefix</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> UTF-8 encoded prefix to mount the tree&#39;s entries at. If the</span>
+        <span class="c">///</span><span class="c"> path does not end with &#39;/&#39; one will be automatically inserted</span>
+        <span class="c">///</span><span class="c"> as necessary.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">stage</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Stage of the entries when adding them.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">db</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Repository the tree(s) will be read from during recursive</span>
+        <span class="c">///</span><span class="c"> traversal. This must be the same repository that the resulting</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> would be written out to (or used in) otherwise </span>
+        <span class="c">///</span><span class="c"> the caller is simply asking for deferred MissingObjectExceptions.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">tree</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The tree to recursively add. This tree&#39;s contents will appear</span>
+        <span class="c">///</span><span class="c"> under </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">pathPrefix</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">. The ObjectId must be that of a</span>
+        <span class="c">///</span><span class="c"> tree; the caller is responsible for dereferencing a tag or</span>
+        <span class="c">///</span><span class="c"> commit (if necessary).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A tree cannot be read to iterate through its entries.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="32a931856c201240" href="../R/32a931856c201240.html" target="n" data-glyph="72,1" class="i method">addTree</a>(<b>byte</b>[] <span id="r5 rd" class="r5 r">pathPrefix</span>, <b>int</b> <span id="r6 rd" class="r6 r">stage</span>, <a href="../Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r7 rd" class="r7 r">db</span>, <a href="../AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r8 rd" class="r8 r">tree</span>)
+        {
+            <a href="../TreeWalk/TreeWalk.cs.html#f77ff77748e6b1dc" class="k">var</a> <span id="r9 rd" class="r9 r">tw</span> = <b>new</b> <span class="i n">TreeWalk</span>.<a href="../TreeWalk/TreeWalk.cs.html#06ce8352273419f1" class="t constructor">TreeWalk</a>(<span class="r7 r">db</span>);
+            <span class="r9 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#b74356de20445e44" class="i method">reset</a>();
+            <a href="../WindowCursor.cs.html#1782168e8a82d90f" class="k">var</a> <span id="r10 rd" class="r10 r">curs</span> = <b>new</b> <a href="../WindowCursor.cs.html#8cb7e36e619a1307" class="t constructor">WindowCursor</a>();
+            <b>try</b>
+            {
+                <span class="r9 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#8adeec7a4ef0a0ee" class="i method">addTree</a>(<b>new</b> <a href="../TreeWalk/CanonicalTreeParser.cs.html#3f3afd775116c650" class="t constructor">CanonicalTreeParser</a>(<span class="r5 r">pathPrefix</span>, <span class="r7 r">db</span>, <span class="r8 r">tree</span>.<a href="../AnyObjectId.cs.html#18a464883edcf2fb" class="i method">ToObjectId</a>(), <span class="r10 r">curs</span>));
+            }
+            <b>finally</b>
+            {
+                <span class="r10 r">curs</span>.<a href="../WindowCursor.cs.html#5fc4aebb06ba157d" class="i method">Release</a>();
+            }
+            <span class="r9 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#631ba2ce7faf766b" class="i property">Recursive</a> = <b>true</b>;
+
+            <b>if</b> (!<span class="r9 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#2e7c4dbc3070e2c6" class="i method">next</a>()) <b>return</b>;
+
+            <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r11 rd" class="r11 r">newEntry</span> = <a href="#f2bfb95d2c1362dd" class="i method">ToEntry</a>(<span class="r6 r">stage</span>, <span class="r9 r">tw</span>);
+            <a href="#238170f81926825f" class="i method">BeforeAdd</a>(<span class="r11 r">newEntry</span>);
+            <a href="BaseDirCacheEditor.cs.html#f9d7d0ff5d1169a0" class="i method">FastAdd</a>(<span class="r11 r">newEntry</span>);
+            <b>while</b> (<span class="r9 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#2e7c4dbc3070e2c6" class="i method">next</a>())
+            {
+                <a href="BaseDirCacheEditor.cs.html#f9d7d0ff5d1169a0" class="i method">FastAdd</a>(<a href="#f2bfb95d2c1362dd" class="i method">ToEntry</a>(<span class="r6 r">stage</span>, <span class="r9 r">tw</span>));
+            }
+        }
+
+        <b>private static</b> <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <a id="f2bfb95d2c1362dd" href="../R/f2bfb95d2c1362dd.html" target="n" data-glyph="76,1" class="i method">ToEntry</a>(<b>int</b> <span id="r12 rd" class="r12 r">stage</span>, <span class="i n">TreeWalk</span>.<a href="../TreeWalk/TreeWalk.cs.html#f77ff77748e6b1dc" class="t t">TreeWalk</a> <span id="r13 rd" class="r13 r">tw</span>)
+        {
+            <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="k">var</a> <span id="r14 rd" class="r14 r">e</span> = <b>new</b> <a href="DirCacheEntry.cs.html#6a60b6bbc9cba2e8" class="t constructor">DirCacheEntry</a>(<span class="r13 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#738d2e93b7ce29b1" class="i method">getRawPath</a>(), <span class="r12 r">stage</span>);
+            <a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="k">var</a> <span id="r15 rd" class="r15 r">iterator</span> = <span class="r13 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#58953e7f6aced338" class="i method">getTree</a>&lt;<a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="t t">AbstractTreeIterator</a>&gt;(0, <b>typeof</b>(<a href="../TreeWalk/AbstractTreeIterator.cs.html#34307eb0ddf28837" class="t t">AbstractTreeIterator</a>));
+            <span class="r14 r">e</span>.<a href="DirCacheEntry.cs.html#9e3648738c910330" class="i method">setFileMode</a>(<span class="r13 r">tw</span>.<a href="../TreeWalk/TreeWalk.cs.html#875887b97e8c273b" class="i method">getFileMode</a>(0));
+            <span class="r14 r">e</span>.<a href="DirCacheEntry.cs.html#405a02505fb71fe1" class="i method">setObjectIdFromRaw</a>(<span class="r15 r">iterator</span>.<a href="../TreeWalk/AbstractTreeIterator.cs.html#e4880aa80dc2acd6" class="i method">idBuffer</a>(), <span class="r15 r">iterator</span>.<a href="../TreeWalk/AbstractTreeIterator.cs.html#7fa2c68b4bf4e772" class="i method">idOffset</a>());
+            <b>return</b> <span class="r14 r">e</span>;
+        }
+
+        <b>public override void</b> <a id="9ce6c8bee7c08585" href="../R/9ce6c8bee7c08585.html" target="n" data-glyph="72,1" class="i method">finish</a>()
+        {
+            <b>if</b> (!<a href="#bde5baaf4a174c29" class="i field">_sorted</a>)
+            {
+                <a href="#c99443bf4daea7a5" class="i method">Resort</a>();
+            }
+            <a href="BaseDirCacheEditor.cs.html#22fcac2f490db4c1" class="i method">Replace</a>();
+        }
+
+        <b>private void</b> <a id="238170f81926825f" href="../R/238170f81926825f.html" target="n" data-glyph="76,1" class="i method">BeforeAdd</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r16 rd" class="r16 r">newEntry</span>)
+        {
+            <b>if</b> (<a href="#bde5baaf4a174c29" class="i field">_sorted</a> &amp;&amp; <a href="BaseDirCacheEditor.cs.html#ea4865a1a331bf12" class="i property">EntryCnt</a> &gt; 0)
+            {
+                <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r17 rd" class="r17 r">lastEntry</span> = <a href="BaseDirCacheEditor.cs.html#bff1d2ad6d12ce05" class="i property">Entries</a>[<a href="BaseDirCacheEditor.cs.html#ea4865a1a331bf12" class="i property">EntryCnt</a> - 1];
+                <b>int</b> <span id="r18 rd" class="r18 r">cr</span> = <a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a>.<a href="DirCache.cs.html#2d052d3d92c7f1df" class="i method">Compare</a>(<span class="r17 r">lastEntry</span>, <span class="r16 r">newEntry</span>);
+                <b>if</b> (<span class="r18 r">cr</span> &gt; 0)
+                {
+                    <span class="c">// The new entry sorts before the old entry; we are</span>
+                    <span class="c">// no longer sorted correctly. We&#39;ll need to redo</span>
+                    <span class="c">// the sorting before we can close out the build.</span>
+                    <span class="c">//</span>
+                    <a href="#bde5baaf4a174c29" class="i field">_sorted</a> = <b>false</b>;
+                }
+                <b>else if</b> (<span class="r18 r">cr</span> == 0)
+                {
+                    <span class="c">// Same file path; we can only insert this if the</span>
+                    <span class="c">// stages won&#39;t be violated.</span>
+                    <span class="c">//</span>
+                    <b>int</b> <span id="r19 rd" class="r19 r">peStage</span> = <span class="r17 r">lastEntry</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>();
+                    <b>int</b> <span id="r20 rd" class="r20 r">dceStage</span> = <span class="r16 r">newEntry</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>();
+                    <b>if</b> (<span class="r19 r">peStage</span> == <span class="r20 r">dceStage</span>)
+                        <b>throw</b> <a href="#8769e39a6f93d1cb" class="i method">Bad</a>(<span class="r16 r">newEntry</span>, <span class="s">&quot;Duplicate stages not allowed&quot;</span>);
+                    <b>if</b> (<span class="r19 r">peStage</span> == 0 || <span class="r20 r">dceStage</span> == 0)
+                        <b>throw</b> <a href="#8769e39a6f93d1cb" class="i method">Bad</a>(<span class="r16 r">newEntry</span>, <span class="s">&quot;Mixed stages not allowed&quot;</span>);
+                    <b>if</b> (<span class="r19 r">peStage</span> &gt; <span class="r20 r">dceStage</span>)
+                        <a href="#bde5baaf4a174c29" class="i field">_sorted</a> = <b>false</b>;
+                }
+            }
+        }
+
+        <b>private void</b> <a id="c99443bf4daea7a5" href="../R/c99443bf4daea7a5.html" target="n" data-glyph="76,1" class="i method">Resort</a>()
+        {
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#54496ee33e3b155a" class="i method">Sort</a>(<a href="BaseDirCacheEditor.cs.html#bff1d2ad6d12ce05" class="i property">Entries</a>, 0, <a href="BaseDirCacheEditor.cs.html#ea4865a1a331bf12" class="i property">EntryCnt</a>, <b>new</b> <a href="../Util/GenericComparer.cs.html#7cc10a579de4a282" class="t constructor">GenericComparer</a>&lt;<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a>&gt;(<a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a>.<a href="DirCache.cs.html#1e1fcaa9916bca5e" class="i field">EntryComparer</a>));
+
+            <b>for</b> (<b>int</b> <span id="r21 rd" class="r21 r">entryIdx</span> = 1; <span class="r21 r">entryIdx</span> &lt; <a href="BaseDirCacheEditor.cs.html#ea4865a1a331bf12" class="i property">EntryCnt</a>; <span class="r21 r">entryIdx</span>++)
+            {
+                <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r22 rd" class="r22 r">pe</span> = <a href="BaseDirCacheEditor.cs.html#bff1d2ad6d12ce05" class="i property">Entries</a>[<span class="r21 r">entryIdx</span> - 1];
+                <a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r23 rd" class="r23 r">ce</span> = <a href="BaseDirCacheEditor.cs.html#bff1d2ad6d12ce05" class="i property">Entries</a>[<span class="r21 r">entryIdx</span>];
+                <b>int</b> <span id="r24 rd" class="r24 r">cr</span> = <a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a>.<a href="DirCache.cs.html#2d052d3d92c7f1df" class="i method">Compare</a>(<span class="r22 r">pe</span>, <span class="r23 r">ce</span>);
+                <b>if</b> (<span class="r24 r">cr</span> == 0)
+                {
+                    <span class="c">// Same file path; we can only allow this if the stages</span>
+                    <span class="c">// are 1-3 and no 0 exists.</span>
+                    <span class="c">//</span>
+                    <b>int</b> <span id="r25 rd" class="r25 r">peStage</span> = <span class="r22 r">pe</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>();
+                    <b>int</b> <span id="r26 rd" class="r26 r">ceStage</span> = <span class="r23 r">ce</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>();
+
+                    <b>if</b> (<span class="r25 r">peStage</span> == <span class="r26 r">ceStage</span>)
+                    {
+                        <b>throw</b> <a href="#8769e39a6f93d1cb" class="i method">Bad</a>(<span class="r23 r">ce</span>, <span class="s">&quot;Duplicate stages not allowed&quot;</span>);
+                    }
+
+                    <b>if</b> (<span class="r25 r">peStage</span> == 0 || <span class="r26 r">ceStage</span> == 0)
+                    {
+                        <b>throw</b> <a href="#8769e39a6f93d1cb" class="i method">Bad</a>(<span class="r23 r">ce</span>, <span class="s">&quot;Mixed stages not allowed&quot;</span>);
+                    }
+                }
+            }
+
+            <a href="#bde5baaf4a174c29" class="i field">_sorted</a> = <b>true</b>;
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a> <a id="8769e39a6f93d1cb" href="../R/8769e39a6f93d1cb.html" target="n" data-glyph="76,1" class="i method">Bad</a>(<a href="DirCacheEntry.cs.html#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r27 rd" class="r27 r">a</span>, <b>string</b> <span id="r28 rd" class="r28 r">msg</span>)
+        {
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="r28 r">msg</span> + <span class="s">&quot;: &quot;</span> + <span class="r27 r">a</span>.<a href="DirCacheEntry.cs.html#0926ebb73c5f69a5" class="i method">getStage</a>() + <span class="s">&quot; &quot;</span> + <span class="r27 r">a</span>.<a href="DirCacheEntry.cs.html#7ee987977b56640f" class="i method">getPathString</a>());
+        }
+    }
+}</pre></td></tr></table></div></body></html>

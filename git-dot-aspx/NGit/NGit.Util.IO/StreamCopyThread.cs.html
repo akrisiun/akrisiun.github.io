@@ -1,0 +1,208 @@
+﻿<!DOCTYPE html>
+<html><head><title>StreamCopyThread.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(199);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Util.IO/StreamCopyThread.cs" target="_top">NGit.Util.IO\StreamCopyThread.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Thread to copy from an input stream to an output stream.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Thread to copy from an input stream to an output stream.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>internal class</b> <a id="5f0a62eaf2aa16d9" href="../R/5f0a62eaf2aa16d9.html" target="n" data-glyph="2,0" class="t t">StreamCopyThread</a> : <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>
+	{
+		<b>private const int</b> <a id="5cc7e44a27b233c0" href="../R/5cc7e44a27b233c0.html" target="n" data-glyph="10,1" class="i field">BUFFER_SIZE</a> = 1024;
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <a id="2102843a76525dba" href="../R/2102843a76525dba.html" target="n" data-glyph="46,1" class="i field">src</a>;
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <a id="d4b87ca9030e38a1" href="../R/d4b87ca9030e38a1.html" target="n" data-glyph="46,1" class="i field">dst</a>;
+
+		<b>private volatile bool</b> <a id="47b396f95d4365a6" href="../R/47b396f95d4365a6.html" target="n" data-glyph="46,1" class="i field">done</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a thread to copy data from an input stream to an output stream.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create a thread to copy data from an input stream to an output stream.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">i</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> stream to copy from. The thread terminates when this stream</span>
+		<span class="c">///</span><span class="c"> reaches EOF. The thread closes this stream before it exits.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">o</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> stream to copy into. The destination stream is automatically</span>
+		<span class="c">///</span><span class="c"> closed when the thread terminates.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="62c013c055f15eca" href="../R/62c013c055f15eca.html" target="n" data-glyph="72,1" class="i constructor">StreamCopyThread</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r0 rd" class="r0 r">i</span>, <a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <span id="r1 rd" class="r1 r">o</span>)
+		{
+			<a href="/Sharpen/A.html#7046e9ef75861e01" class="i method">SetName</a>(<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#9c18f268284a4c54" class="i method">CurrentThread</a>().<a href="/Sharpen/A.html#8c83bbdd33150472" class="i method">GetName</a>() + <span class="s">&quot;-StreamCopy&quot;</span>);
+			<a href="#2102843a76525dba" class="i field">src</a> = <span class="r0 r">i</span>;
+			<a href="#d4b87ca9030e38a1" class="i field">dst</a> = <span class="r1 r">o</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Request the thread to flush the output stream as soon as possible.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Request the thread to flush the output stream as soon as possible.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This is an asynchronous request to the thread. The actual flush will</span>
+		<span class="c">///</span><span class="c"> happen at some future point in time, when the thread wakes up to process</span>
+		<span class="c">///</span><span class="c"> the request.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="2feca93d9b1500cd" href="../R/2feca93d9b1500cd.html" target="n" data-glyph="72,1" class="i method">Flush</a>()
+		{
+			<a href="/Sharpen/A.html#10516fb714437913" class="i method">Interrupt</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Request that the thread terminate, and wait for it.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Request that the thread terminate, and wait for it.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method signals to the copy thread that it should stop as soon as</span>
+		<span class="c">///</span><span class="c"> there is no more IO occurring.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the calling thread was interrupted.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="86ad496ab6d7e099" href="../R/86ad496ab6d7e099.html" target="n" data-glyph="72,1" class="i method">Halt</a>()
+		{
+			<b>for</b> (; ; )
+			{
+				<a href="/Sharpen/A.html#d4091a6782431c1b" class="i method">Join</a>(250);
+				<b>if</b> (<a href="/Sharpen/A.html#04bd21c5ae43e3c0" class="i method">IsAlive</a>())
+				{
+					<a href="#47b396f95d4365a6" class="i field">done</a> = <b>true</b>;
+					<a href="/Sharpen/A.html#10516fb714437913" class="i method">Interrupt</a>();
+				}
+				<b>else</b>
+				{
+					<b>break</b>;
+				}
+			}
+		}
+
+		<b>public override void</b> <a id="141ea86b07692380" href="../R/141ea86b07692380.html" target="n" data-glyph="72,1" class="i method">Run</a>()
+		{
+			<b>try</b>
+			{
+				<b>byte</b>[] <span id="r2 rd" class="r2 r">buf</span> = <b>new</b> <b>byte</b>[<a href="#5cc7e44a27b233c0" class="i field">BUFFER_SIZE</a>];
+				<b>int</b> <span id="r3 rd" class="r3 r">interruptCounter</span> = 0;
+				<b>for</b> (; ; )
+				{
+					<b>try</b>
+					{
+						<b>if</b> (<span class="r3 r">interruptCounter</span> &gt; 0)
+						{
+							<a href="#d4b87ca9030e38a1" class="i field">dst</a>.<a href="/Sharpen/A.html#c075b35eb5730068" class="i method">Flush</a>();
+							<span class="r3 r">interruptCounter</span>--;
+						}
+						<b>if</b> (<a href="#47b396f95d4365a6" class="i field">done</a>)
+						{
+							<b>break</b>;
+						}
+						<b>int</b> <span id="r4 rd" class="r4 r">n</span>;
+						<b>try</b>
+						{
+							<span class="r4 r">n</span> = <a href="#2102843a76525dba" class="i field">src</a>.<a href="/Sharpen/A.html#054a500a244a1c39" class="i method">Read</a>(<span class="r2 r">buf</span>);
+						}
+						<b>catch</b> (<a href="@0@mscorlib/A.html#c832bfca8785698a" class="t t">ThreadInterruptedException</a>)
+						{
+							<span class="r3 r">interruptCounter</span>++;
+							<b>continue</b>;
+						}
+						<b>if</b> (<span class="r4 r">n</span> &lt; 0)
+						{
+							<b>break</b>;
+						}
+						<b>bool</b> <span id="r5 rd" class="r5 r">writeInterrupted</span> = <b>false</b>;
+						<b>for</b> (; ; )
+						{
+							<b>try</b>
+							{
+								<a href="#d4b87ca9030e38a1" class="i field">dst</a>.<a href="/Sharpen/A.html#54b79431ffc12110" class="i method">Write</a>(<span class="r2 r">buf</span>, 0, <span class="r4 r">n</span>);
+							}
+							<b>catch</b> (<a href="@0@mscorlib/A.html#c832bfca8785698a" class="t t">ThreadInterruptedException</a>)
+							{
+								<span class="r5 r">writeInterrupted</span> = <b>true</b>;
+								<b>continue</b>;
+							}
+							<span class="c">// set interrupt status, which will be checked</span>
+							<span class="c">// when we block in src.read</span>
+							<b>if</b> (<span class="r5 r">writeInterrupted</span>)
+							{
+								<a href="/Sharpen/A.html#10516fb714437913" class="i method">Interrupt</a>();
+							}
+							<b>break</b>;
+						}
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+					{
+						<b>break</b>;
+					}
+				}
+			}
+			<b>finally</b>
+			{
+				<b>try</b>
+				{
+					<a href="#2102843a76525dba" class="i field">src</a>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+				}
+				<span class="c">// Ignore IO errors on close</span>
+				<b>try</b>
+				{
+					<a href="#d4b87ca9030e38a1" class="i field">dst</a>.<a href="/Sharpen/A.html#6788f268a20b51ce" class="i method">Close</a>();
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+				}
+			}
+		}
+		<span class="c">// Ignore IO errors on close</span>
+	}
+}
+</pre></td></tr></table></div></body></html>

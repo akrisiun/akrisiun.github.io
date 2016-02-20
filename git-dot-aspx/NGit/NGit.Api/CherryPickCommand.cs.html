@@ -1,0 +1,237 @@
+﻿<!DOCTYPE html>
+<html><head><title>CherryPickCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(228);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/CherryPickCommand.cs" target="_top">NGit.Api\CherryPickCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Merge</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A class used to execute a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">cherry-pick</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> command. It has setters for all</span>
+	<span class="c">///</span><span class="c"> supported options and arguments of this command and a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#88381233fa845081" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> method</span>
+	<span class="c">///</span><span class="c"> to finally execute the command. Each instance of this class should only be</span>
+	<span class="c">///</span><span class="c"> used for one invocation of the command (means: one call to</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#88381233fa845081" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> )</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span>href=&quot;http://www.kernel.org/pub/software/scm/git/docs/git-cherry-pick.html&quot;
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about cherry-pick</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="c70e6cfecbf2ffbb" href="../R/c70e6cfecbf2ffbb.html" target="n" data-glyph="0,0" class="t t">CherryPickCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a>&gt;
+	{
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="5d5fab28de8a07de" href="../R/5d5fab28de8a07de.html" target="n" data-glyph="46,1" class="i field">commits</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="4546a900402b1d46" href="../R/4546a900402b1d46.html" target="n" data-glyph="75,1" class="i constructor">CherryPickCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r0 r">repo</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Executes the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">Cherry-Pick</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> command with all the options and</span>
+		<span class="c">///</span><span class="c"> parameters collected by the setter methods (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#3c6147918ae3c88b" class="i method">Include</a>(<span class="i n">NGit</span>.<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Include(NGit.Ref)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> of</span>
+		<span class="c">///</span><span class="c"> this class. Each instance of this class should only be used for one</span>
+		<span class="c">///</span><span class="c"> invocation of the command. Don&#39;t call this method twice on an instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result of the cherry-pick</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.GitAPIException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#5d7264b257703642" class="t t">WrongRepositoryStateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.WrongRepositoryStateException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/ConcurrentRefUpdateException.cs.html#3c820c6954c55f0e" class="t t">ConcurrentRefUpdateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.ConcurrentRefUpdateException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/UnmergedPathsException.cs.html#095370662d6874b1" class="t t">UnmergedPathsException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.UnmergedPathsException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoMessageException.cs.html#1bb1c0288a90560e" class="t t">NoMessageException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.NoMessageException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoHeadException.cs.html#70bf94d89c4eb110" class="t t">NoHeadException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.NoHeadException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a> <a id="88381233fa845081" href="../R/88381233fa845081.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r1 rd" class="r1 r">newHead</span> = <b>null</b>;
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <span id="r2 rd" class="r2 r">cherryPickedRefs</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;();
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r3 rd" class="r3 r">revWalk</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<b>try</b>
+			{
+				<span class="c">// get the head commit</span>
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r4 rd" class="r4 r">headRef</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<b>if</b> (<span class="r4 r">headRef</span> == <b>null</b>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#65a573bc59a8e4d4" class="i field">commitOnRepoWithoutHEADCurrentlyNotSupported</a>
+						);
+				}
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r5 rd" class="r5 r">headCommit</span> = <span class="r3 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r4 r">headRef</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>());
+				<span class="r1 r">newHead</span> = <span class="r5 r">headCommit</span>;
+				<span class="c">// loop through all refs to be cherry-picked</span>
+				<b>foreach</b> (<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r6 rd" class="r6 r">src</span> <b>in</b> <a href="#5d5fab28de8a07de" class="i field">commits</a>)
+				{
+					<span class="c">// get the commit to be cherry-picked</span>
+					<span class="c">// handle annotated tags</span>
+					<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r7 rd" class="r7 r">srcObjectId</span> = <span class="r6 r">src</span>.<a href="../NGit/Ref.cs.html#f9c6216152c573d8" class="i method">GetPeeledObjectId</a>();
+					<b>if</b> (<span class="r7 r">srcObjectId</span> == <b>null</b>)
+					{
+						<span class="r7 r">srcObjectId</span> = <span class="r6 r">src</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+					}
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r8 rd" class="r8 r">srcCommit</span> = <span class="r3 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r7 r">srcObjectId</span>);
+					<span class="c">// get the parent of the commit to cherry-pick</span>
+					<b>if</b> (<span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#6804a6589a038c04" class="i property">ParentCount</a> != 1)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/MultipleParentsNotAllowedException.cs.html#1073d6fa556c6464" class="t constructor">MultipleParentsNotAllowedException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().
+							<a href="../NGit.Internal/JGitText.cs.html#066e40bc2de029a3" class="i field">canOnlyCherryPickCommitsWithOneParent</a>, <span class="r8 r">srcCommit</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>
+							(<span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#6804a6589a038c04" class="i property">ParentCount</a>)));
+					}
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r9 rd" class="r9 r">srcParent</span> = <span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#f8123aa92e7623eb" class="i method">GetParent</a>(0);
+					<span class="r3 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#4ab02db9afbfe5a4" class="i method">ParseHeaders</a>(<span class="r9 r">srcParent</span>);
+					<a href="../NGit.Merge/ResolveMerger.cs.html#4c89cde851216ecd" class="t t">ResolveMerger</a> <span id="r10 rd" class="r10 r">merger</span> = (<a href="../NGit.Merge/ResolveMerger.cs.html#4c89cde851216ecd" class="t t">ResolveMerger</a>)((<a href="../NGit.Merge/ThreeWayMerger.cs.html#01715721722e8e06" class="t t">ThreeWayMerger</a>)<a href="../NGit.Merge/MergeStrategy.cs.html#bf0d56dc88902b3d" class="t t">MergeStrategy</a>.<a href="../NGit.Merge/MergeStrategy.cs.html#83a09cb5f560d626" class="i field">RESOLVE</a>.<a href="../NGit.Merge/ThreeWayMergeStrategy.cs.html#0e1ba994bf38b641" class="i method">NewMerger</a>
+						(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>));
+					<span class="r10 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#3fe40c1885083ecc" class="i method">SetWorkingTreeIterator</a>(<b>new</b> <a href="../NGit.Treewalk/FileTreeIterator.cs.html#b46cb8801d309325" class="t constructor">FileTreeIterator</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>));
+					<span class="r10 r">merger</span>.<a href="../NGit.Merge/ThreeWayMerger.cs.html#21e638328d807ca7" class="i method">SetBase</a>(<span class="r9 r">srcParent</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+					<b>if</b> (<span class="r10 r">merger</span>.<a href="../NGit.Merge/ThreeWayMerger.cs.html#a4dce006ef2b62c0" class="i method">Merge</a>(<span class="r5 r">headCommit</span>, <span class="r8 r">srcCommit</span>))
+					{
+						<b>if</b> (<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>.<a href="../NGit/AnyObjectId.cs.html#ead3b31b42c5aa99" class="i method">Equals</a>(<span class="r5 r">headCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>, <span class="r10 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#556f5f4131b30900" class="i method">GetResultTreeId</a>()))
+						{
+							<b>continue</b>;
+						}
+						<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a> <span id="r11 rd" class="r11 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#726275afb70b49a6" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r5 r">headCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>
+							(), <span class="r10 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#556f5f4131b30900" class="i method">GetResultTreeId</a>());
+						<span class="r11 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#c98b11bb8e5d0b91" class="i method">SetFailOnConflict</a>(<b>true</b>);
+						<span class="r11 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#e56f2429d666ea70" class="i method">Checkout</a>();
+						<span class="r1 r">newHead</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#d09113f37676df4c" class="i method">GetRepository</a>()).<a href="Git.cs.html#58eeb297ac383ce3" class="i method">Commit</a>().<a href="CommitCommand.cs.html#ac81c562a4b857d0" class="i method">SetMessage</a>(<span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#3c04ab11a4046cf0" class="i method">GetFullMessage</a>()
+							).<a href="CommitCommand.cs.html#c4055e781a96b985" class="i method">SetReflogComment</a>(<span class="s">&quot;cherry-pick: &quot;</span> + <span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#bbfc9d152cf5f5fc" class="i method">GetShortMessage</a>()).<a href="CommitCommand.cs.html#3f837586aa967755" class="i method">SetAuthor</a>(<span class="r8 r">srcCommit</span>
+							.<a href="../NGit.Revwalk/RevCommit.cs.html#23355c5fbe8beb9d" class="i method">GetAuthorIdent</a>()).<a href="CommitCommand.cs.html#e40c4c0200577029" class="i method">Call</a>();
+						<span class="r2 r">cherryPickedRefs</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r6 r">src</span>);
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r10 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#e4d3e02f4dda78a3" class="i method">Failed</a>())
+						{
+							<b>return</b> <b>new</b> <a href="CherryPickResult.cs.html#b350b0cbdc49fe3b" class="t constructor">CherryPickResult</a>(<span class="r10 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#78dec7de895c0a1c" class="i method">GetFailingPaths</a>());
+						}
+						<span class="c">// there are merge conflicts</span>
+						<b>string</b> <span id="r12 rd" class="r12 r">message</span> = <b>new</b> <a href="../NGit.Merge/MergeMessageFormatter.cs.html#86574a03847be70d" class="t constructor">MergeMessageFormatter</a>().<a href="../NGit.Merge/MergeMessageFormatter.cs.html#94237564649ea148" class="i method">FormatWithConflicts</a>(<span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#3c04ab11a4046cf0" class="i method">GetFullMessage</a>
+							(), <span class="r10 r">merger</span>.<a href="../NGit.Merge/ResolveMerger.cs.html#3b4e6baaf125f972" class="i method">GetUnmergedPaths</a>());
+						<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#c1f9cc2d1e3d64cb" class="i method">WriteCherryPickHead</a>(<span class="r8 r">srcCommit</span>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>);
+						<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#a69a7bc695e98273" class="i method">WriteMergeCommitMsg</a>(<span class="r12 r">message</span>);
+						<b>return</b> <a href="CherryPickResult.cs.html#c2670488779073aa" class="t t">CherryPickResult</a>.<a href="CherryPickResult.cs.html#4a02b1d17970edab" class="i field">CONFLICT</a>;
+					}
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r13 rd" class="r13 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#88a4bf424f81b73b" class="i field">exceptionCaughtDuringExecutionOfCherryPickCommand</a>
+					, <span class="r13 r">e</span>), <span class="r13 r">e</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r3 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+			<b>return</b> <b>new</b> <a href="CherryPickResult.cs.html#9cc3d8767df760aa" class="t constructor">CherryPickResult</a>(<span class="r1 r">newHead</span>, <span class="r2 r">cherryPickedRefs</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a reference to a commit which is cherry-picked to the current</span>
+		<span class="c">///</span><span class="c"> head</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#c70e6cfecbf2ffbb" class="t t">CherryPickCommand</a> <a id="3c6147918ae3c88b" href="../R/3c6147918ae3c88b.html" target="n" data-glyph="72,1" class="i method">Include</a>(<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r14 rd" class="r14 r">commit</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#5d5fab28de8a07de" class="i field">commits</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r14 r">commit</span>);
+			<b>return</b> <a href="#c70e6cfecbf2ffbb" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the Id of a commit which is cherry-picked to the current head</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#c70e6cfecbf2ffbb" class="t t">CherryPickCommand</a> <a id="7e8381d8b656b5cc" href="../R/7e8381d8b656b5cc.html" target="n" data-glyph="72,1" class="i method">Include</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r15 rd" class="r15 r">commit</span>)
+		{
+			<b>return</b> <a href="#665a3037ec4e5c55" class="i method">Include</a>(<span class="r15 r">commit</span>.<a href="../NGit/AnyObjectId.cs.html#4e9c38ea87ec4f33" class="i method">GetName</a>(), <span class="r15 r">commit</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a name given to the commit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">commit</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the Id of a commit which is cherry-picked to the current head</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#c70e6cfecbf2ffbb" class="t t">CherryPickCommand</a> <a id="665a3037ec4e5c55" href="../R/665a3037ec4e5c55.html" target="n" data-glyph="72,1" class="i method">Include</a>(<b>string</b> <span id="r16 rd" class="r16 r">name</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r17 rd" class="r17 r">commit</span>
+			)
+		{
+			<b>return</b> <a href="#3c6147918ae3c88b" class="i method">Include</a>(<b>new</b> <a href="../NGit/ObjectIdRef.cs.html#e05503644522791c" class="t t">ObjectIdRef</a>.<a href="../NGit/ObjectIdRef.cs.html#85e37651aff49114" class="t constructor">Unpeeled</a>(<a href="../NGit/Ref.cs.html#1b606deb8e918043" class="t t">RefStorage</a>.<a href="../NGit/Ref.cs.html#e10e437befc95c59" class="i field">LOOSE</a>, <span class="r16 r">name</span>, <span class="r17 r">commit</span>.<a href="../NGit/AnyObjectId.cs.html#82a834fd5f79e3ca" class="i method">Copy</a>()));
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

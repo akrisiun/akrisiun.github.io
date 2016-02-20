@@ -1,0 +1,1152 @@
+﻿<!DOCTYPE html>
+<html><head><title>RefDirectory.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(1143);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/RefDirectory.cs" target="_top">RefDirectory.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2010, Google Inc.
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2007, Dave Watson &lt;dwatson@mimvista.com&gt;
+ * Copyright (C) 2006, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Eclipse Foundation, Inc. nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">RevWalk</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+<b>using</b> <span class="t">File</span> = <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Traditional file system based {@link RefDatabase}.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This is the classical reference database representation for a Git repository.</span>
+    <span class="c">///</span><span class="c"> References are stored in two formats: loose, and packed.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> Loose references are stored as individual files within the {@code refs/}</span>
+    <span class="c">///</span><span class="c"> directory. The file name matches the reference name and the file contents is</span>
+    <span class="c">///</span><span class="c"> the current {@link ObjectId} in string form.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> Packed references are stored in a single text file named {@code packed-refs}.</span>
+    <span class="c">///</span><span class="c"> In the packed format, each reference is stored on its own line. This file</span>
+    <span class="c">///</span><span class="c"> reduces the number of files needed for large reference spaces, reducing the</span>
+    <span class="c">///</span><span class="c"> overall size of a Git repository on disk.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="b7360b0f0070b3a6" href="R/b7360b0f0070b3a6.html" target="n" data-glyph="0,0" class="t t">RefDirectory</a> : <a href="RefDatabase.cs.html#46bd94b774717bce" class="t t">RefDatabase</a>
+    {
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Magic string denoting the start of a symbolic reference file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public static string</b> <a id="2993c942b948e4b4" href="R/2993c942b948e4b4.html" target="n" data-glyph="42,1" class="i field">SYMREF</a> = <span class="s">&quot;ref: &quot;</span>; <span class="c">//$NON-NLS-1$</span>
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Magic string denoting the header of a packed-refs file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public static string</b> <a id="5435c56bbd45de03" href="R/5435c56bbd45de03.html" target="n" data-glyph="42,1" class="i field">PACKED_REFS_HEADER</a> = <span class="s">&quot;# pack-refs with:&quot;</span>; <span class="c">//$NON-NLS-1$</span>
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> If in the header, denotes the file has peeled data.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public static string</b> <a id="c3c7848217fe1f9e" href="R/c3c7848217fe1f9e.html" target="n" data-glyph="42,1" class="i field">PACKED_REFS_PEELED</a> = <span class="s">&quot; peeled&quot;</span>; <span class="c">//$NON-NLS-1$</span>
+
+        <b>private readonly</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="0fd58a95587e5557" href="R/0fd58a95587e5557.html" target="n" data-glyph="46,1" class="i field">parent</a>;
+
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="5559ae60cc0a89c1" href="R/5559ae60cc0a89c1.html" target="n" data-glyph="46,1" class="i field">gitDir</a>;
+
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="d5dfc9ea5be8e982" href="R/d5dfc9ea5be8e982.html" target="n" data-glyph="46,1" class="i field">refsDir</a>;
+
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="2cf0c82470d6f2fa" href="R/2cf0c82470d6f2fa.html" target="n" data-glyph="46,1" class="i field">logsDir</a>;
+
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="29432c07392c6a8f" href="R/29432c07392c6a8f.html" target="n" data-glyph="46,1" class="i field">logsRefsDir</a>;
+
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="fd18ef523b9f6ed8" href="R/fd18ef523b9f6ed8.html" target="n" data-glyph="46,1" class="i field">packedRefsFile</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Immutable sorted list of loose references.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Symbolic references in this collection are stored unresolved, that is</span>
+        <span class="c">///</span><span class="c"> their target appears to be a new reference with no ObjectId. These are</span>
+        <span class="c">///</span><span class="c"> converted into resolved references during a get operation, ensuring the</span>
+        <span class="c">///</span><span class="c"> live value is always returned.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicReference.cs.html#1e8ba7f5e3f67204" class="t t">AtomicReference</a>&lt;<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt;&gt; <a id="1ee2e8f364271f31" href="R/1ee2e8f364271f31.html" target="n" data-glyph="46,1" class="i field">looseRefs</a> = <b>new</b> <a href="Util/JavaHelper/AtomicReference.cs.html#8e7d0614bbaa136c" class="t constructor">AtomicReference</a>&lt;<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt;&gt;();
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Immutable sorted list of packed references.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicReference.cs.html#1e8ba7f5e3f67204" class="t t">AtomicReference</a>&lt;<a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>&gt; <a id="2e7e411f48ff5a77" href="R/2e7e411f48ff5a77.html" target="n" data-glyph="46,1" class="i field">packedRefs</a> = <b>new</b> <a href="Util/JavaHelper/AtomicReference.cs.html#8e7d0614bbaa136c" class="t constructor">AtomicReference</a>&lt;<a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>&gt;();
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Number of modifications made to this database.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This counter is incremented when a change is made, or detected from the</span>
+        <span class="c">///</span><span class="c"> filesystem during a read operation.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#5fbf804243225a1e" class="t t">AtomicInteger</a> <a id="09a83ef059263400" href="R/09a83ef059263400.html" target="n" data-glyph="46,1" class="i field">modCnt</a> = <b>new</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#22d9e8b88d672a19" class="t constructor">AtomicInteger</a>();
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Last </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#09a83ef059263400" class="i field">modCnt</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> that we sent to listeners.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This value is compared to </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#09a83ef059263400" class="i field">modCnt</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">, and a notification is sent to</span>
+        <span class="c">///</span><span class="c"> the listeners only when it differs.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#5fbf804243225a1e" class="t t">AtomicInteger</a> <a id="d3e76aa2e30fe2d0" href="R/d3e76aa2e30fe2d0.html" target="n" data-glyph="46,1" class="i field">lastNotifiedModCnt</a> = <b>new</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#22d9e8b88d672a19" class="t constructor">AtomicInteger</a>();
+
+        <b>public</b> <a id="e809935403030c68" href="R/e809935403030c68.html" target="n" data-glyph="72,1" class="i constructor">RefDirectory</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r0 rd" class="r0 r">db</span>)
+        {
+            <a href="#0fd58a95587e5557" class="i field">parent</a> = <span class="r0 r">db</span>;
+            <a href="#5559ae60cc0a89c1" class="i field">gitDir</a> = <span class="r0 r">db</span>.<a href="Repository.cs.html#77a819ff8f2ad4d4" class="i property">Directory</a>;
+            <a href="#d5dfc9ea5be8e982" class="i field">refsDir</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#5559ae60cc0a89c1" class="i field">gitDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>);
+            <a href="#2cf0c82470d6f2fa" class="i field">logsDir</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#5559ae60cc0a89c1" class="i field">gitDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#07f2332d688efd63" class="i field">LOGS</a>);
+            <a href="#29432c07392c6a8f" class="i field">logsRefsDir</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#5559ae60cc0a89c1" class="i field">gitDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#07f2332d688efd63" class="i field">LOGS</a> + <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a> + <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>);
+            <a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#5559ae60cc0a89c1" class="i field">gitDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#629eed27ae311b9f" class="i field">PACKED_REFS</a>);
+
+            <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt;.<a href="Util/RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>());
+            <a href="#2e7e411f48ff5a77" class="i field">packedRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>.<a href="#da408537954e8d98" class="i field">NO_PACKED_REFS</a>);
+        }
+
+        <b>public</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="a60fd92add2f90a6" href="R/a60fd92add2f90a6.html" target="n" data-glyph="72,1" class="i method">getRepository</a>()
+        {
+            <b>return</b> <a href="#0fd58a95587e5557" class="i field">parent</a>;
+        }
+
+        <b>public override void</b> <a id="f5dedc92f184ed59" href="R/f5dedc92f184ed59.html" target="n" data-glyph="72,1" class="i method">create</a>()
+        {
+            <a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <a href="#2cf0c82470d6f2fa" class="i field">logsDir</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <a href="#29432c07392c6a8f" class="i field">logsRefsDir</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+
+            <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#f5c8f6540674ab54" class="i field">R_HEADS</a>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)).<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#71ce821cee5d9c50" class="i field">R_TAGS</a>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)).<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+            <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#29432c07392c6a8f" class="i field">logsRefsDir</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#f5c8f6540674ab54" class="i field">R_HEADS</a>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)).<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+        }
+
+
+        <b>public override void</b> <a id="a233ec7cc48d786b" href="R/a233ec7cc48d786b.html" target="n" data-glyph="72,1" class="i method">close</a>()
+        {
+            <span class="c">// We have no resources to close.</span>
+        }
+
+        <b>public void</b> <a id="1e71024ebc336daa" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">rescan</a>()
+        {
+            <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt;.<a href="Util/RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>());
+            <a href="#2e7e411f48ff5a77" class="i field">packedRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>.<a href="#da408537954e8d98" class="i field">NO_PACKED_REFS</a>);
+        }
+
+
+        <b>public override bool</b> <a id="c38c430e217d3380" href="R/c38c430e217d3380.html" target="n" data-glyph="72,1" class="i method">isNameConflicting</a>(<b>string</b> <span id="r1 rd" class="r1 r">name</span>)
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r2 rd" class="r2 r">packed</span> = <a href="#e75ba8843418bb86" class="i method">getPackedRefs</a>();
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r3 rd" class="r3 r">loose</span> = <a href="#829c907c2a3ea59e" class="i method">getLooseRefs</a>();
+
+            <span class="c">// Cannot be nested within an existing reference.</span>
+            <b>int</b> <span id="r4 rd" class="r4 r">lastSlash</span> = <span class="r1 r">name</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;/&#39;</span>);
+            <b>while</b> (0 &lt; <span class="r4 r">lastSlash</span>)
+            {
+                <b>string</b> <span id="r5 rd" class="r5 r">needle</span> = <span class="r1 r">name</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, <span class="r4 r">lastSlash</span>);
+                <b>if</b> (<span class="r3 r">loose</span>.<a href="Util/RefList.cs.html#d5f1d1b07c46a68d" class="i method">contains</a>(<span class="r5 r">needle</span>) || <span class="r2 r">packed</span>.<a href="Util/RefList.cs.html#d5f1d1b07c46a68d" class="i method">contains</a>(<span class="r5 r">needle</span>))
+                    <b>return true</b>;
+                <span class="r4 r">lastSlash</span> = <span class="r1 r">name</span>.<a href="@0@mscorlib/A.html#c350049fd746286e" class="i method">LastIndexOf</a>(<span class="s">&#39;/&#39;</span>, <span class="r4 r">lastSlash</span> - 1);
+            }
+
+            <span class="c">// Cannot be the container of an existing reference.</span>
+            <b>string</b> <span id="r6 rd" class="r6 r">prefix</span> = <span class="r1 r">name</span> + <span class="s">&#39;/&#39;</span>;
+            <b>int</b> <span id="r7 rd" class="r7 r">idx</span>;
+
+            <span class="r7 r">idx</span> = -(<span class="r2 r">packed</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r6 r">prefix</span>) + 1);
+            <b>if</b> (<span class="r7 r">idx</span> &lt; <span class="r2 r">packed</span>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>() &amp;&amp; <span class="r2 r">packed</span>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<span class="r7 r">idx</span>).<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r6 r">prefix</span>))
+                <b>return true</b>;
+
+            <span class="r7 r">idx</span> = -(<span class="r3 r">loose</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r6 r">prefix</span>) + 1);
+            <b>if</b> (<span class="r7 r">idx</span> &lt; <span class="r3 r">loose</span>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>() &amp;&amp; <span class="r3 r">loose</span>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<span class="r7 r">idx</span>).<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r6 r">prefix</span>))
+                <b>return true</b>;
+
+            <b>return false</b>;
+        }
+
+        <b>private</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <a id="829c907c2a3ea59e" href="R/829c907c2a3ea59e.html" target="n" data-glyph="76,1" class="i method">getLooseRefs</a>()
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r8 rd" class="r8 r">oldLoose</span> = <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+
+            <a href="#e81e3b21c7272292" class="k">var</a> <span id="r9 rd" class="r9 r">scan</span> = <b>new</b> <a href="#2c8243ed287e2fa6" class="t constructor">LooseScanner</a>(<span class="r8 r">oldLoose</span>, <a href="#b7360b0f0070b3a6" class="k">this</a>);
+            <span class="r9 r">scan</span>.<a href="#68498e8811ad722a" class="i method">scan</a>(<a href="RefDatabase.cs.html#4dc469d51157ca01" class="i field">ALL</a>);
+
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r10 rd" class="r10 r">loose</span>;
+            <b>if</b> (<span class="r9 r">scan</span>.<a href="#ee3c02f227ee9537" class="i field">newLoose</a> != <b>null</b>)
+            {
+                <span class="r10 r">loose</span> = <span class="r9 r">scan</span>.<a href="#ee3c02f227ee9537" class="i field">newLoose</a>.<a href="Util/RefList.cs.html#4614e8ce6fdc1014" class="i method">toRefList</a>();
+                <b>if</b> (<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r8 r">oldLoose</span>, <span class="r10 r">loose</span>))
+                    <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            }
+            <b>else</b>
+                <span class="r10 r">loose</span> = <span class="r8 r">oldLoose</span>;
+            <b>return</b> <span class="r10 r">loose</span>;
+        }
+
+
+        <b>public override</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="a1bacc3f878f563c" href="R/a1bacc3f878f563c.html" target="n" data-glyph="72,1" class="i method">getRef</a>(<b>string</b> <span id="r11 rd" class="r11 r">needle</span>)
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r12 rd" class="r12 r">packed</span> = <a href="#e75ba8843418bb86" class="i method">getPackedRefs</a>();
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r13 rd" class="r13 r">@ref</span> = <b>null</b>;
+            <b>foreach</b> (<b>string</b> <span id="r14 rd" class="r14 r">prefix</span> <b>in</b> <a href="RefDatabase.cs.html#311d9db7bb251c11" class="i field">SEARCH_PATH</a>)
+            {
+                <span class="r13 r">@ref</span> = <a href="#711fbab8744ed356" class="i method">readRef</a>(<span class="r14 r">prefix</span> + <span class="r11 r">needle</span>, <span class="r12 r">packed</span>);
+                <b>if</b> (<span class="r13 r">@ref</span> != <b>null</b>)
+                {
+                    <span class="r13 r">@ref</span> = <a href="#63dcc2f923b7264a" class="i method">resolve</a>(<span class="r13 r">@ref</span>, 0, <b>null</b>, <b>null</b>, <span class="r12 r">packed</span>);
+                    <b>break</b>;
+                }
+            }
+            <a href="#8e645e6371c33bec" class="i method">fireRefsChanged</a>();
+            <b>return</b> <span class="r13 r">@ref</span>;
+        }
+
+
+        <b>public override</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="928db7ea03a7fae8" href="R/928db7ea03a7fae8.html" target="n" data-glyph="72,1" class="i method">getRefs</a>(<b>string</b> <span id="r15 rd" class="r15 r">prefix</span>)
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r16 rd" class="r16 r">packed</span> = <a href="#e75ba8843418bb86" class="i method">getPackedRefs</a>();
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r17 rd" class="r17 r">oldLoose</span> = <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+
+            <a href="#e81e3b21c7272292" class="k">var</a> <span id="r18 rd" class="r18 r">scan</span> = <b>new</b> <a href="#2c8243ed287e2fa6" class="t constructor">LooseScanner</a>(<span class="r17 r">oldLoose</span>, <a href="#b7360b0f0070b3a6" class="k">this</a>);
+            <span class="r18 r">scan</span>.<a href="#68498e8811ad722a" class="i method">scan</a>(<span class="r15 r">prefix</span>);
+
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r19 rd" class="r19 r">loose</span>;
+            <b>if</b> (<span class="r18 r">scan</span>.<a href="#ee3c02f227ee9537" class="i field">newLoose</a> != <b>null</b>)
+            {
+                <span class="r19 r">loose</span> = <span class="r18 r">scan</span>.<a href="#ee3c02f227ee9537" class="i field">newLoose</a>.<a href="Util/RefList.cs.html#4614e8ce6fdc1014" class="i method">toRefList</a>();
+                <b>if</b> (<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r17 r">oldLoose</span>, <span class="r19 r">loose</span>))
+                    <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            }
+            <b>else</b>
+                <span class="r19 r">loose</span> = <span class="r17 r">oldLoose</span>;
+            <a href="#8e645e6371c33bec" class="i method">fireRefsChanged</a>();
+
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="Util/RefList.cs.html#d391459dfbaf95d2" class="t t">Builder</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r20 rd" class="r20 r">symbolic</span> = <span class="r18 r">scan</span>.<a href="#adcb7b2780829a54" class="i field">symbolic</a>;
+            <b>for</b> (<b>int</b> <span id="r21 rd" class="r21 r">idx</span> = 0; <span class="r21 r">idx</span> &lt; <span class="r20 r">symbolic</span>.<a href="Util/RefList.cs.html#7b8c2b1771431822" class="i method">size</a>(); )
+            {
+                <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r22 rd" class="r22 r">@ref</span> = <span class="r20 r">symbolic</span>.<a href="Util/RefList.cs.html#9d5dbe938b5782c8" class="i method">get</a>(<span class="r21 r">idx</span>);
+                <span class="r22 r">@ref</span> = <a href="#63dcc2f923b7264a" class="i method">resolve</a>(<span class="r22 r">@ref</span>, 0, <span class="r15 r">prefix</span>, <span class="r19 r">loose</span>, <span class="r16 r">packed</span>);
+                <b>if</b> (<span class="r22 r">@ref</span> != <b>null</b> &amp;&amp; <span class="r22 r">@ref</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>() != <b>null</b>)
+                {
+                    <span class="r20 r">symbolic</span>.<a href="Util/RefList.cs.html#00cb7ecd00d1c4a9" class="i method">set</a>(<span class="r21 r">idx</span>, <span class="r22 r">@ref</span>);
+                    <span class="r21 r">idx</span>++;
+                }
+                <b>else</b>
+                {
+                    <span class="c">// A broken symbolic reference, we have to drop it from the</span>
+                    <span class="c">// collections the client is about to receive. Should be a</span>
+                    <span class="c">// rare occurrence so pay a copy penalty.</span>
+                    <span class="r19 r">loose</span> = <span class="r19 r">loose</span>.<a href="Util/RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r21 r">idx</span>);
+                    <span class="r20 r">symbolic</span>.<a href="Util/RefList.cs.html#80280df5a95189f5" class="i method">remove</a>(<span class="r21 r">idx</span>);
+                }
+            }
+
+            <b>return</b> <b>new</b> <a href="Util/RefMap.cs.html#9895f823f0cf4731" class="t constructor">RefMap</a>(<span class="r15 r">prefix</span>, <span class="r16 r">packed</span>, <a href="#db9707fcde348612" class="i method">upcast</a>(<span class="r19 r">loose</span>), <span class="r20 r">symbolic</span>.<a href="Util/RefList.cs.html#4614e8ce6fdc1014" class="i method">toRefList</a>());
+        }
+
+        <b>private</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="db9707fcde348612" href="R/db9707fcde348612.html" target="n" data-glyph="76,1" class="i method">upcast</a>&lt;<span id="r23 rd t" class="r23 r t">TRef</span>&gt;(<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<span class="r23 r t">TRef</span>&gt; <span id="r24 rd" class="r24 r">loose</span>) <b>where</b> <span class="r23 r t">TRef</span> : <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r25 rd" class="r25 r">list</span> = <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(<span class="r24 r">loose</span>.<a href="Util/RefList.cs.html#8c2263e3762e91db" class="i method">asList</a>());
+            <b>return</b> <b>new</b> <a href="Util/RefList.cs.html#4ee874bf0e9ed87b" class="t constructor">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(<span class="r25 r">list</span>.<a href="@0@mscorlib/A.html#d4409b7542728cec" class="i method">ToArray</a>(), <span class="r25 r">list</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>);
+        }
+
+        <b>private class</b> <a id="e81e3b21c7272292" href="R/e81e3b21c7272292.html" target="n" data-glyph="4,1" class="t t">LooseScanner</a>
+        {
+            <b>private readonly</b> <a href="#b7360b0f0070b3a6" class="t t">RefDirectory</a> <a id="33b220960ab591c2" href="R/33b220960ab591c2.html" target="n" data-glyph="46,2" class="i field">_refDirectory</a>;
+            <b>private readonly</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <a id="511d08a62addf1cb" href="R/511d08a62addf1cb.html" target="n" data-glyph="46,2" class="i field">curLoose</a>;
+
+            <b>private int</b> <a id="487ee4d4598e3948" href="R/487ee4d4598e3948.html" target="n" data-glyph="46,2" class="i field">curIdx</a>;
+
+            <b>public readonly</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="Util/RefList.cs.html#d391459dfbaf95d2" class="t t">Builder</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="adcb7b2780829a54" href="R/adcb7b2780829a54.html" target="n" data-glyph="42,2" class="i field">symbolic</a> = <b>new</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="Util/RefList.cs.html#a3a316046e1d81fe" class="t constructor">Builder</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(4);
+
+            <b>public</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt;.<a href="Util/RefList.cs.html#d391459dfbaf95d2" class="t t">Builder</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <a id="ee3c02f227ee9537" href="R/ee3c02f227ee9537.html" target="n" data-glyph="42,2" class="i field">newLoose</a>;
+
+            <b>public</b> <a id="2c8243ed287e2fa6" href="R/2c8243ed287e2fa6.html" target="n" data-glyph="72,2" class="i constructor">LooseScanner</a>(<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r26 rd" class="r26 r">curLoose</span>, <a href="#b7360b0f0070b3a6" class="t t">RefDirectory</a> <span id="r27 rd" class="r27 r">refDirectory</span>)
+            {
+                <a href="#e81e3b21c7272292" class="k">this</a>.<a href="#511d08a62addf1cb" class="i field">curLoose</a> = <span class="r26 r">curLoose</span>;
+                <a href="#33b220960ab591c2" class="i field">_refDirectory</a> = <span class="r27 r">refDirectory</span>;
+            }
+
+            <b>public void</b> <a id="68498e8811ad722a" href="R/68498e8811ad722a.html" target="n" data-glyph="72,2" class="i method">scan</a>(<b>string</b> <span id="r28 rd" class="r28 r">prefix</span>)
+            {
+                <b>if</b> (<a href="RefDatabase.cs.html#4dc469d51157ca01" class="i field">ALL</a>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r28 r">prefix</span>))
+                {
+                    <a href="#179ece7ab223d550" class="i method">scanOne</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>);
+                    <a href="#679edbb090d3d0c3" class="i method">scanTree</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>, <a href="#33b220960ab591c2" class="i field">_refDirectory</a>.<a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>);
+
+                    <span class="c">// If any entries remain, they are deleted, drop them.</span>
+                    <b>if</b> (<a href="#ee3c02f227ee9537" class="i field">newLoose</a> == <b>null</b> &amp;&amp; <a href="#487ee4d4598e3948" class="i field">curIdx</a> &lt; <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                        <a href="#ee3c02f227ee9537" class="i field">newLoose</a> = <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#7865d1b54a92c6dc" class="i method">copy</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>);
+
+                }
+                <b>else if</b> (<span class="r28 r">prefix</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>) &amp;&amp; <span class="r28 r">prefix</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<span class="s">&quot;/&quot;</span>))
+                {
+                    <a href="#487ee4d4598e3948" class="i field">curIdx</a> = -(<a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r28 r">prefix</span>) + 1);
+                    <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r29 rd" class="r29 r">dir</span> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#33b220960ab591c2" class="i field">_refDirectory</a>.<a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>, <span class="r28 r">prefix</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>));
+                    <a href="#679edbb090d3d0c3" class="i method">scanTree</a>(<span class="r28 r">prefix</span>, <span class="r29 r">dir</span>);
+
+                    <span class="c">// Skip over entries still within the prefix; these have</span>
+                    <span class="c">// been removed from the directory.</span>
+                    <b>while</b> (<a href="#487ee4d4598e3948" class="i field">curIdx</a> &lt; <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                    {
+                        <b>if</b> (!<a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>).<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r28 r">prefix</span>))
+                            <b>break</b>;
+                        <b>if</b> (<a href="#ee3c02f227ee9537" class="i field">newLoose</a> == <b>null</b>)
+                            <a href="#ee3c02f227ee9537" class="i field">newLoose</a> = <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#7865d1b54a92c6dc" class="i method">copy</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>);
+                        <a href="#487ee4d4598e3948" class="i field">curIdx</a>++;
+                    }
+
+                    <span class="c">// Keep any entries outside of the prefix space, we</span>
+                    <span class="c">// do not know anything about their status.</span>
+                    <b>if</b> (<a href="#ee3c02f227ee9537" class="i field">newLoose</a> != <b>null</b>)
+                    {
+                        <b>while</b> (<a href="#487ee4d4598e3948" class="i field">curIdx</a> &lt; <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                            <a href="#ee3c02f227ee9537" class="i field">newLoose</a>.<a href="Util/RefList.cs.html#d91880934dc594f3" class="i method">add</a>(<a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>++));
+                    }
+                }
+            }
+
+            <b>private void</b> <a id="679edbb090d3d0c3" href="R/679edbb090d3d0c3.html" target="n" data-glyph="76,2" class="i method">scanTree</a>(<b>string</b> <span id="r30 rd" class="r30 r">prefix</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r31 rd" class="r31 r">dir</span>)
+            {
+                <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a>[] <span id="r32 rd" class="r32 r">entries</span> = <span class="r31 r">dir</span>.<a href="@0@mscorlib/A.html#3ee5d8b84e9f6462" class="i method">GetFileSystemInfos</a>();
+                <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="k">var</a> <span id="r33 rd" class="r33 r">entries2</span> = <span class="r32 r">entries</span>.<a href="@0@System.Core/A.html#e73922753675387a" class="i method">Where</a>(<span id="r34 rd" class="r34 r">fsi</span> =&gt; <a href="LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a>.<a href="LockFile.cs.html#71575455b4f563db" class="i field">FILTER</a>(<span class="r34 r">fsi</span>.<a href="@0@mscorlib/A.html#2d5526818d4807b8" class="i property">Name</a>));
+                <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r35 rd" class="r35 r">entries3</span> = <span class="r33 r">entries2</span>.<a href="@0@System.Core/A.html#e276d6892241255b" class="i method">ToList</a>();
+
+                <span class="r32 r">entries</span> = <span class="r35 r">entries3</span>.<a href="@0@mscorlib/A.html#d4409b7542728cec" class="i method">ToArray</a>();
+
+                <b>if</b> (<span class="r32 r">entries</span> != <b>null</b> &amp;&amp; 0 &lt; <span class="r32 r">entries</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+                {
+                    <span class="c">//                    Array.Sort(entries);</span>
+                    <b>foreach</b> (<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r36 rd" class="r36 r">e</span> <b>in</b> <span class="r32 r">entries</span>)
+                    {
+                        <b>if</b> (<span class="r36 r">e</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+                            <a href="#679edbb090d3d0c3" class="i method">scanTree</a>(<span class="r30 r">prefix</span> + <span class="r36 r">e</span>.<a href="@0@mscorlib/A.html#2d5526818d4807b8" class="i property">Name</a> + <span class="s">&#39;/&#39;</span>, (<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a>)<span class="r36 r">e</span>);
+                        <b>else</b>
+                            <a href="#179ece7ab223d550" class="i method">scanOne</a>(<span class="r30 r">prefix</span> + <span class="r36 r">e</span>.<a href="@0@mscorlib/A.html#2d5526818d4807b8" class="i property">Name</a>);
+                    }
+                }
+            }
+
+            <b>private void</b> <a id="179ece7ab223d550" href="R/179ece7ab223d550.html" target="n" data-glyph="76,2" class="i method">scanOne</a>(<b>string</b> <span id="r37 rd" class="r37 r">name</span>)
+            {
+                <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r38 rd" class="r38 r">cur</span>;
+
+                <b>if</b> (<a href="#487ee4d4598e3948" class="i field">curIdx</a> &lt; <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>())
+                {
+                    <b>do</b>
+                    {
+                        <span class="r38 r">cur</span> = <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>);
+                        <b>int</b> <span id="r39 rd" class="r39 r">cmp</span> = <a href="RefComparator.cs.html#535b403148f2ae44" class="t t">RefComparator</a>.<a href="RefComparator.cs.html#987df436c827bdad" class="i method">compareTo</a>(<span class="r38 r">cur</span>, <span class="r37 r">name</span>);
+                        <b>if</b> (<span class="r39 r">cmp</span> &lt; 0)
+                        {
+                            <span class="c">// Reference is not loose anymore, its been deleted.</span>
+                            <span class="c">// Skip the name in the new result list.</span>
+                            <b>if</b> (<a href="#ee3c02f227ee9537" class="i field">newLoose</a> == <b>null</b>)
+                                <a href="#ee3c02f227ee9537" class="i field">newLoose</a> = <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#7865d1b54a92c6dc" class="i method">copy</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>);
+                            <a href="#487ee4d4598e3948" class="i field">curIdx</a>++;
+                            <span class="r38 r">cur</span> = <b>null</b>;
+                            <b>continue</b>;
+                        }
+
+                        <b>if</b> (<span class="r39 r">cmp</span> &gt; 0) <span class="c">// Newly discovered loose reference.</span>
+                            <span class="r38 r">cur</span> = <b>null</b>;
+                        <b>break</b>;
+                    } <b>while</b> (<a href="#487ee4d4598e3948" class="i field">curIdx</a> &lt; <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#0579aad08e1468f0" class="i method">size</a>());
+                }
+                <b>else</b>
+                    <span class="r38 r">cur</span> = <b>null</b>; <span class="c">// Newly discovered loose reference.</span>
+
+                <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r40 rd" class="r40 r">n</span>;
+                <b>try</b>
+                {
+                    <span class="r40 r">n</span> = <a href="#33b220960ab591c2" class="i field">_refDirectory</a>.<a href="#5cc04c3113b185db" class="i method">scanRef</a>(<span class="r38 r">cur</span>, <span class="r37 r">name</span>);
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <span class="r40 r">n</span> = <b>null</b>;
+                }
+
+                <b>if</b> (<span class="r40 r">n</span> != <b>null</b>)
+                {
+                    <b>if</b> (<span class="r38 r">cur</span> != <span class="r40 r">n</span> &amp;&amp; <a href="#ee3c02f227ee9537" class="i field">newLoose</a> == <b>null</b>)
+                        <a href="#ee3c02f227ee9537" class="i field">newLoose</a> = <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#7865d1b54a92c6dc" class="i method">copy</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>);
+                    <b>if</b> (<a href="#ee3c02f227ee9537" class="i field">newLoose</a> != <b>null</b>)
+                        <a href="#ee3c02f227ee9537" class="i field">newLoose</a>.<a href="Util/RefList.cs.html#d91880934dc594f3" class="i method">add</a>(<span class="r40 r">n</span>);
+                    <b>if</b> (<span class="r40 r">n</span>.<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+                        <a href="#adcb7b2780829a54" class="i field">symbolic</a>.<a href="Util/RefList.cs.html#d91880934dc594f3" class="i method">add</a>(<span class="r40 r">n</span>);
+                }
+                <b>else if</b> (<span class="r38 r">cur</span> != <b>null</b>)
+                {
+                    <span class="c">// Tragically, this file is no longer a loose reference.</span>
+                    <span class="c">// Kill our cached entry of it.</span>
+                    <b>if</b> (<a href="#ee3c02f227ee9537" class="i field">newLoose</a> == <b>null</b>)
+                        <a href="#ee3c02f227ee9537" class="i field">newLoose</a> = <a href="#511d08a62addf1cb" class="i field">curLoose</a>.<a href="Util/RefList.cs.html#7865d1b54a92c6dc" class="i method">copy</a>(<a href="#487ee4d4598e3948" class="i field">curIdx</a>);
+                }
+
+                <b>if</b> (<span class="r38 r">cur</span> != <b>null</b>)
+                    <a href="#487ee4d4598e3948" class="i field">curIdx</a>++;
+            }
+        }
+
+        <b>public override</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="885a7c862ffbbc16" href="R/885a7c862ffbbc16.html" target="n" data-glyph="72,1" class="i method">peel</a>(<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r41 rd" class="r41 r">@ref</span>)
+        {
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r42 rd" class="r42 r">leaf</span> = <span class="r41 r">@ref</span>.<a href="Ref.cs.html#305cdded6df7afa1" class="i method">getLeaf</a>();
+            <b>if</b> (<span class="r42 r">leaf</span>.<a href="Ref.cs.html#eea633d2213f595b" class="i method">isPeeled</a>() || <span class="r42 r">leaf</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>() == <b>null</b>)
+                <b>return</b> <span class="r41 r">@ref</span>;
+
+            <span class="i n">RevWalk</span>.<a href="RevWalk/RevWalk.cs.html#3cdb1764ea58588b" class="t t">RevWalk</a> <span id="r43 rd" class="r43 r">rw</span> = <b>new</b> <span class="i n">RevWalk</span>.<a href="RevWalk/RevWalk.cs.html#0b5400e3482eef62" class="t constructor">RevWalk</a>(<a href="#a60fd92add2f90a6" class="i method">getRepository</a>());
+            <a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a> <span id="r44 rd" class="r44 r">obj</span> = <span class="r43 r">rw</span>.<a href="RevWalk/RevWalk.cs.html#01c1336e57a2cf0a" class="i method">parseAny</a>(<span class="r42 r">leaf</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>());
+            <a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r45 rd" class="r45 r">newLeaf</span>;
+            <b>if</b> (<span class="r44 r">obj</span> <b>is</b> <a href="RevWalk/RevTag.cs.html#7d9e87fae84c0091" class="t t">RevTag</a>)
+            {
+                <b>do</b>
+                {
+                    <span class="r44 r">obj</span> = <span class="r43 r">rw</span>.<a href="RevWalk/RevWalk.cs.html#01c1336e57a2cf0a" class="i method">parseAny</a>(((<a href="RevWalk/RevTag.cs.html#7d9e87fae84c0091" class="t t">RevTag</a>)<span class="r44 r">obj</span>).<a href="RevWalk/RevTag.cs.html#f51937c96114c935" class="i method">getObject</a>());
+                } <b>while</b> (<span class="r44 r">obj</span> <b>is</b> <a href="RevWalk/RevTag.cs.html#7d9e87fae84c0091" class="t t">RevTag</a>);
+
+                <span class="r45 r">newLeaf</span> = <b>new</b> <a href="ObjectIdRef.cs.html#f74467294d1eebe5" class="t constructor">PeeledTag</a>(<span class="r42 r">leaf</span>.<a href="Ref.cs.html#f9fc9223caa01079" class="i method">getStorage</a>(), <span class="r42 r">leaf</span>
+                                                               .<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r42 r">leaf</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>(), <span class="r44 r">obj</span>.<a href="AnyObjectId.cs.html#8b7074ef6eeaaa2e" class="i method">Copy</a>());
+            }
+            <b>else</b>
+            {
+                <span class="r45 r">newLeaf</span> = <b>new</b> <a href="ObjectIdRef.cs.html#dd6b7401c0d913b5" class="t constructor">PeeledNonTag</a>(<span class="r42 r">leaf</span>.<a href="Ref.cs.html#f9fc9223caa01079" class="i method">getStorage</a>(), <span class="r42 r">leaf</span>
+                                                                  .<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r42 r">leaf</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>());
+            }
+
+            <span class="c">// Try to remember this peeling in the cache, so we don&#39;t have to do</span>
+            <span class="c">// it again in the future, but only if the reference is unchanged.</span>
+            <b>if</b> (<span class="r42 r">leaf</span>.<a href="Ref.cs.html#f9fc9223caa01079" class="i method">getStorage</a>().<a href="Ref.cs.html#40dafc3898cc0a21" class="i property">IsLoose</a>)
+            {
+                <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r46 rd" class="r46 r">curList</span> = <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <b>int</b> <span id="r47 rd" class="r47 r">idx</span> = <span class="r46 r">curList</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r42 r">leaf</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>());
+                <b>if</b> (0 &lt;= <span class="r47 r">idx</span> &amp;&amp; <span class="r46 r">curList</span>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<span class="r47 r">idx</span>) == <span class="r42 r">leaf</span>)
+                {
+                    <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r48 rd" class="r48 r">asPeeled</span> = ((<a href="#90c9f2139a58447f" class="t t">LooseRef</a>)<span class="r42 r">leaf</span>).<a href="#cc10a1d1c11ecd78" class="i method">peel</a>(<span class="r45 r">newLeaf</span>);
+                    <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r49 rd" class="r49 r">newList</span> = <span class="r46 r">curList</span>.<a href="Util/RefList.cs.html#7ce5b33cd04e709e" class="i method">set</a>(<span class="r47 r">idx</span>, <span class="r48 r">asPeeled</span>);
+                    <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r46 r">curList</span>, <span class="r49 r">newList</span>);
+                }
+            }
+
+            <b>return</b> <a href="#6579b4a983b01422" class="i method">recreate</a>(<span class="r41 r">@ref</span>, <span class="r45 r">newLeaf</span>);
+        }
+
+        <b>private static</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="6579b4a983b01422" href="R/6579b4a983b01422.html" target="n" data-glyph="76,1" class="i method">recreate</a>(<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r50 rd" class="r50 r">old</span>, <a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r51 rd" class="r51 r">leaf</span>)
+        {
+            <b>if</b> (<span class="r50 r">old</span>.<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+            {
+                <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r52 rd" class="r52 r">dst</span> = <a href="#6579b4a983b01422" class="i method">recreate</a>(<span class="r50 r">old</span>.<a href="Ref.cs.html#62bf1c054532cc4f" class="i method">getTarget</a>(), <span class="r51 r">leaf</span>);
+                <b>return</b> <b>new</b> <a href="SymbolicRef.cs.html#94999925ccb68b8f" class="t constructor">SymbolicRef</a>(<span class="r50 r">old</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r52 r">dst</span>);
+            }
+            <b>return</b> <span class="r51 r">leaf</span>;
+        }
+
+        <b>public void</b> <a id="c0f898cb36a4fdcb" href="R/c0f898cb36a4fdcb.html" target="n" data-glyph="72,1" class="i method">storedSymbolicRef</a>(<a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <span id="r53 rd" class="r53 r">u</span>, <b>long</b> <span id="r54 rd" class="r54 r">modified</span>, <b>string</b> <span id="r55 rd" class="r55 r">target</span>)
+        {
+            <a href="#dd2830bdb2b577e6" class="i method">putLooseRef</a>(<a href="#bb60f6c50f5a9725" class="i method">newSymbolicRef</a>(<span class="r54 r">modified</span>, <span class="r53 r">u</span>.<a href="RefUpdate.cs.html#ab06af3899704105" class="i method">getRef</a>().<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r55 r">target</span>));
+            <a href="#8e645e6371c33bec" class="i method">fireRefsChanged</a>();
+        }
+
+        <b>public override</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <a id="41f268dffa08abcd" href="R/41f268dffa08abcd.html" target="n" data-glyph="72,1" class="i method">newUpdate</a>(<b>string</b> <span id="r56 rd" class="r56 r">name</span>, <b>bool</b> <span id="r57 rd" class="r57 r">detach</span>)
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r58 rd" class="r58 r">packed</span> = <a href="#e75ba8843418bb86" class="i method">getPackedRefs</a>();
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r59 rd" class="r59 r">@ref</span> = <a href="#711fbab8744ed356" class="i method">readRef</a>(<span class="r56 r">name</span>, <span class="r58 r">packed</span>);
+            <b>if</b> (<span class="r59 r">@ref</span> != <b>null</b>)
+                <span class="r59 r">@ref</span> = <a href="#63dcc2f923b7264a" class="i method">resolve</a>(<span class="r59 r">@ref</span>, 0, <b>null</b>, <b>null</b>, <span class="r58 r">packed</span>);
+            <b>if</b> (<span class="r59 r">@ref</span> == <b>null</b>)
+                <span class="r59 r">@ref</span> = <b>new</b> <a href="ObjectIdRef.cs.html#c5925d134f204c8d" class="t constructor">Unpeeled</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#bdc046a8cfc47e34" class="i field">New</a>, <span class="r56 r">name</span>, <b>null</b>);
+            <b>else if</b> (<span class="r57 r">detach</span> &amp;&amp; <span class="r59 r">@ref</span>.<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+                <span class="r59 r">@ref</span> = <b>new</b> <a href="ObjectIdRef.cs.html#c5925d134f204c8d" class="t constructor">Unpeeled</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#1760a0ce101e33d7" class="i field">Loose</a>, <span class="r56 r">name</span>, <span class="r59 r">@ref</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>());
+            <b>return</b> <b>new</b> <a href="RefDirectoryUpdate.cs.html#151cbefccb1aa16b" class="t constructor">RefDirectoryUpdate</a>(<a href="#b7360b0f0070b3a6" class="k">this</a>, <span class="r59 r">@ref</span>);
+        }
+
+        <b>public override</b> <a href="RefRename.cs.html#5fd7aa1b7decfdc1" class="t t">RefRename</a> <a id="b4460e7bc7bc8ce7" href="R/b4460e7bc7bc8ce7.html" target="n" data-glyph="72,1" class="i method">newRename</a>(<b>string</b> <span id="r60 rd" class="r60 r">fromName</span>, <b>string</b> <span id="r61 rd" class="r61 r">toName</span>)
+        {
+            <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r62 rd" class="r62 r">from</span> = <a href="#41f268dffa08abcd" class="i method">newUpdate</a>(<span class="r60 r">fromName</span>, <b>false</b>);
+            <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r63 rd" class="r63 r">to</span> = <a href="#41f268dffa08abcd" class="i method">newUpdate</a>(<span class="r61 r">toName</span>, <b>false</b>);
+            <b>return</b> <b>new</b> <a href="RefDirectoryRename.cs.html#c18928d7974d4922" class="t constructor">RefDirectoryRename</a>((<a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a>)<span class="r62 r">from</span>, (<a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a>)<span class="r63 r">to</span>);
+        }
+
+        <b>public void</b> <a id="4bb9b5378901bf61" href="R/4bb9b5378901bf61.html" target="n" data-glyph="72,1" class="i method">stored</a>(<a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <span id="r64 rd" class="r64 r">update</span>, <b>long</b> <span id="r65 rd" class="r65 r">modified</span>)
+        {
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r66 rd" class="r66 r">target</span> = <span class="r64 r">update</span>.<a href="RefUpdate.cs.html#43383b3168a41625" class="i method">getNewObjectId</a>().<a href="AnyObjectId.cs.html#8b7074ef6eeaaa2e" class="i method">Copy</a>();
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r67 rd" class="r67 r">leaf</span> = <span class="r64 r">update</span>.<a href="RefUpdate.cs.html#ab06af3899704105" class="i method">getRef</a>().<a href="Ref.cs.html#305cdded6df7afa1" class="i method">getLeaf</a>();
+            <a href="#dd2830bdb2b577e6" class="i method">putLooseRef</a>(<b>new</b> <a href="#633a567d41c46473" class="t constructor">LooseUnpeeled</a>(<span class="r65 r">modified</span>, <span class="r67 r">leaf</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r66 r">target</span>));
+        }
+
+        <b>private void</b> <a id="dd2830bdb2b577e6" href="R/dd2830bdb2b577e6.html" target="n" data-glyph="76,1" class="i method">putLooseRef</a>(<a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r68 rd" class="r68 r">@ref</span>)
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r69 rd" class="r69 r">cList</span>, <span id="r70 rd" class="r70 r">nList</span>;
+            <b>do</b>
+            {
+                <span class="r69 r">cList</span> = <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <span class="r70 r">nList</span> = <span class="r69 r">cList</span>.<a href="Util/RefList.cs.html#2293f74bbc3a0544" class="i method">put</a>(<span class="r68 r">@ref</span>);
+            } <b>while</b> (!<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r69 r">cList</span>, <span class="r70 r">nList</span>));
+            <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            <a href="#8e645e6371c33bec" class="i method">fireRefsChanged</a>();
+        }
+
+        <b>public void</b> <a id="1a481075b801ae03" href="R/1a481075b801ae03.html" target="n" data-glyph="72,1" class="i method">delete</a>(<a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <span id="r71 rd" class="r71 r">update</span>)
+        {
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r72 rd" class="r72 r">dst</span> = <span class="r71 r">update</span>.<a href="RefUpdate.cs.html#ab06af3899704105" class="i method">getRef</a>().<a href="Ref.cs.html#305cdded6df7afa1" class="i method">getLeaf</a>();
+            <b>string</b> <span id="r73 rd" class="r73 r">name</span> = <span class="r72 r">dst</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>();
+
+            <span class="c">// Write the packed-refs file using an atomic update. We might</span>
+            <span class="c">// wind up reading it twice, before and after the lock, to ensure</span>
+            <span class="c">// we don&#39;t miss an edit made externally.</span>
+            <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <span id="r74 rd" class="r74 r">packed</span> = <a href="#e75ba8843418bb86" class="i method">getPackedRefs</a>();
+            <b>if</b> (<span class="r74 r">packed</span>.<a href="Util/RefList.cs.html#d5f1d1b07c46a68d" class="i method">contains</a>(<span class="r73 r">name</span>))
+            {
+                <a href="LockFile.cs.html#6a33a20086fca4a1" class="k">var</a> <span id="r75 rd" class="r75 r">lck</span> = <b>new</b> <a href="LockFile.cs.html#b99601a78132e167" class="t constructor">LockFile</a>(<a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>);
+                <b>if</b> (!<span class="r75 r">lck</span>.<a href="LockFile.cs.html#e7165a58b2fd07b9" class="i method">Lock</a>())
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Cannot lock &quot;</span> + <a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>);
+                <b>try</b>
+                {
+                    <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <span id="r76 rd" class="r76 r">cur</span> = <a href="#07fe67a850e5c928" class="i method">readPackedRefs</a>(0, 0);
+                    <b>int</b> <span id="r77 rd" class="r77 r">idx</span> = <span class="r76 r">cur</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r73 r">name</span>);
+                    <b>if</b> (0 &lt;= <span class="r77 r">idx</span>)
+                        <a href="#d1bbbe5cd62ac934" class="i method">commitPackedRefs</a>(<span class="r75 r">lck</span>, <span class="r76 r">cur</span>.<a href="Util/RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r77 r">idx</span>), <span class="r74 r">packed</span>);
+                }
+                <b>finally</b>
+                {
+                    <span class="r75 r">lck</span>.<a href="LockFile.cs.html#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                }
+            }
+
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r78 rd" class="r78 r">curLoose</span>, <span id="r79 rd" class="r79 r">newLoose</span>;
+            <b>do</b>
+            {
+                <span class="r78 r">curLoose</span> = <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <b>int</b> <span id="r80 rd" class="r80 r">idx</span> = <span class="r78 r">curLoose</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r73 r">name</span>);
+                <b>if</b> (<span class="r80 r">idx</span> &lt; 0)
+                    <b>break</b>;
+                <span class="r79 r">newLoose</span> = <span class="r78 r">curLoose</span>.<a href="Util/RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r80 r">idx</span>);
+            } <b>while</b> (!<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r78 r">curLoose</span>, <span class="r79 r">newLoose</span>));
+
+            <b>int</b> <span id="r81 rd" class="r81 r">levels</span> = <a href="#ab548fb86facdf67" class="i method">levelsIn</a>(<span class="r73 r">name</span>) - 2;
+            <a href="#b0ae23e83250c1c3" class="i method">delete</a>(<a href="#d6c378de6ec5080d" class="i method">logFor</a>(<span class="r73 r">name</span>), <span class="r81 r">levels</span>);
+            <b>if</b> (<span class="r72 r">dst</span>.<a href="Ref.cs.html#f9fc9223caa01079" class="i method">getStorage</a>().<a href="Ref.cs.html#40dafc3898cc0a21" class="i property">IsLoose</a>)
+            {
+                <span class="r71 r">update</span>.<a href="RefDirectoryUpdate.cs.html#18f8fc25aa8a0296" class="i method">unlock</a>();
+                <a href="#b0ae23e83250c1c3" class="i method">delete</a>(<a href="#c2cd6b852412d5cf" class="i method">fileFor</a>(<span class="r73 r">name</span>), <span class="r81 r">levels</span>);
+            }
+
+            <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            <a href="#8e645e6371c33bec" class="i method">fireRefsChanged</a>();
+        }
+
+        <b>public void</b> <a id="81229a28a6fd252b" href="R/81229a28a6fd252b.html" target="n" data-glyph="72,1" class="i method">log</a>(<a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r82 rd" class="r82 r">update</span>, <b>string</b> <span id="r83 rd" class="r83 r">msg</span>, <b>bool</b> <span id="r84 rd" class="r84 r">deref</span>)
+        {
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r85 rd" class="r85 r">oldId</span> = <span class="r82 r">update</span>.<a href="RefUpdate.cs.html#f026b1be1a0cecc5" class="i method">getOldObjectId</a>();
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r86 rd" class="r86 r">newId</span> = <span class="r82 r">update</span>.<a href="RefUpdate.cs.html#43383b3168a41625" class="i method">getNewObjectId</a>();
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r87 rd" class="r87 r">@ref</span> = <span class="r82 r">update</span>.<a href="RefUpdate.cs.html#ab06af3899704105" class="i method">getRef</a>();
+
+            <a href="PersonIdent.cs.html#317a34072618d9ff" class="t t">PersonIdent</a> <span id="r88 rd" class="r88 r">ident</span> = <span class="r82 r">update</span>.<a href="RefUpdate.cs.html#f8b52946c4e7ea88" class="i method">getRefLogIdent</a>();
+            <b>if</b> (<span class="r88 r">ident</span> == <b>null</b>)
+                <span class="r88 r">ident</span> = <b>new</b> <a href="PersonIdent.cs.html#1ae113674e09bf48" class="t constructor">PersonIdent</a>(<a href="#0fd58a95587e5557" class="i field">parent</a>);
+            <b>else</b>
+                <span class="r88 r">ident</span> = <b>new</b> <a href="PersonIdent.cs.html#59ac6dc8505be89e" class="t constructor">PersonIdent</a>(<span class="r88 r">ident</span>);
+
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r89 rd" class="r89 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#b0c86d6089a488f2" class="i method">ToString</a>(<span class="r85 r">oldId</span>));
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#b0c86d6089a488f2" class="i method">ToString</a>(<span class="r86 r">newId</span>));
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r88 r">ident</span>.<a href="PersonIdent.cs.html#7324f784f9f079d1" class="i method">ToExternalString</a>());
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\t&#39;</span>);
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r83 r">msg</span>);
+            <span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\n&#39;</span>);
+            <b>byte</b>[] <span id="r90 rd" class="r90 r">rec</span> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r89 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>());
+
+            <b>if</b> (<span class="r84 r">deref</span> &amp;&amp; <span class="r87 r">@ref</span>.<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+            {
+                <a href="#3977466f3a0d68b4" class="i method">log</a>(<span class="r87 r">@ref</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r90 r">rec</span>);
+                <a href="#3977466f3a0d68b4" class="i method">log</a>(<span class="r87 r">@ref</span>.<a href="Ref.cs.html#305cdded6df7afa1" class="i method">getLeaf</a>().<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r90 r">rec</span>);
+            }
+            <b>else</b>
+            {
+                <a href="#3977466f3a0d68b4" class="i method">log</a>(<span class="r87 r">@ref</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r90 r">rec</span>);
+            }
+        }
+
+        <b>private void</b> <a id="3977466f3a0d68b4" href="R/3977466f3a0d68b4.html" target="n" data-glyph="76,1" class="i method">log</a>(<b>string</b> <span id="r91 rd" class="r91 r">refName</span>, <b>byte</b>[] <span id="r92 rd" class="r92 r">rec</span>)
+        {
+            <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r93 rd" class="r93 r">log</span> = <a href="#d6c378de6ec5080d" class="i method">logFor</a>(<span class="r91 r">refName</span>);
+            <b>bool</b> <span id="r94 rd" class="r94 r">write</span>;
+            <b>if</b> (<a href="#281d3f28bebc0341" class="i method">isLogAllRefUpdates</a>() &amp;&amp; <a href="#d23fd4768adfbbaf" class="i method">shouldAutoCreateLog</a>(<span class="r91 r">refName</span>))
+                <span class="r94 r">write</span> = <b>true</b>;
+            <b>else if</b> (<span class="r93 r">log</span>.<a href="Util/Extensions.cs.html#b6e46e03d3efdd7c" class="i method">IsFile</a>())
+                <span class="r94 r">write</span> = <b>true</b>;
+            <b>else</b>
+                <span class="r94 r">write</span> = <b>false</b>;
+
+            <b>if</b> (<span class="r94 r">write</span>)
+            {
+                <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r95 rd" class="r95 r">dir</span> = <span class="r93 r">log</span>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>;
+                <b>if</b> (!<span class="r95 r">dir</span>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>() &amp;&amp; !<span class="r95 r">dir</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Cannot create directory &quot;</span> + <span class="r95 r">dir</span>);
+                }
+
+                <b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r96 rd" class="r96 r">sw</span> = <a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#ecebce25a4bad97c" class="i method">Open</a>(<span class="r93 r">log</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#7e7b0836e171adde" class="i field">Append</a>))
+                <b>using</b> (<a href="@0@mscorlib/A.html#cf806b417abe1a35" class="k">var</a> <span id="r97 rd" class="r97 r">@out</span> = <b>new</b> <a href="@0@mscorlib/A.html#93163b0edbac85a5" class="t constructor">BinaryWriter</a>(<span class="r96 r">sw</span>))
+                {
+                    <span class="r97 r">@out</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<span class="r92 r">rec</span>);
+                }
+            }
+        }
+
+        <b>private bool</b> <a id="281d3f28bebc0341" href="R/281d3f28bebc0341.html" target="n" data-glyph="76,1" class="i method">isLogAllRefUpdates</a>()
+        {
+            <b>return</b> <a href="#0fd58a95587e5557" class="i field">parent</a>.<a href="Repository.cs.html#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="RepositoryConfig.cs.html#288eed24ede43959" class="i method">getCore</a>().<a href="CoreConfig.cs.html#a012d11e9b091dbc" class="i method">isLogAllRefUpdates</a>();
+        }
+
+        <b>private bool</b> <a id="d23fd4768adfbbaf" href="R/d23fd4768adfbbaf.html" target="n" data-glyph="76,1" class="i method">shouldAutoCreateLog</a>(<b>string</b> <span id="r98 rd" class="r98 r">refName</span>)
+        {
+            <b>return</b> <span class="r98 r">refName</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>) <span class="c">//</span>
+                   || <span class="r98 r">refName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#f5c8f6540674ab54" class="i field">R_HEADS</a>) <span class="c">//</span>
+                   || <span class="r98 r">refName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#dd2e6d4fa212de24" class="i field">R_REMOTES</a>);
+        }
+
+        <b>private</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="63dcc2f923b7264a" href="R/63dcc2f923b7264a.html" target="n" data-glyph="76,1" class="i method">resolve</a>(<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r99 rd" class="r99 r">@ref</span>, <b>int</b> <span id="r100 rd" class="r100 r">depth</span>, <b>string</b> <span id="r101 rd" class="r101 r">prefix</span>,
+                            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r102 rd" class="r102 r">loose</span>, <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r103 rd" class="r103 r">packed</span>)
+        {
+            <b>if</b> (<span class="r99 r">@ref</span>.<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+            {
+                <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r104 rd" class="r104 r">dst</span> = <span class="r99 r">@ref</span>.<a href="Ref.cs.html#62bf1c054532cc4f" class="i method">getTarget</a>();
+
+                <b>if</b> (<a href="RefDatabase.cs.html#95ec4eacf7635640" class="i field">MAX_SYMBOLIC_REF_DEPTH</a> &lt;= <span class="r100 r">depth</span>)
+                    <b>return null</b>; <span class="c">// claim it doesn&#39;t exist</span>
+
+                <span class="c">// If the cached value can be assumed to be current due to a</span>
+                <span class="c">// recent scan of the loose directory, use it.</span>
+                <b>if</b> (<span class="r102 r">loose</span> != <b>null</b> &amp;&amp; <span class="r104 r">dst</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r101 r">prefix</span>))
+                {
+                    <b>int</b> <span id="r105 rd" class="r105 r">idx</span>;
+                    <b>if</b> (0 &lt;= (<span class="r105 r">idx</span> = <span class="r102 r">loose</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r104 r">dst</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>())))
+                        <span class="r104 r">dst</span> = <span class="r102 r">loose</span>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<span class="r105 r">idx</span>);
+                    <b>else if</b> (0 &lt;= (<span class="r105 r">idx</span> = <span class="r103 r">packed</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r104 r">dst</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>())))
+                        <span class="r104 r">dst</span> = <span class="r103 r">packed</span>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<span class="r105 r">idx</span>);
+                    <b>else
+                        return</b> <span class="r99 r">@ref</span>;
+                }
+                <b>else</b>
+                {
+                    <span class="r104 r">dst</span> = <a href="#711fbab8744ed356" class="i method">readRef</a>(<span class="r104 r">dst</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r103 r">packed</span>);
+                    <b>if</b> (<span class="r104 r">dst</span> == <b>null</b>)
+                        <b>return</b> <span class="r99 r">@ref</span>;
+                }
+
+                <span class="r104 r">dst</span> = <a href="#63dcc2f923b7264a" class="i method">resolve</a>(<span class="r104 r">dst</span>, <span class="r100 r">depth</span> + 1, <span class="r101 r">prefix</span>, <span class="r102 r">loose</span>, <span class="r103 r">packed</span>);
+                <b>if</b> (<span class="r104 r">dst</span> == <b>null</b>)
+                    <b>return null</b>;
+                <b>return</b> <b>new</b> <a href="SymbolicRef.cs.html#94999925ccb68b8f" class="t constructor">SymbolicRef</a>(<span class="r99 r">@ref</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r104 r">dst</span>);
+            }
+            <b>return</b> <span class="r99 r">@ref</span>;
+        }
+
+        <b>private</b> <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <a id="e75ba8843418bb86" href="R/e75ba8843418bb86.html" target="n" data-glyph="76,1" class="i method">getPackedRefs</a>()
+        {
+            <b>long</b> <span id="r106 rd" class="r106 r">size</span> = 0;
+            <b>if</b> (<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+            {
+                <span class="r106 r">size</span> = <a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>;
+            }
+
+            <b>long</b> <span id="r107 rd" class="r107 r">mtime</span> = <span class="r106 r">size</span> != 0 ? <a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() : 0;
+
+            <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <span id="r108 rd" class="r108 r">curList</span> = <a href="#2e7e411f48ff5a77" class="i field">packedRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <b>if</b> (<span class="r106 r">size</span> == <span class="r108 r">curList</span>.<a href="#dbe21983d50e6676" class="i field">lastSize</a> &amp;&amp; <span class="r107 r">mtime</span> == <span class="r108 r">curList</span>.<a href="#526f293f857650d5" class="i field">lastModified</a>)
+                <b>return</b> <span class="r108 r">curList</span>;
+
+            <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <span id="r109 rd" class="r109 r">newList</span> = <a href="#07fe67a850e5c928" class="i method">readPackedRefs</a>(<span class="r106 r">size</span>, <span class="r107 r">mtime</span>);
+            <b>if</b> (<a href="#2e7e411f48ff5a77" class="i field">packedRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r108 r">curList</span>, <span class="r109 r">newList</span>))
+                <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            <b>return</b> <span class="r109 r">newList</span>;
+        }
+
+        <b>private</b> <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <a id="07fe67a850e5c928" href="R/07fe67a850e5c928.html" target="n" data-glyph="76,1" class="i method">readPackedRefs</a>(<b>long</b> <span id="r110 rd" class="r110 r">size</span>, <b>long</b> <span id="r111 rd" class="r111 r">mtime</span>)
+        {
+            <b>if</b> (!<a href="@0@mscorlib/A.html#1c7421e464f67b7e" class="t t">File</a>.<a href="@0@mscorlib/A.html#3360368484a9f131" class="i method">Exists</a>(<a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+            {
+                <span class="c">// Ignore it and leave the new list empty.</span>
+                <b>return</b> <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>.<a href="#da408537954e8d98" class="i field">NO_PACKED_REFS</a>;
+            }
+
+            <b>using</b> (<a href="@0@mscorlib/A.html#b5fe1efcec14de32" class="k">var</a> <span id="r112 rd" class="r112 r">br</span> = <b>new</b> <a href="@0@mscorlib/A.html#c376a634cf16699f" class="t constructor">StreamReader</a>(<a href="#fd18ef523b9f6ed8" class="i field">packedRefsFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#b2fcdc67ec48e578" class="i field">CHARSET</a>))
+            {
+                <b>return</b> <b>new</b> <a href="#4e0ffdb3181e201e" class="t constructor">PackedRefList</a>(<a href="#ab2a1a90e19c514b" class="i method">parsePackedRefs</a>(<span class="r112 r">br</span>), <span class="r110 r">size</span>, <span class="r111 r">mtime</span>);
+            }
+        }
+
+        <b>private static</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="ab2a1a90e19c514b" href="R/ab2a1a90e19c514b.html" target="n" data-glyph="76,1" class="i method">parsePackedRefs</a>(<a href="@0@mscorlib/A.html#7b5eff52b5bf1164" class="t t">TextReader</a> <span id="r113 rd" class="r113 r">br</span>)
+        {
+            <a href="Util/RefList.cs.html#d391459dfbaf95d2" class="k">var</a> <span id="r114 rd" class="r114 r">all</span> = <b>new</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;.<a href="Util/RefList.cs.html#6b5c62e7b66e01ee" class="t constructor">Builder</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;();
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r115 rd" class="r115 r">last</span> = <b>null</b>;
+            <b>bool</b> <span id="r116 rd" class="r116 r">peeled</span> = <b>false</b>;
+            <b>bool</b> <span id="r117 rd" class="r117 r">needSort</span> = <b>false</b>;
+
+            <b>string</b> <span id="r118 rd" class="r118 r">p</span>;
+            <b>while</b> ((<span class="r118 r">p</span> = <span class="r113 r">br</span>.<a href="@0@mscorlib/A.html#91b2c7adbdc4b165" class="i method">ReadLine</a>()) != <b>null</b>)
+            {
+                <b>if</b> (<span class="r118 r">p</span>[0] == <span class="s">&#39;#&#39;</span>)
+                {
+                    <b>if</b> (<span class="r118 r">p</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="#5435c56bbd45de03" class="i field">PACKED_REFS_HEADER</a>))
+                    {
+                        <span class="r118 r">p</span> = <span class="r118 r">p</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="#5435c56bbd45de03" class="i field">PACKED_REFS_HEADER</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+                        <span class="r116 r">peeled</span> = <span class="r118 r">p</span>.<a href="@0@mscorlib/A.html#428c5c9954dea844" class="i method">Contains</a>(<a href="#c3c7848217fe1f9e" class="i field">PACKED_REFS_PEELED</a>);
+                    }
+                    <b>continue</b>;
+                }
+
+                <b>if</b> (<span class="r118 r">p</span>[0] == <span class="s">&#39;^&#39;</span>)
+                {
+                    <b>if</b> (<span class="r115 r">last</span> == <b>null</b>)
+                        <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Peeled line before ref.&quot;</span>);
+
+                    <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r119 rd" class="r119 r">id</span> = <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a4a5d5ce43840f13" class="i method">FromString</a>(<span class="r118 r">p</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(1));
+                    <span class="r115 r">last</span> = <b>new</b> <a href="ObjectIdRef.cs.html#f74467294d1eebe5" class="t constructor">PeeledTag</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#e1a2ba53908b1dc9" class="i field">Packed</a>, <span class="r115 r">last</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>(), <span class="r115 r">last</span>
+                                                                             .<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>(), <span class="r119 r">id</span>);
+                    <span class="r114 r">all</span>.<a href="Util/RefList.cs.html#00cb7ecd00d1c4a9" class="i method">set</a>(<span class="r114 r">all</span>.<a href="Util/RefList.cs.html#7b8c2b1771431822" class="i method">size</a>() - 1, <span class="r115 r">last</span>);
+                    <b>continue</b>;
+                }
+
+                <b>int</b> <span id="r120 rd" class="r120 r">sp</span> = <span class="r118 r">p</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39; &#39;</span>);
+                <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r121 rd" class="r121 r">id2</span> = <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a4a5d5ce43840f13" class="i method">FromString</a>(<span class="r118 r">p</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, <span class="r120 r">sp</span>));
+                <b>string</b> <span id="r122 rd" class="r122 r">name</span> = <a href="#84ebc573a802edc7" class="i method">copy</a>(<span class="r118 r">p</span>, <span class="r120 r">sp</span> + 1, <span class="r118 r">p</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+                <a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r123 rd" class="r123 r">cur</span>;
+                <b>if</b> (<span class="r116 r">peeled</span>)
+                    <span class="r123 r">cur</span> = <b>new</b> <a href="ObjectIdRef.cs.html#dd6b7401c0d913b5" class="t constructor">PeeledNonTag</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#e1a2ba53908b1dc9" class="i field">Packed</a>, <span class="r122 r">name</span>, <span class="r121 r">id2</span>);
+                <b>else</b>
+                    <span class="r123 r">cur</span> = <b>new</b> <a href="ObjectIdRef.cs.html#c5925d134f204c8d" class="t constructor">Unpeeled</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#e1a2ba53908b1dc9" class="i field">Packed</a>, <span class="r122 r">name</span>, <span class="r121 r">id2</span>);
+                <b>if</b> (<span class="r115 r">last</span> != <b>null</b> &amp;&amp; <a href="RefComparator.cs.html#535b403148f2ae44" class="t t">RefComparator</a>.<a href="RefComparator.cs.html#6ddf06feb156d647" class="i method">compareTo</a>(<span class="r115 r">last</span>, <span class="r123 r">cur</span>) &gt; 0)
+                    <span class="r117 r">needSort</span> = <b>true</b>;
+                <span class="r114 r">all</span>.<a href="Util/RefList.cs.html#d91880934dc594f3" class="i method">add</a>(<span class="r123 r">cur</span>);
+                <span class="r115 r">last</span> = <span class="r123 r">cur</span>;
+            }
+
+            <b>if</b> (<span class="r117 r">needSort</span>)
+                <span class="r114 r">all</span>.<a href="Util/RefList.cs.html#e50392e0a729ef8e" class="i method">sort</a>();
+            <b>return</b> <span class="r114 r">all</span>.<a href="Util/RefList.cs.html#4614e8ce6fdc1014" class="i method">toRefList</a>();
+        }
+
+        <b>private static string</b> <a id="84ebc573a802edc7" href="R/84ebc573a802edc7.html" target="n" data-glyph="76,1" class="i method">copy</a>(<b>string</b> <span id="r124 rd" class="r124 r">src</span>, <b>int</b> <span id="r125 rd" class="r125 r">off</span>, <b>int</b> <span id="r126 rd" class="r126 r">end</span>)
+        {
+            <span class="c">// Don&#39;t use substring since it could leave a reference to the much</span>
+            <span class="c">// larger existing string. Force construction of a full new object.</span>
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#ec674e2123a44860" class="t constructor">StringBuilder</a>(<span class="r126 r">end</span> - <span class="r125 r">off</span>).<a href="@0@mscorlib/A.html#6d48c42f6982ca03" class="i method">Append</a>(<span class="r124 r">src</span>, <span class="r125 r">off</span>, <span class="r126 r">end</span> - <span class="r125 r">off</span>).<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+
+        <b>private void</b> <a id="d1bbbe5cd62ac934" href="R/d1bbbe5cd62ac934.html" target="n" data-glyph="76,1" class="i method">commitPackedRefs</a>(<a href="LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r127 rd" class="r127 r">lck</span>, <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r128 rd" class="r128 r">refs</span>, <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <span id="r129 rd" class="r129 r">oldPackedList</span>)
+        {
+            <b>new</b> <a href="#8ecb73b21a9ad802" class="t constructor">PackedRefsWriter</a>(<span class="r127 r">lck</span>, <span class="r128 r">refs</span>, <span class="r129 r">oldPackedList</span>, <a href="#2e7e411f48ff5a77" class="i field">packedRefs</a>).<a href="RefWriter.cs.html#92f39488e51b1673" class="i method">writePackedRefs</a>();
+        }
+
+        <b>private class</b> <a id="c1600eb9cc338450" href="R/c1600eb9cc338450.html" target="n" data-glyph="4,1" class="t t">PackedRefsWriter</a> : <a href="RefWriter.cs.html#d3a6bec25cf33072" class="t t">RefWriter</a>
+        {
+            <b>private readonly</b> <a href="LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <a id="7c850822604ac3e8" href="R/7c850822604ac3e8.html" target="n" data-glyph="46,2" class="i field">_lck</a>;
+            <b>private readonly</b> <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="8128d158be42ca3e" href="R/8128d158be42ca3e.html" target="n" data-glyph="46,2" class="i field">_refs</a>;
+            <b>private readonly</b> <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <a id="42d464142594e7d9" href="R/42d464142594e7d9.html" target="n" data-glyph="46,2" class="i field">_oldPackedList</a>;
+            <b>private readonly</b> <a href="Util/JavaHelper/AtomicReference.cs.html#1e8ba7f5e3f67204" class="t t">AtomicReference</a>&lt;<a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>&gt; <a id="66ce5e4c285b9734" href="R/66ce5e4c285b9734.html" target="n" data-glyph="46,2" class="i field">_packedRefs</a>;
+
+            <b>public</b> <a id="8ecb73b21a9ad802" href="R/8ecb73b21a9ad802.html" target="n" data-glyph="72,2" class="i constructor">PackedRefsWriter</a>(<a href="LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a> <span id="r130 rd" class="r130 r">lck</span>, <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r131 rd" class="r131 r">refs</span>, <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <span id="r132 rd" class="r132 r">oldPackedList</span>, <a href="Util/JavaHelper/AtomicReference.cs.html#1e8ba7f5e3f67204" class="t t">AtomicReference</a>&lt;<a href="#e369aed608bbd2f1" class="t t">PackedRefList</a>&gt; <span id="r133 rd" class="r133 r">packedRefs</span>)
+                : <a href="RefWriter.cs.html#bee328bb22f8e8e2" class="k">base</a>(<span class="r131 r">refs</span>)
+            {
+                <a href="#7c850822604ac3e8" class="i field">_lck</a> = <span class="r130 r">lck</span>;
+                <a href="#8128d158be42ca3e" class="i field">_refs</a> = <span class="r131 r">refs</span>;
+                <a href="#42d464142594e7d9" class="i field">_oldPackedList</a> = <span class="r132 r">oldPackedList</span>;
+                <a href="#66ce5e4c285b9734" class="i field">_packedRefs</a> = <span class="r133 r">packedRefs</span>;
+            }
+
+            <b>protected override void</b> <a id="5b8a0e75fe3360b8" href="R/5b8a0e75fe3360b8.html" target="n" data-glyph="75,2" class="i method">writeFile</a>(<b>string</b> <span id="r134 rd" class="r134 r">name</span>, <b>byte</b>[] <span id="r135 rd" class="r135 r">content</span>)
+            {
+                <a href="#7c850822604ac3e8" class="i field">_lck</a>.<a href="LockFile.cs.html#2d0f9e342eec0631" class="i method">setNeedStatInformation</a>(<b>true</b>);
+                <b>try</b>
+                {
+                    <a href="#7c850822604ac3e8" class="i field">_lck</a>.<a href="LockFile.cs.html#f44f21bf2f69cedb" class="i method">Write</a>(<span class="r135 r">content</span>);
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r136 rd" class="r136 r">ioe</span>)
+                {
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ObjectWritingException.cs.html#932cf7e1d332cf77" class="t constructor">ObjectWritingException</a>(<span class="s">&quot;Unable to write &quot;</span> + <span class="r134 r">name</span>,
+                                                     <span class="r136 r">ioe</span>);
+                }
+                <b>try</b>
+                {
+                    <a href="#7c850822604ac3e8" class="i field">_lck</a>.<a href="LockFile.cs.html#ef3d6004b91e6333" class="i method">waitForStatChange</a>();
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#1b47a5a85e0d5883" class="t t">ThreadAbortException</a>)
+                {
+                    <a href="#7c850822604ac3e8" class="i field">_lck</a>.<a href="LockFile.cs.html#2c1f6b2d12857b2d" class="i method">Unlock</a>();
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ObjectWritingException.cs.html#d5c41605ef7a6b89" class="t constructor">ObjectWritingException</a>(<span class="s">&quot;Interrupted writing &quot;</span>
+                                                     + <span class="r134 r">name</span>);
+                }
+                <b>if</b> (!<a href="#7c850822604ac3e8" class="i field">_lck</a>.<a href="LockFile.cs.html#b167ec17da77c55b" class="i method">Commit</a>())
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ObjectWritingException.cs.html#d5c41605ef7a6b89" class="t constructor">ObjectWritingException</a>(<span class="s">&quot;Unable to write &quot;</span> + <span class="r134 r">name</span>);
+
+                <a href="#66ce5e4c285b9734" class="i field">_packedRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<a href="#42d464142594e7d9" class="i field">_oldPackedList</a>, <b>new</b> <a href="#4e0ffdb3181e201e" class="t constructor">PackedRefList</a>(<a href="#8128d158be42ca3e" class="i field">_refs</a>,
+                                                                            <span class="r135 r">content</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <a href="#7c850822604ac3e8" class="i field">_lck</a>.<a href="LockFile.cs.html#2c311d9ca7a2d0d2" class="i property">CommitLastModified</a>));
+            }
+        }
+        <b>private</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="711fbab8744ed356" href="R/711fbab8744ed356.html" target="n" data-glyph="76,1" class="i method">readRef</a>(<b>string</b> <span id="r137 rd" class="r137 r">name</span>, <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r138 rd" class="r138 r">packed</span>)
+        {
+            <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="#90c9f2139a58447f" class="t t">LooseRef</a>&gt; <span id="r139 rd" class="r139 r">curList</span> = <a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <b>int</b> <span id="r140 rd" class="r140 r">idx</span> = <span class="r139 r">curList</span>.<a href="Util/RefList.cs.html#b3c4ebdb250a0f5c" class="i method">find</a>(<span class="r137 r">name</span>);
+            <b>if</b> (0 &lt;= <span class="r140 r">idx</span>)
+            {
+                <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r141 rd" class="r141 r">o</span> = <span class="r139 r">curList</span>.<a href="Util/RefList.cs.html#bd2e8ee9b6d584ee" class="i method">get</a>(<span class="r140 r">idx</span>);
+                <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r142 rd" class="r142 r">n</span> = <a href="#5cc04c3113b185db" class="i method">scanRef</a>(<span class="r141 r">o</span>, <span class="r137 r">name</span>);
+                <b>if</b> (<span class="r142 r">n</span> == <b>null</b>)
+                {
+                    <b>if</b> (<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r139 r">curList</span>, <span class="r139 r">curList</span>.<a href="Util/RefList.cs.html#b812dce3ab83df04" class="i method">remove</a>(<span class="r140 r">idx</span>)))
+                        <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+                    <b>return</b> <span class="r138 r">packed</span>.<a href="Util/RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r137 r">name</span>);
+                }
+
+                <b>if</b> (<span class="r141 r">o</span> == <span class="r142 r">n</span>)
+                    <b>return</b> <span class="r142 r">n</span>;
+                <b>if</b> (<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r139 r">curList</span>, <span class="r139 r">curList</span>.<a href="Util/RefList.cs.html#7ce5b33cd04e709e" class="i method">set</a>(<span class="r140 r">idx</span>, <span class="r142 r">n</span>)))
+                    <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+                <b>return</b> <span class="r142 r">n</span>;
+            }
+
+            <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r143 rd" class="r143 r">n2</span> = <a href="#5cc04c3113b185db" class="i method">scanRef</a>(<b>null</b>, <span class="r137 r">name</span>);
+            <b>if</b> (<span class="r143 r">n2</span> == <b>null</b>)
+                <b>return</b> <span class="r138 r">packed</span>.<a href="Util/RefList.cs.html#7cee3516065b0564" class="i method">get</a>(<span class="r137 r">name</span>);
+            <b>if</b> (<a href="#1ee2e8f364271f31" class="i field">looseRefs</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r139 r">curList</span>, <span class="r139 r">curList</span>.<a href="Util/RefList.cs.html#299bb5b1ee6a6abd" class="i method">add</a>(<span class="r140 r">idx</span>, <span class="r143 r">n2</span>)))
+                <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            <b>return</b> <span class="r143 r">n2</span>;
+        }
+
+        <b>private</b> <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <a id="5cc04c3113b185db" href="R/5cc04c3113b185db.html" target="n" data-glyph="76,1" class="i method">scanRef</a>(<a href="#90c9f2139a58447f" class="t t">LooseRef</a> <span id="r144 rd" class="r144 r">@ref</span>, <b>string</b> <span id="r145 rd" class="r145 r">name</span>)
+        {
+            <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r146 rd" class="r146 r">path</span> = <a href="#c2cd6b852412d5cf" class="i method">fileFor</a>(<span class="r145 r">name</span>);
+            <b>long</b> <span id="r147 rd" class="r147 r">modified</span> = 0;
+
+            <span class="r147 r">modified</span> = <span class="r146 r">path</span>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>();
+
+            <b>if</b> (<span class="r144 r">@ref</span> != <b>null</b>)
+            {
+                <b>if</b> (<span class="r144 r">@ref</span>.<a href="#0ff185626aefbcf4" class="i method">getLastModified</a>() == <span class="r147 r">modified</span>)
+                    <b>return</b> <span class="r144 r">@ref</span>;
+                <span class="r145 r">name</span> = <span class="r144 r">@ref</span>.<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>();
+            }
+            <b>else if</b> (<span class="r147 r">modified</span> == 0)
+                <b>return null</b>;
+
+            <b>byte</b>[] <span id="r148 rd" class="r148 r">buf</span>;
+            <b>try</b>
+            {
+                <span class="r148 r">buf</span> = <a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#656509b9fc20764f" class="i method">ReadFully</a>(<span class="r146 r">path</span>, 4096);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a>)
+            {
+                <b>return null</b>; <span class="c">// doesn&#39;t exist; not a reference.</span>
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#c89af51ac20d8a84" class="t t">DirectoryNotFoundException</a>)
+            {
+                <b>return null</b>; <span class="c">// doesn&#39;t exist; not a reference.</span>
+            }
+
+            <b>int</b> <span id="r149 rd" class="r149 r">n</span> = <span class="r148 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <b>if</b> (<span class="r149 r">n</span> == 0)
+                <b>return null</b>; <span class="c">// empty file; not a reference.</span>
+
+            <b>if</b> (<a href="#0bec50faf1756166" class="i method">isSymRef</a>(<span class="r148 r">buf</span>, <span class="r149 r">n</span>))
+            {
+                <span class="c">// trim trailing whitespace</span>
+                <b>while</b> (0 &lt; <span class="r149 r">n</span> &amp;&amp; <a href="@0@mscorlib/A.html#02f2b1a33b09362d" class="t t">Char</a>.<a href="@0@mscorlib/A.html#cda2cc9b76535970" class="i method">IsWhiteSpace</a>((<b>char</b>)<span class="r148 r">buf</span>[<span class="r149 r">n</span> - 1]))
+                    <span class="r149 r">n</span>--;
+                <b>if</b> (<span class="r149 r">n</span> &lt; 6)
+                {
+                    <b>string</b> <span id="r150 rd" class="r150 r">content</span> = <a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#1b6eaa7d1442116c" class="i method">decode</a>(<span class="r148 r">buf</span>, 0, <span class="r149 r">n</span>);
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Not a ref: &quot;</span> + <span class="r145 r">name</span> + <span class="s">&quot;: &quot;</span> + <span class="r150 r">content</span>);
+                }
+                <b>string</b> <span id="r151 rd" class="r151 r">target</span> = <a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#1b6eaa7d1442116c" class="i method">decode</a>(<span class="r148 r">buf</span>, 5, <span class="r149 r">n</span>);
+                <b>return</b> <a href="#bb60f6c50f5a9725" class="i method">newSymbolicRef</a>(<span class="r147 r">modified</span>, <span class="r145 r">name</span>, <span class="r151 r">target</span>);
+            }
+
+            <b>if</b> (<span class="r149 r">n</span> &lt; <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#75366613464807f8" class="i field">OBJECT_ID_STRING_LENGTH</a>)
+                <b>return null</b>; <span class="c">// impossibly short object identifier; not a reference.</span>
+
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r152 rd" class="r152 r">id</span>;
+            <b>try</b>
+            {
+                <span class="r152 r">id</span> = <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#3e127c192a574f53" class="i method">FromString</a>(<span class="r148 r">buf</span>, 0);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#109b3ef6299ef9df" class="t t">ArgumentException</a>)
+            {
+                <b>while</b> (0 &lt; <span class="r149 r">n</span> &amp;&amp; <a href="@0@mscorlib/A.html#02f2b1a33b09362d" class="t t">Char</a>.<a href="@0@mscorlib/A.html#cda2cc9b76535970" class="i method">IsWhiteSpace</a>((<b>char</b>)<span class="r148 r">buf</span>[<span class="r149 r">n</span> - 1]))
+                    <span class="r149 r">n</span>--;
+                <b>string</b> <span id="r153 rd" class="r153 r">content</span> = <a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#1b6eaa7d1442116c" class="i method">decode</a>(<span class="r148 r">buf</span>, 0, <span class="r149 r">n</span>);
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Not a ref: &quot;</span> + <span class="r145 r">name</span> + <span class="s">&quot;: &quot;</span> + <span class="r153 r">content</span>);
+            }
+            <b>return</b> <b>new</b> <a href="#633a567d41c46473" class="t constructor">LooseUnpeeled</a>(<span class="r147 r">modified</span>, <span class="r145 r">name</span>, <span class="r152 r">id</span>);
+        }
+
+        <b>private static bool</b> <a id="0bec50faf1756166" href="R/0bec50faf1756166.html" target="n" data-glyph="76,1" class="i method">isSymRef</a>(<b>byte</b>[] <span id="r154 rd" class="r154 r">buf</span>, <b>int</b> <span id="r155 rd" class="r155 r">n</span>)
+        {
+            <b>if</b> (<span class="r155 r">n</span> &lt; 6)
+                <b>return false</b>;
+            <b>return</b> <span class="r154 r">buf</span>[0] == <span class="s">&#39;r&#39;</span> <span class="c">//</span>
+                   &amp;&amp; <span class="r154 r">buf</span>[1] == <span class="s">&#39;e&#39;</span> <span class="c">//</span>
+                   &amp;&amp; <span class="r154 r">buf</span>[2] == <span class="s">&#39;f&#39;</span> <span class="c">//</span>
+                   &amp;&amp; <span class="r154 r">buf</span>[3] == <span class="s">&#39;:&#39;</span> <span class="c">//</span>
+                   &amp;&amp; <span class="r154 r">buf</span>[4] == <span class="s">&#39; &#39;</span>;
+        }
+
+        <span class="c">/* If the parent should fire listeners, fires them. */</span>
+        <b>private void</b> <a id="8e645e6371c33bec" href="R/8e645e6371c33bec.html" target="n" data-glyph="76,1" class="i method">fireRefsChanged</a>()
+        {
+            <b>int</b> <span id="r156 rd" class="r156 r">last</span> = <a href="#d3e76aa2e30fe2d0" class="i field">lastNotifiedModCnt</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <b>int</b> <span id="r157 rd" class="r157 r">curr</span> = <a href="#09a83ef059263400" class="i field">modCnt</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+            <b>if</b> (<span class="r156 r">last</span> != <span class="r157 r">curr</span> &amp;&amp; <a href="#d3e76aa2e30fe2d0" class="i field">lastNotifiedModCnt</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r156 r">last</span>, <span class="r157 r">curr</span>))
+                <a href="#0fd58a95587e5557" class="i field">parent</a>.<a href="Repository.cs.html#3d1eba96bcb2d461" class="i method">fireRefsChanged</a>();
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a reference update to write a temporary reference.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">an update for a new temporary reference.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <a id="8751cd3ffa32520e" href="R/8751cd3ffa32520e.html" target="n" data-glyph="72,1" class="i method">newTemporaryUpdate</a>()
+        {
+            <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r158 rd" class="r158 r">tmp</span> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>, <span class="s">&quot;renamed_&quot;</span> + <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a>.<a href="@0@mscorlib/A.html#b7fae6994c22c22e" class="i method">NewGuid</a>() + <span class="s">&quot;_ref&quot;</span>);
+            <b>string</b> <span id="r159 rd" class="r159 r">name</span> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a> + <span class="r158 r">tmp</span>.<a href="@0@mscorlib/A.html#f559e2409f4dfe9e" class="i property">Name</a>;
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r160 rd" class="r160 r">@ref</span> = <b>new</b> <a href="ObjectIdRef.cs.html#c5925d134f204c8d" class="t constructor">Unpeeled</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#bdc046a8cfc47e34" class="i field">New</a>, <span class="r159 r">name</span>, <b>null</b>);
+            <b>return</b> <b>new</b> <a href="RefDirectoryUpdate.cs.html#151cbefccb1aa16b" class="t constructor">RefDirectoryUpdate</a>(<a href="#b7360b0f0070b3a6" class="k">this</a>, <span class="r160 r">@ref</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Locate the file on disk for a single reference name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r161 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> name of the ref, relative to the Git repository top level</span>
+        <span class="c">///</span><span class="c"> directory (so typically starts with refs/).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the loose file location.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="c2cd6b852412d5cf" href="R/c2cd6b852412d5cf.html" target="n" data-glyph="72,1" class="i method">fileFor</a>(<b>string</b> <span id="r161 rd" class="r161 r">name</span>)
+        {
+            <b>if</b> (<span class="r161 r">name</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>))
+            {
+                <span class="r161 r">name</span> = <span class="r161 r">name</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+                <b>return</b> <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#d5dfc9ea5be8e982" class="i field">refsDir</a>, <span class="r161 r">name</span>);
+            }
+            <b>return</b> <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#5559ae60cc0a89c1" class="i field">gitDir</a>, <span class="r161 r">name</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Locate the log file on disk for a single reference name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r162 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> name of the ref, relative to the Git repository top level</span>
+        <span class="c">///</span><span class="c"> directory (so typically starts with refs/).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the log file location.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="d6c378de6ec5080d" href="R/d6c378de6ec5080d.html" target="n" data-glyph="72,1" class="i method">logFor</a>(<b>string</b> <span id="r162 rd" class="r162 r">name</span>)
+        {
+            <b>if</b> (<span class="r162 r">name</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>))
+            {
+                <span class="r162 r">name</span> = <span class="r162 r">name</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c8e999ead2dec149" class="i field">R_REFS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+                <b>return</b> <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#29432c07392c6a8f" class="i field">logsRefsDir</a>, <span class="r162 r">name</span>);
+            }
+            <b>return</b> <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#2cf0c82470d6f2fa" class="i field">logsDir</a>, <span class="r162 r">name</span>);
+        }
+
+        <b>public static int</b> <a id="ab548fb86facdf67" href="R/ab548fb86facdf67.html" target="n" data-glyph="72,1" class="i method">levelsIn</a>(<b>string</b> <span id="r163 rd" class="r163 r">name</span>)
+        {
+            <b>int</b> <span id="r164 rd" class="r164 r">count</span> = 0;
+            <b>for</b> (<b>int</b> <span id="r165 rd" class="r165 r">p</span> = <span class="r163 r">name</span>.<a href="@0@mscorlib/A.html#eb06d6d166f6a3d9" class="i method">IndexOf</a>(<span class="s">&#39;/&#39;</span>); <span class="r165 r">p</span> &gt;= 0; <span class="r165 r">p</span> = <span class="r163 r">name</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;/&#39;</span>, <span class="r165 r">p</span> + 1))
+                <span class="r164 r">count</span>++;
+            <b>return</b> <span class="r164 r">count</span>;
+        }
+
+        <b>public static void</b> <a id="b0ae23e83250c1c3" href="R/b0ae23e83250c1c3.html" target="n" data-glyph="72,1" class="i method">delete</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r166 rd" class="r166 r">file</span>, <b>int</b> <span id="r167 rd" class="r167 r">depth</span>)
+        {
+            <b>if</b> (!<span class="r166 r">file</span>.<a href="Util/PathUtil.cs.html#bf54af593f7b2aad" class="i method">DeleteFile</a>() &amp;&amp; <span class="r166 r">file</span>.<a href="Util/Extensions.cs.html#b6e46e03d3efdd7c" class="i method">IsFile</a>())
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;File cannot be deleted: &quot;</span> + <span class="r166 r">file</span>);
+
+            <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r168 rd" class="r168 r">dir</span> = <span class="r166 r">file</span>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>;
+            <b>for</b> (<b>int</b> <span id="r169 rd" class="r169 r">i</span> = 0; <span class="r169 r">i</span> &lt; <span class="r167 r">depth</span>; ++<span class="r169 r">i</span>)
+            {
+                <b>try</b>
+                {
+                    <span class="r168 r">dir</span>.<a href="@0@mscorlib/A.html#6e65a4ec19364f64" class="i method">Delete</a>();
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <b>break</b>;   <span class="c">// ignore problem here</span>
+                }
+
+                <span class="r168 r">dir</span> = <span class="r168 r">dir</span>.<a href="@0@mscorlib/A.html#4b0f923e4e34075e" class="i property">Parent</a>;
+            }
+        }
+
+        <b>private class</b> <a id="e369aed608bbd2f1" href="R/e369aed608bbd2f1.html" target="n" data-glyph="4,1" class="t t">PackedRefList</a> : <a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;
+        {
+            <b>public static</b> <a href="#e369aed608bbd2f1" class="t t">PackedRefList</a> <a id="da408537954e8d98" href="R/da408537954e8d98.html" target="n" data-glyph="42,2" class="i field">NO_PACKED_REFS</a> = <b>new</b> <a href="#4e0ffdb3181e201e" class="t constructor">PackedRefList</a>(<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;
+                                                                               .<a href="Util/RefList.cs.html#bd636b9b4d0caddb" class="i method">emptyList</a>(), 0, 0);
+
+            <span class="c">/* Last length of the packed-refs file when we read it. */</span>
+            <b>public readonly long</b> <a id="dbe21983d50e6676" href="R/dbe21983d50e6676.html" target="n" data-glyph="42,2" class="i field">lastSize</a>;
+
+            <span class="c">/* Last modified time of the packed-refs file when we read it. */</span>
+            <b>public readonly long</b> <a id="526f293f857650d5" href="R/526f293f857650d5.html" target="n" data-glyph="42,2" class="i field">lastModified</a>;
+
+            <b>public</b> <a id="4e0ffdb3181e201e" href="R/4e0ffdb3181e201e.html" target="n" data-glyph="72,2" class="i constructor">PackedRefList</a>(<a href="Util/RefList.cs.html#9b2576c0571b6ae4" class="t t">RefList</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r170 rd" class="r170 r">src</span>, <b>long</b> <span id="r171 rd" class="r171 r">size</span>, <b>long</b> <span id="r172 rd" class="r172 r">mtime</span>)
+                : <a href="Util/RefList.cs.html#3f061f357a8988eb" class="k">base</a>(<span class="r170 r">src</span>)
+            {
+                <a href="#dbe21983d50e6676" class="i field">lastSize</a> = <span class="r171 r">size</span>;
+                <a href="#526f293f857650d5" class="i field">lastModified</a> = <span class="r172 r">mtime</span>;
+            }
+        }
+
+        <b>private static</b> <a href="#bc0d9e2cdc6ec8fb" class="t t">LooseSymbolicRef</a> <a id="bb60f6c50f5a9725" href="R/bb60f6c50f5a9725.html" target="n" data-glyph="76,1" class="i method">newSymbolicRef</a>(<b>long</b> <span id="r173 rd" class="r173 r">lastModified</span>,
+                                                       <b>string</b> <span id="r174 rd" class="r174 r">name</span>, <b>string</b> <span id="r175 rd" class="r175 r">target</span>)
+        {
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r176 rd" class="r176 r">dst</span> = <b>new</b> <a href="ObjectIdRef.cs.html#c5925d134f204c8d" class="t constructor">Unpeeled</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#bdc046a8cfc47e34" class="i field">New</a>, <span class="r175 r">target</span>, <b>null</b>);
+            <b>return</b> <b>new</b> <a href="#38575c8122ded6f6" class="t constructor">LooseSymbolicRef</a>(<span class="r173 r">lastModified</span>, <span class="r174 r">name</span>, <span class="r176 r">dst</span>);
+        }
+
+        <b>private interface</b> <a id="90c9f2139a58447f" href="R/90c9f2139a58447f.html" target="n" data-glyph="52,1" class="t t">LooseRef</a> : <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>
+        {
+            <b>long</b> <a id="0ff185626aefbcf4" href="R/0ff185626aefbcf4.html" target="n" data-glyph="72,2" class="i method">getLastModified</a>();
+
+            <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <a id="cc10a1d1c11ecd78" href="R/cc10a1d1c11ecd78.html" target="n" data-glyph="72,2" class="i method">peel</a>(<a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r177 rd" class="r177 r">newLeaf</span>);
+        }
+
+        <b>private class</b> <a id="615aa4e26412b972" href="R/615aa4e26412b972.html" target="n" data-glyph="4,1" class="t t">LoosePeeledTag</a> : <a href="ObjectIdRef.cs.html#70f2765d95a3da9d" class="t t">PeeledTag</a>, <a href="#90c9f2139a58447f" class="t t">LooseRef</a>
+        {
+            <b>private readonly long</b> <a id="1474932a446814cd" href="R/1474932a446814cd.html" target="n" data-glyph="46,2" class="i field">_lastModified</a>;
+
+            <b>public</b> <a id="5fd6a5fff659d94f" href="R/5fd6a5fff659d94f.html" target="n" data-glyph="72,2" class="i constructor">LoosePeeledTag</a>(<b>long</b> <span id="r178 rd" class="r178 r">mtime</span>, <b>string</b> <span id="r179 rd" class="r179 r">refName</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r180 rd" class="r180 r">id</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r181 rd" class="r181 r">p</span>)
+                : <a href="ObjectIdRef.cs.html#f74467294d1eebe5" class="k">base</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#1760a0ce101e33d7" class="i field">Loose</a>, <span class="r179 r">refName</span>, <span class="r180 r">id</span>, <span class="r181 r">p</span>)
+            {
+                <a href="#1474932a446814cd" class="i field">_lastModified</a> = <span class="r178 r">mtime</span>;
+            }
+
+            <b>public long</b> <a id="517638b7ac12feb4" href="R/517638b7ac12feb4.html" target="n" data-glyph="72,2" class="i method">getLastModified</a>()
+            {
+                <b>return</b> <a href="#1474932a446814cd" class="i field">_lastModified</a>;
+            }
+
+            <b>public</b> <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <a id="fd2e755c311afeed" href="R/fd2e755c311afeed.html" target="n" data-glyph="72,2" class="i method">peel</a>(<a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r182 rd" class="r182 r">newLeaf</span>)
+            {
+                <b>return</b> <a href="#615aa4e26412b972" class="k">this</a>;
+            }
+        }
+
+        <b>private class</b> <a id="ff2c9294734b1103" href="R/ff2c9294734b1103.html" target="n" data-glyph="4,1" class="t t">LooseNonTag</a> : <a href="ObjectIdRef.cs.html#91f7391b26b0fdd6" class="t t">PeeledNonTag</a>
+                                     , <a href="#90c9f2139a58447f" class="t t">LooseRef</a>
+        {
+            <b>private readonly long</b> <a id="f1bb7e7a4911eef8" href="R/f1bb7e7a4911eef8.html" target="n" data-glyph="46,2" class="i field">_lastModified</a>;
+
+            <b>public</b> <a id="259ac6065de927f1" href="R/259ac6065de927f1.html" target="n" data-glyph="72,2" class="i constructor">LooseNonTag</a>(<b>long</b> <span id="r183 rd" class="r183 r">mtime</span>, <b>string</b> <span id="r184 rd" class="r184 r">refName</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r185 rd" class="r185 r">id</span>)
+                : <a href="ObjectIdRef.cs.html#dd6b7401c0d913b5" class="k">base</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#1760a0ce101e33d7" class="i field">Loose</a>, <span class="r184 r">refName</span>, <span class="r185 r">id</span>)
+            {
+                <a href="#f1bb7e7a4911eef8" class="i field">_lastModified</a> = <span class="r183 r">mtime</span>;
+            }
+
+            <b>public long</b> <a id="8ab9e458744183cf" href="R/8ab9e458744183cf.html" target="n" data-glyph="72,2" class="i method">getLastModified</a>()
+            {
+                <b>return</b> <a href="#f1bb7e7a4911eef8" class="i field">_lastModified</a>;
+            }
+
+            <b>public</b> <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <a id="2a3236c44966e7c7" href="R/2a3236c44966e7c7.html" target="n" data-glyph="72,2" class="i method">peel</a>(<a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r186 rd" class="r186 r">newLeaf</span>)
+            {
+                <b>return</b> <a href="#ff2c9294734b1103" class="k">this</a>;
+            }
+        }
+
+        <b>private class</b> <a id="9ae681725c7f0faf" href="R/9ae681725c7f0faf.html" target="n" data-glyph="4,1" class="t t">LooseUnpeeled</a> : <a href="ObjectIdRef.cs.html#766705a2c5457a6d" class="t t">Unpeeled</a>, <a href="#90c9f2139a58447f" class="t t">LooseRef</a>
+        {
+            <b>private readonly long</b> <a id="b67e3fcf7bb9ae5b" href="R/b67e3fcf7bb9ae5b.html" target="n" data-glyph="46,2" class="i field">_lastModified</a>;
+
+            <b>public</b> <a id="633a567d41c46473" href="R/633a567d41c46473.html" target="n" data-glyph="72,2" class="i constructor">LooseUnpeeled</a>(<b>long</b> <span id="r187 rd" class="r187 r">mtime</span>, <b>string</b> <span id="r188 rd" class="r188 r">refName</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r189 rd" class="r189 r">id</span>)
+                : <a href="ObjectIdRef.cs.html#c5925d134f204c8d" class="k">base</a>(<a href="Ref.cs.html#c6b7bb1e2b7527a3" class="t t">Storage</a>.<a href="Ref.cs.html#1760a0ce101e33d7" class="i field">Loose</a>, <span class="r188 r">refName</span>, <span class="r189 r">id</span>)
+            {
+                <a href="#b67e3fcf7bb9ae5b" class="i field">_lastModified</a> = <span class="r187 r">mtime</span>;
+            }
+
+            <b>public long</b> <a id="dd335a870d9a1bdf" href="R/dd335a870d9a1bdf.html" target="n" data-glyph="72,2" class="i method">getLastModified</a>()
+            {
+                <b>return</b> <a href="#b67e3fcf7bb9ae5b" class="i field">_lastModified</a>;
+            }
+
+            <b>public</b> <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <a id="edc545524df9f372" href="R/edc545524df9f372.html" target="n" data-glyph="72,2" class="i method">peel</a>(<a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r190 rd" class="r190 r">newLeaf</span>)
+            {
+                <b>if</b> (<span class="r190 r">newLeaf</span>.<a href="Ref.cs.html#3d48a81020ef583c" class="i method">getPeeledObjectId</a>() != <b>null</b>)
+                    <b>return</b> <b>new</b> <a href="#5fd6a5fff659d94f" class="t constructor">LoosePeeledTag</a>(<a href="#b67e3fcf7bb9ae5b" class="i field">_lastModified</a>, <a href="ObjectIdRef.cs.html#e77acf631383e721" class="i property">Name</a>,
+                                              <a href="ObjectIdRef.cs.html#86e02e93b75ef09a" class="i property">ObjectId</a>, <span class="r190 r">newLeaf</span>.<a href="ObjectIdRef.cs.html#d999c512faa0f77e" class="i property">PeeledObjectId</a>);
+                <b>else
+                    return</b> <b>new</b> <a href="#259ac6065de927f1" class="t constructor">LooseNonTag</a>(<a href="#b67e3fcf7bb9ae5b" class="i field">_lastModified</a>, <a href="ObjectIdRef.cs.html#e77acf631383e721" class="i property">Name</a>, <a href="ObjectIdRef.cs.html#86e02e93b75ef09a" class="i property">ObjectId</a>);
+            }
+        }
+
+        <b>private class</b> <a id="bc0d9e2cdc6ec8fb" href="R/bc0d9e2cdc6ec8fb.html" target="n" data-glyph="4,1" class="t t">LooseSymbolicRef</a> : <a href="SymbolicRef.cs.html#a110e45c74edd4a2" class="t t">SymbolicRef</a>, <a href="#90c9f2139a58447f" class="t t">LooseRef</a>
+        {
+            <b>private readonly long</b> <a id="ac579ac9372020ba" href="R/ac579ac9372020ba.html" target="n" data-glyph="46,2" class="i field">_lastModified</a>;
+
+            <b>public</b> <a id="38575c8122ded6f6" href="R/38575c8122ded6f6.html" target="n" data-glyph="72,2" class="i constructor">LooseSymbolicRef</a>(<b>long</b> <span id="r191 rd" class="r191 r">mtime</span>, <b>string</b> <span id="r192 rd" class="r192 r">refName</span>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r193 rd" class="r193 r">target</span>)
+                : <a href="SymbolicRef.cs.html#94999925ccb68b8f" class="k">base</a>(<span class="r192 r">refName</span>, <span class="r193 r">target</span>)
+            {
+                <a href="#ac579ac9372020ba" class="i field">_lastModified</a> = <span class="r191 r">mtime</span>;
+            }
+
+            <b>public long</b> <a id="fd5b7ae09a6d351e" href="R/fd5b7ae09a6d351e.html" target="n" data-glyph="72,2" class="i method">getLastModified</a>()
+            {
+                <b>return</b> <a href="#ac579ac9372020ba" class="i field">_lastModified</a>;
+            }
+
+            <b>public</b> <a href="#90c9f2139a58447f" class="t t">LooseRef</a> <a id="2a29be12964933ff" href="R/2a29be12964933ff.html" target="n" data-glyph="72,2" class="i method">peel</a>(<a href="ObjectIdRef.cs.html#0b1058d6ce8b7732" class="t t">ObjectIdRef</a> <span id="r194 rd" class="r194 r">newLeaf</span>)
+            {
+                <span class="c">// We should never try to peel the symbolic references.</span>
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+            }
+        }
+    }
+}
+
+
+</pre></td></tr></table></div></body></html>

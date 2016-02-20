@@ -1,0 +1,435 @@
+﻿<!DOCTYPE html>
+<html><head><title>ObjectInserter.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(426);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/ObjectInserter.cs" target="_top">NGit\ObjectInserter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Transport</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Inserts objects into an existing</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ObjectDatabase</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> .</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> An inserter is not thread-safe. Individual threads should each obtain their</span>
+	<span class="c">///</span><span class="c"> own unique inserter instance, or must arrange for locking at a higher level</span>
+	<span class="c">///</span><span class="c"> to ensure the inserter is in use by no more than one thread at a time.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Objects written by an inserter may not be immediately visible for reading</span>
+	<span class="c">///</span><span class="c"> after the insert method completes. Callers must invoke either</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6c4af6fea6d6eb44" class="i method">Release</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Release()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> or</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4c38ca2633c7a828" class="i method">Flush</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Flush()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> prior to updating references or</span>
+	<span class="c">///</span><span class="c"> otherwise making the returned ObjectIds visible to other code.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public abstract class</b> <a id="f245fd0ba211832f" href="../R/f245fd0ba211832f.html" target="n" data-glyph="0,0" class="t t">ObjectInserter</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">An inserter that can be used for formatting and id generation only.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">An inserter that can be used for formatting and id generation only.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public class</b> <a id="9b2e0391daee0688" href="../R/9b2e0391daee0688.html" target="n" data-glyph="0,1" class="t t"><span id="b51a9111ac1485fe">Formatter</span></a> : <a href="#f245fd0ba211832f" class="t t">ObjectInserter</a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="2867f4be8998d88e" href="../R/2867f4be8998d88e.html" target="n" data-glyph="72,2" class="i method">Insert</a>(<b>int</b> <span id="r0 rd" class="r0 r">objectType</span>, <b>long</b> <span id="r1 rd" class="r1 r">length</span>, <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r2 rd" class="r2 r">@in</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="../NGit.Transport/PackParser.cs.html#26e1828330f2f0a5" class="t t">PackParser</a> <a id="30e4de673f7b9d1e" href="../R/30e4de673f7b9d1e.html" target="n" data-glyph="72,2" class="i method">NewPackParser</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r3 rd" class="r3 r">@in</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override void</b> <a id="a4e8c99d02fd59aa" href="../R/a4e8c99d02fd59aa.html" target="n" data-glyph="72,2" class="i method">Flush</a>()
+			{
+			}
+
+			<span class="c">// Do nothing.</span>
+			<b>public override void</b> <a id="8a61b3d8589dce12" href="../R/8a61b3d8589dce12.html" target="n" data-glyph="72,2" class="i method">Release</a>()
+			{
+			}
+			<span class="c">// Do nothing.</span>
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Wraps a delegate ObjectInserter.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Wraps a delegate ObjectInserter.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public abstract class</b> <a id="ee046b53e99d1a77" href="../R/../../0000000000.html" target="n" data-glyph="0,1" class="t t"><span id="ba8252637141068a">Filter</span></a> : <a href="#f245fd0ba211832f" class="t t">ObjectInserter</a>
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">delegate ObjectInserter to handle all processing.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<b>protected internal abstract</b> <a href="#f245fd0ba211832f" class="t t">ObjectInserter</a> <a id="a1d6d4084d6bb493" href="../R/a1d6d4084d6bb493.html" target="n" data-glyph="75,2" class="i method">Delegate</a>();
+
+			<b>protected internal override byte</b>[] <a id="440775c2eb06c183" href="../R/440775c2eb06c183.html" target="n" data-glyph="75,2" class="i method">Buffer</a>()
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#d10648d942b27a04" class="i method">Buffer</a>();
+			}
+
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="57d4f961bcc256bd" href="../R/57d4f961bcc256bd.html" target="n" data-glyph="72,2" class="i method">IdFor</a>(<b>int</b> <span id="r4 rd" class="r4 r">type</span>, <b>byte</b>[] <span id="r5 rd" class="r5 r">data</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#038b36cbd7402733" class="i method">IdFor</a>(<span class="r4 r">type</span>, <span class="r5 r">data</span>);
+			}
+
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="b7576d23825d4fde" href="../R/b7576d23825d4fde.html" target="n" data-glyph="72,2" class="i method">IdFor</a>(<b>int</b> <span id="r6 rd" class="r6 r">type</span>, <b>byte</b>[] <span id="r7 rd" class="r7 r">data</span>, <b>int</b> <span id="r8 rd" class="r8 r">off</span>, <b>int</b> <span id="r9 rd" class="r9 r">len</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#40950ab6b5497749" class="i method">IdFor</a>(<span class="r6 r">type</span>, <span class="r7 r">data</span>, <span class="r8 r">off</span>, <span class="r9 r">len</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="f28858ae315e16e0" href="../R/f28858ae315e16e0.html" target="n" data-glyph="72,2" class="i method">IdFor</a>(<b>int</b> <span id="r10 rd" class="r10 r">objectType</span>, <b>long</b> <span id="r11 rd" class="r11 r">length</span>, <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r12 rd" class="r12 r">@in</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#5a83b3db6bbcc6f6" class="i method">IdFor</a>(<span class="r10 r">objectType</span>, <span class="r11 r">length</span>, <span class="r12 r">@in</span>);
+			}
+
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="95bb2a8bb7c8cd6a" href="../R/95bb2a8bb7c8cd6a.html" target="n" data-glyph="72,2" class="i method">IdFor</a>(<a href="TreeFormatter.cs.html#d8a5fe2095322e59" class="t t">TreeFormatter</a> <span id="r13 rd" class="r13 r">formatter</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#e28aff823ceada67" class="i method">IdFor</a>(<span class="r13 r">formatter</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="95cc245980568c20" href="../R/95cc245980568c20.html" target="n" data-glyph="72,2" class="i method">Insert</a>(<b>int</b> <span id="r14 rd" class="r14 r">type</span>, <b>byte</b>[] <span id="r15 rd" class="r15 r">data</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#0d0821541676db9c" class="i method">Insert</a>(<span class="r14 r">type</span>, <span class="r15 r">data</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="3cbef16cfc7b3ce4" href="../R/3cbef16cfc7b3ce4.html" target="n" data-glyph="72,2" class="i method">Insert</a>(<b>int</b> <span id="r16 rd" class="r16 r">type</span>, <b>byte</b>[] <span id="r17 rd" class="r17 r">data</span>, <b>int</b> <span id="r18 rd" class="r18 r">off</span>, <b>int</b> <span id="r19 rd" class="r19 r">len</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#736f77437410c426" class="i method">Insert</a>(<span class="r16 r">type</span>, <span class="r17 r">data</span>, <span class="r18 r">off</span>, <span class="r19 r">len</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="1dbc8c21d9b44b7c" href="../R/1dbc8c21d9b44b7c.html" target="n" data-glyph="72,2" class="i method">Insert</a>(<b>int</b> <span id="r20 rd" class="r20 r">objectType</span>, <b>long</b> <span id="r21 rd" class="r21 r">length</span>, <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r22 rd" class="r22 r">@in</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#fb2dcf0d4b0844fa" class="i method">Insert</a>(<span class="r20 r">objectType</span>, <span class="r21 r">length</span>, <span class="r22 r">@in</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="../NGit.Transport/PackParser.cs.html#26e1828330f2f0a5" class="t t">PackParser</a> <a id="d969fa3f12bd88fe" href="../R/d969fa3f12bd88fe.html" target="n" data-glyph="72,2" class="i method">NewPackParser</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r23 rd" class="r23 r">@in</span>)
+			{
+				<b>return</b> <a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#6258a78165adbc2b" class="i method">NewPackParser</a>(<span class="r23 r">@in</span>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override void</b> <a id="144de4dff339f6f6" href="../R/144de4dff339f6f6.html" target="n" data-glyph="72,2" class="i method">Flush</a>()
+			{
+				<a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#4c38ca2633c7a828" class="i method">Flush</a>();
+			}
+
+			<b>public override void</b> <a id="705264398052884d" href="../R/705264398052884d.html" target="n" data-glyph="72,2" class="i method">Release</a>()
+			{
+				<a href="#a1d6d4084d6bb493" class="i method">Delegate</a>().<a href="#6c4af6fea6d6eb44" class="i method">Release</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Digest to compute the name of an object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Digest to compute the name of an object.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="/Sharpen/A.html#a356dea4cd4a7bb5" class="t t">MessageDigest</a> <a id="c675fcb3c16903eb" href="../R/c675fcb3c16903eb.html" target="n" data-glyph="46,1" class="i field">digest</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Temporary working buffer for streaming data through.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Temporary working buffer for streaming data through.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private byte</b>[] <a id="dab72bebf3597071" href="../R/dab72bebf3597071.html" target="n" data-glyph="46,1" class="i field">tempBuffer</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a new inserter for a database.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create a new inserter for a database.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public</b> <a id="28d3a636214ef1e6" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">ObjectInserter</a>()
+		{
+			<a href="#c675fcb3c16903eb" class="i field">digest</a> = <a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#ee1f85a30fbc4f87" class="i method">NewMessageDigest</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain a temporary buffer for use by the ObjectInserter or its subclass.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain a temporary buffer for use by the ObjectInserter or its subclass.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This buffer is supplied by the ObjectInserter base class to itself and</span>
+		<span class="c">///</span><span class="c"> its subclasses for the purposes of pulling data from a supplied</span>
+		<span class="c">///</span><span class="c"> InputStream, passing it through a Deflater, or formatting the canonical</span>
+		<span class="c">///</span><span class="c"> format of a small object like a small tree or commit.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">strong</span><span class="c">&gt;</span><span class="c">This buffer IS NOT for translation such as auto-CRLF or content</span>
+		<span class="c">///</span><span class="c"> filtering and must not be used for such purposes.</span><span class="c">&lt;/</span><span class="c">strong</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The returned buffer is small, around a few KiBs, and the size may change</span>
+		<span class="c">///</span><span class="c"> between versions of JGit. Callers using this buffer must always check the</span>
+		<span class="c">///</span><span class="c"> length of the returned array to ascertain how much space was provided.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> There is a single buffer for each ObjectInserter, repeated calls to this</span>
+		<span class="c">///</span><span class="c"> method will (usually) always return the same buffer. If the caller needs</span>
+		<span class="c">///</span><span class="c"> more than one buffer, or needs a buffer of a larger size, it must manage</span>
+		<span class="c">///</span><span class="c"> that buffer on its own.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The buffer is usually on first demand for a buffer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a temporary byte array for use by the caller.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected internal virtual byte</b>[] <a id="d10648d942b27a04" href="../R/d10648d942b27a04.html" target="n" data-glyph="75,1" class="i method">Buffer</a>()
+		{
+			<b>byte</b>[] <span id="r24 rd" class="r24 r">b</span> = <a href="#dab72bebf3597071" class="i field">tempBuffer</a>;
+			<b>if</b> (<span class="r24 r">b</span> == <b>null</b>)
+			{
+				<a href="#dab72bebf3597071" class="i field">tempBuffer</a> = <span class="r24 r">b</span> = <b>new</b> <b>byte</b>[8192];
+			}
+			<b>return</b> <span class="r24 r">b</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">digest to help compute an ObjectId</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected internal virtual</b> <a href="/Sharpen/A.html#a356dea4cd4a7bb5" class="t t">MessageDigest</a> <a id="fc61ff429d2e00a0" href="../R/fc61ff429d2e00a0.html" target="n" data-glyph="75,1" class="i method">Digest</a>()
+		{
+			<a href="#c675fcb3c16903eb" class="i field">digest</a>.<a href="/Sharpen/A.html#7ffa9dbc88f4fe35" class="i method">Reset</a>();
+			<b>return</b> <a href="#c675fcb3c16903eb" class="i field">digest</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the name of an object, without inserting it.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Compute the name of an object, without inserting it.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">type</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type code of the object to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r26 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">complete content of the object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="038b36cbd7402733" href="../R/038b36cbd7402733.html" target="n" data-glyph="72,1" class="i method">IdFor</a>(<b>int</b> <span id="r25 rd" class="r25 r">type</span>, <b>byte</b>[] <span id="r26 rd" class="r26 r">data</span>)
+		{
+			<b>return</b> <a href="#40950ab6b5497749" class="i method">IdFor</a>(<span class="r25 r">type</span>, <span class="r26 r">data</span>, 0, <span class="r26 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the name of an object, without inserting it.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Compute the name of an object, without inserting it.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">type</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type code of the object to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">complete content of the object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">off</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first position within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">data</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">len</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes to copy from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">data</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="40950ab6b5497749" href="../R/40950ab6b5497749.html" target="n" data-glyph="72,1" class="i method">IdFor</a>(<b>int</b> <span id="r27 rd" class="r27 r">type</span>, <b>byte</b>[] <span id="r28 rd" class="r28 r">data</span>, <b>int</b> <span id="r29 rd" class="r29 r">off</span>, <b>int</b> <span id="r30 rd" class="r30 r">len</span>)
+		{
+			<a href="/Sharpen/A.html#a356dea4cd4a7bb5" class="t t">MessageDigest</a> <span id="r31 rd" class="r31 r">md</span> = <a href="#fc61ff429d2e00a0" class="i method">Digest</a>();
+			<span class="r31 r">md</span>.<a href="/Sharpen/A.html#a844f6c26c0422b4" class="i method">Update</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#ab3e3ff92197985a" class="i method">EncodedTypeString</a>(<span class="r27 r">type</span>));
+			<span class="r31 r">md</span>.<a href="/Sharpen/A.html#257aed4f91e684ac" class="i method">Update</a>(<b>unchecked</b>((<b>byte</b>)<span class="s">&#39; &#39;</span>));
+			<span class="r31 r">md</span>.<a href="/Sharpen/A.html#a844f6c26c0422b4" class="i method">Update</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d8bfbbf58d67871c" class="i method">EncodeASCII</a>(<span class="r30 r">len</span>));
+			<span class="r31 r">md</span>.<a href="/Sharpen/A.html#257aed4f91e684ac" class="i method">Update</a>(<b>unchecked</b>((<b>byte</b>)0));
+			<span class="r31 r">md</span>.<a href="/Sharpen/A.html#20cafcf60b0ce7a8" class="i method">Update</a>(<span class="r28 r">data</span>, <span class="r29 r">off</span>, <span class="r30 r">len</span>);
+			<b>return</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#d331ef96ebe97120" class="i method">FromRaw</a>(<span class="r31 r">md</span>.<a href="/Sharpen/A.html#61dc860415e0e84f" class="i method">Digest</a>());
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the name of an object, without inserting it.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Compute the name of an object, without inserting it.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">objectType</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type code of the object to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">length</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes to scan from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">in</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">in</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> stream providing the object content. The caller is responsible</span>
+		<span class="c">///</span><span class="c"> for closing the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the source stream could not be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="5a83b3db6bbcc6f6" href="../R/5a83b3db6bbcc6f6.html" target="n" data-glyph="72,1" class="i method">IdFor</a>(<b>int</b> <span id="r32 rd" class="r32 r">objectType</span>, <b>long</b> <span id="r33 rd" class="r33 r">length</span>, <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r34 rd" class="r34 r">@in</span>)
+		{
+			<a href="/Sharpen/A.html#a356dea4cd4a7bb5" class="t t">MessageDigest</a> <span id="r35 rd" class="r35 r">md</span> = <a href="#fc61ff429d2e00a0" class="i method">Digest</a>();
+			<span class="r35 r">md</span>.<a href="/Sharpen/A.html#a844f6c26c0422b4" class="i method">Update</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#ab3e3ff92197985a" class="i method">EncodedTypeString</a>(<span class="r32 r">objectType</span>));
+			<span class="r35 r">md</span>.<a href="/Sharpen/A.html#257aed4f91e684ac" class="i method">Update</a>(<b>unchecked</b>((<b>byte</b>)<span class="s">&#39; &#39;</span>));
+			<span class="r35 r">md</span>.<a href="/Sharpen/A.html#a844f6c26c0422b4" class="i method">Update</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#d8bfbbf58d67871c" class="i method">EncodeASCII</a>(<span class="r33 r">length</span>));
+			<span class="r35 r">md</span>.<a href="/Sharpen/A.html#257aed4f91e684ac" class="i method">Update</a>(<b>unchecked</b>((<b>byte</b>)0));
+			<b>byte</b>[] <span id="r36 rd" class="r36 r">buf</span> = <a href="#d10648d942b27a04" class="i method">Buffer</a>();
+			<b>while</b> (<span class="r33 r">length</span> &gt; 0)
+			{
+				<b>int</b> <span id="r37 rd" class="r37 r">n</span> = <span class="r34 r">@in</span>.<a href="/Sharpen/A.html#aed09ce58860ccfe" class="i method">Read</a>(<span class="r36 r">buf</span>, 0, (<b>int</b>)<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<span class="r33 r">length</span>, <span class="r36 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>));
+				<b>if</b> (<span class="r37 r">n</span> &lt; 0)
+				{
+					<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#8f2aa24fe1d14bd2" class="t constructor">EOFException</a>(<span class="s">&quot;Unexpected end of input&quot;</span>);
+				}
+				<span class="r35 r">md</span>.<a href="/Sharpen/A.html#20cafcf60b0ce7a8" class="i method">Update</a>(<span class="r36 r">buf</span>, 0, <span class="r37 r">n</span>);
+				<span class="r33 r">length</span> -= <span class="r37 r">n</span>;
+			}
+			<b>return</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#d331ef96ebe97120" class="i method">FromRaw</a>(<span class="r35 r">md</span>.<a href="/Sharpen/A.html#61dc860415e0e84f" class="i method">Digest</a>());
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Compute the ObjectId for the given tree without inserting it.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Compute the ObjectId for the given tree without inserting it.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">formatter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the computed ObjectId</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="e28aff823ceada67" href="../R/e28aff823ceada67.html" target="n" data-glyph="72,1" class="i method">IdFor</a>(<a href="TreeFormatter.cs.html#d8a5fe2095322e59" class="t t">TreeFormatter</a> <span id="r38 rd" class="r38 r">formatter</span>)
+		{
+			<b>return</b> <span class="r38 r">formatter</span>.<a href="TreeFormatter.cs.html#22a5fd0d8a107922" class="i method">ComputeId</a>(<a href="#f245fd0ba211832f" class="k">this</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert a single tree into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert a single tree into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r39 r">formatter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the formatter containing the proposed tree&#39;s data.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the tree object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object could not be stored.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="722c8de02d2f279b" href="../R/722c8de02d2f279b.html" target="n" data-glyph="72,1" class="i method">Insert</a>(<a href="TreeFormatter.cs.html#d8a5fe2095322e59" class="t t">TreeFormatter</a> <span id="r39 rd" class="r39 r">formatter</span>)
+		{
+			<span class="c">// Delegate to the formatter, as then it can pass the raw internal</span>
+			<span class="c">// buffer back to this inserter, avoiding unnecessary data copying.</span>
+			<span class="c">//</span>
+			<b>return</b> <span class="r39 r">formatter</span>.<a href="TreeFormatter.cs.html#196e1cd8ff5ed521" class="i method">InsertTo</a>(<a href="#f245fd0ba211832f" class="k">this</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert a single commit into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert a single commit into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r40 r">builder</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the builder containing the proposed commit&#39;s data.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the commit object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object could not be stored.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="36cbe37cd220cf65" href="../R/36cbe37cd220cf65.html" target="n" data-glyph="72,1" class="i method">Insert</a>(<span class="i n">NGit</span>.<a href="CommitBuilder.cs.html#a21e673dc77b7b7f" class="t t">CommitBuilder</a> <span id="r40 rd" class="r40 r">builder</span>)
+		{
+			<b>return</b> <a href="#0d0821541676db9c" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#416456fe2cb28842" class="i field">OBJ_COMMIT</a>, <span class="r40 r">builder</span>.<a href="CommitBuilder.cs.html#f8a177b5e9cdb181" class="i method">Build</a>());
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert a single annotated tag into the store, returning its unique name.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert a single annotated tag into the store, returning its unique name.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r41 r">builder</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the builder containing the proposed tag&#39;s data.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the tag object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object could not be stored.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="945638cafd34eee7" href="../R/945638cafd34eee7.html" target="n" data-glyph="72,1" class="i method">Insert</a>(<a href="TagBuilder.cs.html#af1486eff6996baa" class="t t">TagBuilder</a> <span id="r41 rd" class="r41 r">builder</span>)
+		{
+			<b>return</b> <a href="#0d0821541676db9c" class="i method">Insert</a>(<a href="Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="Constants.cs.html#68634a51498a529d" class="i field">OBJ_TAG</a>, <span class="r41 r">builder</span>.<a href="TagBuilder.cs.html#63d9a35a57f2ce9d" class="i method">Build</a>());
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert a single object into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert a single object into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r42 r">type</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type code of the object to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">complete content of the object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object could not be stored.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="0d0821541676db9c" href="../R/0d0821541676db9c.html" target="n" data-glyph="72,1" class="i method">Insert</a>(<b>int</b> <span id="r42 rd" class="r42 r">type</span>, <b>byte</b>[] <span id="r43 rd" class="r43 r">data</span>)
+		{
+			<b>return</b> <a href="#736f77437410c426" class="i method">Insert</a>(<span class="r42 r">type</span>, <span class="r43 r">data</span>, 0, <span class="r43 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert a single object into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert a single object into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">type</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type code of the object to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r45 r">data</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">complete content of the object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r46 r">off</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first position within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">data</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r47 r">len</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes to copy from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">data</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object could not be stored.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="736f77437410c426" href="../R/736f77437410c426.html" target="n" data-glyph="72,1" class="i method">Insert</a>(<b>int</b> <span id="r44 rd" class="r44 r">type</span>, <b>byte</b>[] <span id="r45 rd" class="r45 r">data</span>, <b>int</b> <span id="r46 rd" class="r46 r">off</span>, <b>int</b> <span id="r47 rd" class="r47 r">len</span>)
+		{
+			<b>return</b> <a href="#fb2dcf0d4b0844fa" class="i method">Insert</a>(<span class="r44 r">type</span>, <span class="r47 r">len</span>, <b>new</b> <a href="/Sharpen/A.html#fb86dd2993e93cd4" class="t constructor">ByteArrayInputStream</a>(<span class="r45 r">data</span>, <span class="r46 r">off</span>, <span class="r47 r">len</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Insert a single object into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Insert a single object into the store, returning its unique name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r48 r">objectType</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type code of the object to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r49 r">length</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes to copy from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">in</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r50 r">in</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> stream providing the object content. The caller is responsible</span>
+		<span class="c">///</span><span class="c"> for closing the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the name of the object.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the object could not be stored, or the source stream could</span>
+		<span class="c">///</span><span class="c"> not be read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="fb2dcf0d4b0844fa" href="../R/fb2dcf0d4b0844fa.html" target="n" data-glyph="72,1" class="i method">Insert</a>(<b>int</b> <span id="r48 rd" class="r48 r">objectType</span>, <b>long</b> <span id="r49 rd" class="r49 r">length</span>, <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r50 rd" class="r50 r">@in</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Initialize a parser to read from a pack formatted stream.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Initialize a parser to read from a pack formatted stream.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r51 r">in</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the input stream. The stream is not closed by the parser, and</span>
+		<span class="c">///</span><span class="c"> must instead be closed by the caller once parsing is complete.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the pack parser.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the parser instance, which can be configured and then used to</span>
+		<span class="c">///</span><span class="c"> parse objects into the ObjectDatabase.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="../NGit.Transport/PackParser.cs.html#26e1828330f2f0a5" class="t t">PackParser</a> <a id="6258a78165adbc2b" href="../R/6258a78165adbc2b.html" target="n" data-glyph="72,1" class="i method">NewPackParser</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r51 rd" class="r51 r">@in</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Make all inserted objects visible.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Make all inserted objects visible.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The flush may take some period of time to make the objects available to</span>
+		<span class="c">///</span><span class="c"> other threads.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the flush could not be completed; objects inserted thus far</span>
+		<span class="c">///</span><span class="c"> are in an indeterminate state.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract void</b> <a id="4c38ca2633c7a828" href="../R/4c38ca2633c7a828.html" target="n" data-glyph="72,1" class="i method">Flush</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Release any resources used by this inserter.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Release any resources used by this inserter.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> An inserter that has been released can be used again, but may need to be</span>
+		<span class="c">///</span><span class="c"> released after the subsequent usage.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public abstract void</b> <a id="6c4af6fea6d6eb44" href="../R/6c4af6fea6d6eb44.html" target="n" data-glyph="72,1" class="i method">Release</a>();
+	}
+}
+</pre></td></tr></table></div></body></html>

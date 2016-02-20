@@ -1,0 +1,256 @@
+﻿<!DOCTYPE html>
+<html><head><title>HistogramDiff.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(247);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/HistogramDiff.cs" target="_top">NGit.Diff\HistogramDiff.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">An extended form of Bram Cohen&#39;s patience diff algorithm.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> An extended form of Bram Cohen&#39;s patience diff algorithm.</span>
+	<span class="c">///</span><span class="c"> This implementation was derived by using the 4 rules that are outlined in</span>
+	<span class="c">///</span><span class="c"> Bram Cohen&#39;s </span><span class="c">&lt;</span><span class="c">a</span><span class="c"> </span><span class="c">href</span><span class="c">=</span><span class="c">&quot;</span><span class="c">http://bramcohen.livejournal.com/73318.html</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">blog</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">,</span>
+	<span class="c">///</span><span class="c"> and then was further extended to support low-occurrence common elements.</span>
+	<span class="c">///</span><span class="c"> The basic idea of the algorithm is to create a histogram of occurrences for</span>
+	<span class="c">///</span><span class="c"> each element of sequence A. Each element of sequence B is then considered in</span>
+	<span class="c">///</span><span class="c"> turn. If the element also exists in sequence A, and has a lower occurrence</span>
+	<span class="c">///</span><span class="c"> count, the positions are considered as a candidate for the longest common</span>
+	<span class="c">///</span><span class="c"> subsequence (LCS). After scanning of B is complete the LCS that has the</span>
+	<span class="c">///</span><span class="c"> lowest number of occurrences is chosen as a split point. The region is split</span>
+	<span class="c">///</span><span class="c"> around the LCS, and the algorithm is recursively applied to the sections</span>
+	<span class="c">///</span><span class="c"> before and after the LCS.</span>
+	<span class="c">///</span><span class="c"> By always selecting a LCS position with the lowest occurrence count, this</span>
+	<span class="c">///</span><span class="c"> algorithm behaves exactly like Bram Cohen&#39;s patience diff whenever there is a</span>
+	<span class="c">///</span><span class="c"> unique common element available between the two sequences. When no unique</span>
+	<span class="c">///</span><span class="c"> elements exist, the lowest occurrence element is chosen instead. This offers</span>
+	<span class="c">///</span><span class="c"> more readable diffs than simply falling back on the standard Myers&#39; O(ND)</span>
+	<span class="c">///</span><span class="c"> algorithm would produce.</span>
+	<span class="c">///</span><span class="c"> To prevent the algorithm from having an O(N^2) running time, an upper limit</span>
+	<span class="c">///</span><span class="c"> on the number of unique elements in a histogram bucket is configured by</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c2bbab7fa84dba77" class="i method">SetMaxChainLength</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetMaxChainLength(int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> . If sequence A has more than this many</span>
+	<span class="c">///</span><span class="c"> elements that hash into the same hash bucket, the algorithm passes the region</span>
+	<span class="c">///</span><span class="c"> to</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#3317d5741d2893eb" class="i method">SetFallbackAlgorithm</a>(<a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetFallbackAlgorithm(DiffAlgorithm)</span>
+	<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> . If no fallback algorithm is</span>
+	<span class="c">///</span><span class="c"> configured, the region is emitted as a replace edit.</span>
+	<span class="c">///</span><span class="c"> During scanning of sequence B, any element of A that occurs more than</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c2bbab7fa84dba77" class="i method">SetMaxChainLength</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetMaxChainLength(int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> times is never considered for an LCS match</span>
+	<span class="c">///</span><span class="c"> position, even if it is common between the two sequences. This limits the</span>
+	<span class="c">///</span><span class="c"> number of locations in sequence A that must be considered to find the LCS,</span>
+	<span class="c">///</span><span class="c"> and helps maintain a lower running time bound.</span>
+	<span class="c">///</span><span class="c"> So long as</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c2bbab7fa84dba77" class="i method">SetMaxChainLength</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetMaxChainLength(int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> is a small constant (such as 64),</span>
+	<span class="c">///</span><span class="c"> the algorithm runs in O(N * D) time, where N is the sum of the input lengths</span>
+	<span class="c">///</span><span class="c"> and D is the number of edits in the resulting EditList. If the supplied</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="SequenceComparator.cs.html#8987038b48260564" class="t t">SequenceComparator</a>{<span class="r0 r t">S</span>}<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SequenceComparator</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> has a good hash function, this implementation</span>
+	<span class="c">///</span><span class="c"> typically out-performs</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="MyersDiff.cs.html#e1d6681a94d61f1f" class="t t">MyersDiff</a>{<span class="r1 r t">S</span>}<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">MyersDiff</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> , even though its theoretical running</span>
+	<span class="c">///</span><span class="c"> time is the same.</span>
+	<span class="c">///</span><span class="c"> This implementation has an internal limitation that prevents it from handling</span>
+	<span class="c">///</span><span class="c"> sequences with more than 268,435,456 (2^28) elements.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="91f4e52bc851cc90" href="../R/91f4e52bc851cc90.html" target="n" data-glyph="0,0" class="t t"><span id="94d67858a626a932">HistogramDiff</span></a> : <a href="LowLevelDiffAlgorithm.cs.html#2707d0d5e52c80c1" class="t t">LowLevelDiffAlgorithm</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Algorithm to use when there are too many element occurrences.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Algorithm to use when there are too many element occurrences.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <a id="0ffa5b06e770c039" href="../R/0ffa5b06e770c039.html" target="n" data-glyph="46,1" class="i field">fallback</a> = <a href="MyersDiff.cs.html#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<a href="Sequence.cs.html#00c47a4b39d65421" class="t t">Sequence</a>&gt;.<a href="MyersDiff.cs.html#e61124c0f478163c" class="i field">INSTANCE</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Maximum number of positions to consider for a given element hash.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Maximum number of positions to consider for a given element hash.</span>
+		<span class="c">///</span><span class="c"> All elements with the same hash are stored into a single chain. The chain</span>
+		<span class="c">///</span><span class="c"> size is capped to ensure search is linear time at O(len_A + len_B) rather</span>
+		<span class="c">///</span><span class="c"> than quadratic at O(len_A * len_B).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="402b564c64158a11" href="../R/402b564c64158a11.html" target="n" data-glyph="46,1" class="i field">maxChainLength</a> = 64;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the algorithm used when there are too many element occurrences.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the algorithm used when there are too many element occurrences.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">alg</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the secondary algorithm. If null the region will be denoted as</span>
+		<span class="c">///</span><span class="c"> a single REPLACE block.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="3317d5741d2893eb" href="../R/3317d5741d2893eb.html" target="n" data-glyph="72,1" class="i method">SetFallbackAlgorithm</a>(<a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <span id="r2 rd" class="r2 r">alg</span>)
+		{
+			<a href="#0ffa5b06e770c039" class="i field">fallback</a> = <span class="r2 r">alg</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Maximum number of positions to consider for a given element hash.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Maximum number of positions to consider for a given element hash.</span>
+		<span class="c">///</span><span class="c"> All elements with the same hash are stored into a single chain. The chain</span>
+		<span class="c">///</span><span class="c"> size is capped to ensure search is linear time at O(len_A + len_B) rather</span>
+		<span class="c">///</span><span class="c"> than quadratic at O(len_A * len_B).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">maxLen</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">new maximum length.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="c2bbab7fa84dba77" href="../R/c2bbab7fa84dba77.html" target="n" data-glyph="72,1" class="i method">SetMaxChainLength</a>(<b>int</b> <span id="r3 rd" class="r3 r">maxLen</span>)
+		{
+			<a href="#402b564c64158a11" class="i field">maxChainLength</a> = <span class="r3 r">maxLen</span>;
+		}
+
+		<b>public override void</b> <a id="0ccc8bafa7b77085" href="../R/0ccc8bafa7b77085.html" target="n" data-glyph="72,1" class="i method">DiffNonCommon</a>&lt;<span id="r4 rd t" class="r4 r t">S</span>&gt;(<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r5 rd" class="r5 r">edits</span>, <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r4 r t">S</span>&gt;
+			 <span id="r6 rd" class="r6 r">cmp</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r4 r t">S</span>&gt; <span id="r7 rd" class="r7 r">a</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r4 r t">S</span>&gt; <span id="r8 rd" class="r8 r">b</span>, <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r9 rd" class="r9 r">region</span>)
+		{
+			<b>new</b> <a href="#91f4e52bc851cc90" class="t t">HistogramDiff</a>.<a href="#f704da8480cedae3" class="t constructor">State</a>&lt;<span class="r4 r t">S</span>&gt;(<a href="#91f4e52bc851cc90" class="k">this</a>, <span class="r5 r">edits</span>, <span class="r6 r">cmp</span>, <span class="r7 r">a</span>, <span class="r8 r">b</span>).<a href="#5c7bb4012dca746d" class="i method">DiffReplace</a>(<span class="r9 r">region</span>);
+		}
+
+		<b>private class</b> <a id="bd09cd2ae99d9a32" href="../R/bd09cd2ae99d9a32.html" target="n" data-glyph="4,1" class="t t">State</a>&lt;<span id="r10 rd t" class="r10 r t">S</span>&gt; <b>where</b> <span class="r10 r t">S</span>:<a href="Sequence.cs.html#00c47a4b39d65421" class="t t">Sequence</a>
+		{
+			<b>private readonly</b> <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r10 r t">S</span>&gt; <a id="9d577c524f2337b0" href="../R/9d577c524f2337b0.html" target="n" data-glyph="46,2" class="i field">cmp</a>;
+
+			<b>internal readonly</b> <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt; <a id="fcf1bafc4bb7affe" href="../R/fcf1bafc4bb7affe.html" target="n" data-glyph="44,2" class="i field">a</a>;
+
+			<b>internal readonly</b> <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt; <a id="3aac6be2e35aae24" href="../R/3aac6be2e35aae24.html" target="n" data-glyph="44,2" class="i field">b</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Result edits we have determined that must be made to convert a to b.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Result edits we have determined that must be made to convert a to b.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<b>internal readonly</b> <a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <a id="bf75c9e3d3ab5ddd" href="../R/bf75c9e3d3ab5ddd.html" target="n" data-glyph="44,2" class="i field">edits</a>;
+
+			<b>internal</b> <a id="f704da8480cedae3" href="../R/f704da8480cedae3.html" target="n" data-glyph="74,2" class="i constructor">State</a>(<a href="#91f4e52bc851cc90" class="t t">HistogramDiff</a> <span id="r11 rd" class="r11 r">_enclosing</span>, <a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r12 rd" class="r12 r">edits</span>, <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>
+				&lt;<span class="r10 r t">S</span>&gt; <span id="r13 rd" class="r13 r">cmp</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt; <span id="r14 rd" class="r14 r">a</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt; <span id="r15 rd" class="r15 r">b</span>)
+			{
+				<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#ddfa4e801c5e062c" class="i field">_enclosing</a> = <span class="r11 r">_enclosing</span>;
+				<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#9d577c524f2337b0" class="i field">cmp</a> = <span class="r13 r">cmp</span>;
+				<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#fcf1bafc4bb7affe" class="i field">a</a> = <span class="r14 r">a</span>;
+				<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#3aac6be2e35aae24" class="i field">b</a> = <span class="r15 r">b</span>;
+				<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#bf75c9e3d3ab5ddd" class="i field">edits</a> = <span class="r12 r">edits</span>;
+			}
+
+			<b>internal virtual void</b> <a id="5c7bb4012dca746d" href="../R/5c7bb4012dca746d.html" target="n" data-glyph="74,2" class="i method">DiffReplace</a>(<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r16 rd" class="r16 r">r</span>)
+			{
+				<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r17 rd" class="r17 r">lcs</span> = <b>new</b> <a href="HistogramDiffIndex.cs.html#566661ee394a3d8c" class="t constructor">HistogramDiffIndex</a>&lt;<span class="r10 r t">S</span>&gt;(<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#ddfa4e801c5e062c" class="i field">_enclosing</a>.<a href="#402b564c64158a11" class="i field">maxChainLength</a>, <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#9d577c524f2337b0" class="i field">cmp</a>, <a href="#bd09cd2ae99d9a32" class="k">this</a>
+					.<a href="#fcf1bafc4bb7affe" class="i field">a</a>, <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#3aac6be2e35aae24" class="i field">b</a>, <span class="r16 r">r</span>).<a href="HistogramDiffIndex.cs.html#4bd061282a9f7b44" class="i method">FindLongestCommonSequence</a>();
+				<b>if</b> (<span class="r17 r">lcs</span> != <b>null</b>)
+				{
+					<span class="c">// If we were given an edit, we can prove a result here.</span>
+					<span class="c">//</span>
+					<b>if</b> (<span class="r17 r">lcs</span>.<a href="Edit.cs.html#ea48879e819113b2" class="i method">IsEmpty</a>())
+					{
+						<span class="c">// An empty edit indicates there is nothing in common.</span>
+						<span class="c">// Replace the entire region.</span>
+						<span class="c">//</span>
+						<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#bf75c9e3d3ab5ddd" class="i field">edits</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r16 r">r</span>);
+					}
+					<b>else</b>
+					{
+						<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#3ee118a6bf2ae058" class="i method">Diff</a>(<span class="r16 r">r</span>.<a href="Edit.cs.html#4cadf592c4040c78" class="i method">Before</a>(<span class="r17 r">lcs</span>));
+						<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#3ee118a6bf2ae058" class="i method">Diff</a>(<span class="r16 r">r</span>.<a href="Edit.cs.html#40a77b9c704d2b1d" class="i method">After</a>(<span class="r17 r">lcs</span>));
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#ddfa4e801c5e062c" class="i field">_enclosing</a>.<a href="#0ffa5b06e770c039" class="i field">fallback</a> <b>is</b> <a href="LowLevelDiffAlgorithm.cs.html#2707d0d5e52c80c1" class="t t">LowLevelDiffAlgorithm</a>)
+					{
+						<a href="LowLevelDiffAlgorithm.cs.html#2707d0d5e52c80c1" class="t t">LowLevelDiffAlgorithm</a> <span id="r18 rd" class="r18 r">fb</span> = (<a href="LowLevelDiffAlgorithm.cs.html#2707d0d5e52c80c1" class="t t">LowLevelDiffAlgorithm</a>)<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#ddfa4e801c5e062c" class="i field">_enclosing</a>.<a href="#0ffa5b06e770c039" class="i field">fallback</a>;
+						<span class="r18 r">fb</span>.<a href="LowLevelDiffAlgorithm.cs.html#bdcb2389f6ecc058" class="i method">DiffNonCommon</a>(<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#bf75c9e3d3ab5ddd" class="i field">edits</a>, <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#9d577c524f2337b0" class="i field">cmp</a>, <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#fcf1bafc4bb7affe" class="i field">a</a>, <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#3aac6be2e35aae24" class="i field">b</a>, <span class="r16 r">r</span>);
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#ddfa4e801c5e062c" class="i field">_enclosing</a>.<a href="#0ffa5b06e770c039" class="i field">fallback</a> != <b>null</b>)
+						{
+							<a href="SubsequenceComparator.cs.html#8b106b879690b53d" class="t t">SubsequenceComparator</a>&lt;<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt;&gt; <span id="r19 rd" class="r19 r">cs</span> = <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#043f713800b832ca" class="i method">Subcmp</a>();
+							<a href="Subsequence.cs.html#dcdc7cfec4553de5" class="t t">Subsequence</a>&lt;<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt;&gt; <span id="r20 rd" class="r20 r">@as</span> = <a href="Subsequence.cs.html#dcdc7cfec4553de5" class="t t">Subsequence</a>&lt;<span class="r10 r t">S</span>&gt;.<a href="Subsequence.cs.html#83038d92bc5f5688" class="i method">A</a>(<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#fcf1bafc4bb7affe" class="i field">a</a>, <span class="r16 r">r</span>);
+							<a href="Subsequence.cs.html#dcdc7cfec4553de5" class="t t">Subsequence</a>&lt;<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt;&gt; <span id="r21 rd" class="r21 r">bs</span> = <a href="Subsequence.cs.html#dcdc7cfec4553de5" class="t t">Subsequence</a>&lt;<span class="r10 r t">S</span>&gt;.<a href="Subsequence.cs.html#abf6b370385e0aee" class="i method">B</a>(<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#3aac6be2e35aae24" class="i field">b</a>, <span class="r16 r">r</span>);
+							<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r22 rd" class="r22 r">res</span> = <a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#ddfa4e801c5e062c" class="i field">_enclosing</a>.<a href="#0ffa5b06e770c039" class="i field">fallback</a>.<a href="DiffAlgorithm.cs.html#ba9c337f12ddd91f" class="i method">DiffNonCommon</a>(<span class="r19 r">cs</span>, <span class="r20 r">@as</span>, <span class="r21 r">bs</span>);
+							<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#ed1a68471fa5c973" class="i method">AddAll</a>(<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#bf75c9e3d3ab5ddd" class="i field">edits</a>, <a href="Subsequence.cs.html#dcdc7cfec4553de5" class="t t">Subsequence</a>&lt;<span class="r10 r t">S</span>&gt;.<a href="Subsequence.cs.html#9860410569303b2a" class="i method">ToBase</a>(<span class="r22 r">res</span>, <span class="r20 r">@as</span>, <span class="r21 r">bs</span>));
+						}
+						<b>else</b>
+						{
+							<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#bf75c9e3d3ab5ddd" class="i field">edits</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r16 r">r</span>);
+						}
+					}
+				}
+			}
+
+			<b>private void</b> <a id="3ee118a6bf2ae058" href="../R/3ee118a6bf2ae058.html" target="n" data-glyph="76,2" class="i method">Diff</a>(<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r23 rd" class="r23 r">r</span>)
+			{
+				<b>switch</b> (<span class="r23 r">r</span>.<a href="Edit.cs.html#e38250a27429f35a" class="i method">GetType</a>())
+				{
+					<b>case</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>.<a href="Edit.cs.html#bb2fc850ae4e34dd" class="t t">Type</a>.<a href="Edit.cs.html#b51441a0a4d2d0de" class="i field">INSERT</a>:
+					<b>case</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>.<a href="Edit.cs.html#bb2fc850ae4e34dd" class="t t">Type</a>.<a href="Edit.cs.html#f4a460f8a069b68f" class="i field">DELETE</a>:
+					{
+						<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#bf75c9e3d3ab5ddd" class="i field">edits</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r23 r">r</span>);
+						<b>break</b>;
+					}
+
+					<b>case</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>.<a href="Edit.cs.html#bb2fc850ae4e34dd" class="t t">Type</a>.<a href="Edit.cs.html#9f9ca38967688470" class="i field">REPLACE</a>:
+					{
+						<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#5c7bb4012dca746d" class="i method">DiffReplace</a>(<span class="r23 r">r</span>);
+						<b>break</b>;
+					}
+
+					<b>case</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>.<a href="Edit.cs.html#bb2fc850ae4e34dd" class="t t">Type</a>.<a href="Edit.cs.html#022ee090e081b483" class="i field">EMPTY</a>:
+					<b>default</b>:
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8d6a52a5496ce078" class="t constructor">InvalidOperationException</a>();
+					}
+				}
+			}
+
+			<b>private</b> <a href="SubsequenceComparator.cs.html#8b106b879690b53d" class="t t">SubsequenceComparator</a>&lt;<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt;&gt; <a id="043f713800b832ca" href="../R/043f713800b832ca.html" target="n" data-glyph="76,2" class="i method">Subcmp</a>()
+			{
+				<b>return</b> <b>new</b> <a href="SubsequenceComparator.cs.html#efb93e45846c3c08" class="t constructor">SubsequenceComparator</a>&lt;<a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r10 r t">S</span>&gt;&gt;(<a href="#bd09cd2ae99d9a32" class="k">this</a>.<a href="#9d577c524f2337b0" class="i field">cmp</a>);
+			}
+
+			<b>private readonly</b> <a href="#91f4e52bc851cc90" class="t t">HistogramDiff</a> <a id="ddfa4e801c5e062c" href="../R/ddfa4e801c5e062c.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

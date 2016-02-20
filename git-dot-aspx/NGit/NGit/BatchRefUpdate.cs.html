@@ -1,0 +1,393 @@
+﻿<!DOCTYPE html>
+<html><head><title>BatchRefUpdate.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(384);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/BatchRefUpdate.cs" target="_top">NGit\BatchRefUpdate.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Transport</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Batch of reference updates to be applied to a repository.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Batch of reference updates to be applied to a repository.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> The batch update is primarily useful in the transport code, where a client or</span>
+	<span class="c">///</span><span class="c"> server is making changes to more than one reference at a time.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="3857cdfdcc1831c5" href="../R/3857cdfdcc1831c5.html" target="n" data-glyph="0,0" class="t t">BatchRefUpdate</a>
+	{
+		<b>private readonly</b> <a href="RefDatabase.cs.html#a8335c0f37d2d313" class="t t">RefDatabase</a> <a id="f4da20f0ef1ec4e2" href="../R/f4da20f0ef1ec4e2.html" target="n" data-glyph="46,1" class="i field">refdb</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Commands to apply during this batch.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Commands to apply during this batch.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>&gt; <a id="5cea2056562e7ff8" href="../R/5cea2056562e7ff8.html" target="n" data-glyph="46,1" class="i field">commands</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Does the caller permit a forced update on a reference?</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="228a23a1591ce252" href="../R/228a23a1591ce252.html" target="n" data-glyph="46,1" class="i field">allowNonFastForwards</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Identity to record action as within the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Identity to record action as within the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="06f76bab8322820d" href="../R/06f76bab8322820d.html" target="n" data-glyph="46,1" class="i field">refLogIdent</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Message the caller wants included in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Message the caller wants included in the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private string</b> <a id="4d29a9aa9f79c9f8" href="../R/4d29a9aa9f79c9f8.html" target="n" data-glyph="46,1" class="i field">refLogMessage</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Should the result value be appended to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">refLogMessage</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="20f2618e86d5b3e1" href="../R/20f2618e86d5b3e1.html" target="n" data-glyph="46,1" class="i field">refLogIncludeResult</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Initialize a new batch update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Initialize a new batch update.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">refdb</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the reference database of the repository to be updated.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="6d1bc2931f233897" href="../R/6d1bc2931f233897.html" target="n" data-glyph="75,1" class="i constructor">BatchRefUpdate</a>(<a href="RefDatabase.cs.html#a8335c0f37d2d313" class="t t">RefDatabase</a> <span id="r0 rd" class="r0 r">refdb</span>)
+		{
+			<a href="#3857cdfdcc1831c5" class="k">this</a>.<a href="#f4da20f0ef1ec4e2" class="i field">refdb</a> = <span class="r0 r">refdb</span>;
+			<a href="#3857cdfdcc1831c5" class="k">this</a>.<a href="#5cea2056562e7ff8" class="i field">commands</a> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>&gt;();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the batch update will permit a non-fast-forward update to</span>
+		<span class="c">///</span><span class="c"> an existing reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="faff24c86182d2ea" href="../R/faff24c86182d2ea.html" target="n" data-glyph="72,1" class="i method">IsAllowNonFastForwards</a>()
+		{
+			<b>return</b> <a href="#228a23a1591ce252" class="i field">allowNonFastForwards</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set if this update wants to permit a forced update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set if this update wants to permit a forced update.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">allow</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">true if this update batch should ignore merge tests.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="7219cc832aa4f311" href="../R/7219cc832aa4f311.html" target="n" data-glyph="72,1" class="i method">SetAllowNonFastForwards</a>(<b>bool</b> <span id="r1 rd" class="r1 r">allow</span>)
+		{
+			<a href="#228a23a1591ce252" class="i field">allowNonFastForwards</a> = <span class="r1 r">allow</span>;
+			<b>return</b> <a href="#3857cdfdcc1831c5" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">identity of the user making the change in the reflog.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="a5d06dc0da2a6ce7" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetRefLogIdent</a>()
+		{
+			<b>return</b> <a href="#06f76bab8322820d" class="i field">refLogIdent</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the identity of the user appearing in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the identity of the user appearing in the reflog.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The timestamp portion of the identity is ignored. A new identity with the</span>
+		<span class="c">///</span><span class="c"> current timestamp will be created automatically when the update occurs</span>
+		<span class="c">///</span><span class="c"> and the log record is written.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">pi</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> identity of the user. If null the identity will be</span>
+		<span class="c">///</span><span class="c"> automatically determined based on the repository</span>
+		<span class="c">///</span><span class="c"> configuration.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="ae17077359022968" href="../R/ae17077359022968.html" target="n" data-glyph="72,1" class="i method">SetRefLogIdent</a>(<a href="PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <span id="r2 rd" class="r2 r">pi</span>)
+		{
+			<a href="#06f76bab8322820d" class="i field">refLogIdent</a> = <span class="r2 r">pi</span>;
+			<b>return</b> <a href="#3857cdfdcc1831c5" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> message the caller wants to include in the reflog; null if the</span>
+		<span class="c">///</span><span class="c"> update should not be logged.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="05bc403a5cb44d62" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetRefLogMessage</a>()
+		{
+			<b>return</b> <a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the ref log message should show the result.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="27fe50bcfb086db0" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">IsRefLogIncludingResult</a>()
+		{
+			<b>return</b> <a href="#20f2618e86d5b3e1" class="i field">refLogIncludeResult</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the message to include in the reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">msg</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the message to describe this change. It may be null if</span>
+		<span class="c">///</span><span class="c"> appendStatus is null in order not to append to the reflog</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">appendStatus</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the status of the ref change (fast-forward or</span>
+		<span class="c">///</span><span class="c"> forced-update) should be appended to the user supplied</span>
+		<span class="c">///</span><span class="c"> message.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="42e764ca20092153" href="../R/42e764ca20092153.html" target="n" data-glyph="72,1" class="i method">SetRefLogMessage</a>(<b>string</b> <span id="r3 rd" class="r3 r">msg</span>, <b>bool</b> <span id="r4 rd" class="r4 r">appendStatus</span>
+			)
+		{
+			<b>if</b> (<span class="r3 r">msg</span> == <b>null</b> &amp;&amp; !<span class="r4 r">appendStatus</span>)
+			{
+				<a href="#e3bc6686bf1612cf" class="i method">DisableRefLog</a>();
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<span class="r3 r">msg</span> == <b>null</b> &amp;&amp; <span class="r4 r">appendStatus</span>)
+				{
+					<a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+					<a href="#20f2618e86d5b3e1" class="i field">refLogIncludeResult</a> = <b>true</b>;
+				}
+				<b>else</b>
+				{
+					<a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a> = <span class="r3 r">msg</span>;
+					<a href="#20f2618e86d5b3e1" class="i field">refLogIncludeResult</a> = <span class="r4 r">appendStatus</span>;
+				}
+			}
+			<b>return</b> <a href="#3857cdfdcc1831c5" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Don&#39;t record this update in the ref&#39;s associated reflog.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Don&#39;t record this update in the ref&#39;s associated reflog.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="e3bc6686bf1612cf" href="../R/e3bc6686bf1612cf.html" target="n" data-glyph="72,1" class="i method">DisableRefLog</a>()
+		{
+			<a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a> = <b>null</b>;
+			<a href="#20f2618e86d5b3e1" class="i field">refLogIncludeResult</a> = <b>false</b>;
+			<b>return</b> <a href="#3857cdfdcc1831c5" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if log has been disabled by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e3bc6686bf1612cf" class="i method">DisableRefLog</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">DisableRefLog()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="fc1cbc9ac8ed6498" href="../R/fc1cbc9ac8ed6498.html" target="n" data-glyph="72,1" class="i method">IsRefLogDisabled</a>()
+		{
+			<b>return</b> <a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a> == <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">commands this update will process.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>&gt; <a id="fbe66acc12f3fd9b" href="../R/fbe66acc12f3fd9b.html" target="n" data-glyph="72,1" class="i method">GetCommands</a>()
+		{
+			<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#c6c5e0f0816e9860" class="i method">UnmodifiableList</a>(<a href="#5cea2056562e7ff8" class="i field">commands</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add a single command to this batch update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Add a single command to this batch update.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">cmd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the command to add, must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="039e7946f196560c" href="../R/039e7946f196560c.html" target="n" data-glyph="72,1" class="i method">AddCommand</a>(<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a> <span id="r5 rd" class="r5 r">cmd</span>)
+		{
+			<a href="#5cea2056562e7ff8" class="i field">commands</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r5 r">cmd</span>);
+			<b>return</b> <a href="#3857cdfdcc1831c5" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add commands to this batch update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Add commands to this batch update.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">cmd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the commands to add, must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="92bd383517829a72" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">AddCommand</a>(<b>params</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>[] <span id="r6 rd" class="r6 r">cmd</span>)
+		{
+			<b>return</b> <a href="#d8d1a4d34690cac0" class="i method">AddCommand</a>(<a href="/Sharpen/A.html#7342d8d23595dd8e" class="t t">Arrays</a>.<a href="/Sharpen/A.html#18670a37be3c4a08" class="i method">AsList</a>(<span class="r6 r">cmd</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add commands to this batch update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Add commands to this batch update.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">cmd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the commands to add, must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<a href="#3857cdfdcc1831c5" class="t t">BatchRefUpdate</a> <a id="d8d1a4d34690cac0" href="../R/d8d1a4d34690cac0.html" target="n" data-glyph="72,1" class="i method">AddCommand</a>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>&gt; <span id="r7 rd" class="r7 r">cmd</span>)
+		{
+			<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#ed1a68471fa5c973" class="i method">AddAll</a>(<a href="#5cea2056562e7ff8" class="i field">commands</a>, <span class="r7 r">cmd</span>);
+			<b>return</b> <a href="#3857cdfdcc1831c5" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Execute this batch update.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Execute this batch update.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The default implementation of this method performs a sequential reference</span>
+		<span class="c">///</span><span class="c"> update over each reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">walk</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a RevWalk to parse tags in case the storage system wants to</span>
+		<span class="c">///</span><span class="c"> store them pre-peeled, a common performance optimization.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">update</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">progress monitor to receive update status on.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the database is unable to accept the update. Individual</span>
+		<span class="c">///</span><span class="c"> command status must be tested to determine if there is a</span>
+		<span class="c">///</span><span class="c"> partial failure, or a total failure.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="ecbdf221a16fa61c" href="../R/ecbdf221a16fa61c.html" target="n" data-glyph="72,1" class="i method">Execute</a>(<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r8 rd" class="r8 r">walk</span>, <a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r9 rd" class="r9 r">update</span>)
+		{
+			<span class="r9 r">update</span>.<a href="ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#3610384a7d9ae589" class="i field">updatingReferences</a>, <a href="#5cea2056562e7ff8" class="i field">commands</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+			<b>foreach</b> (<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a> <span id="r10 rd" class="r10 r">cmd</span> <b>in</b> <a href="#5cea2056562e7ff8" class="i field">commands</a>)
+			{
+				<b>try</b>
+				{
+					<span class="r9 r">update</span>.<a href="ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(1);
+					<b>if</b> (<span class="r10 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#427da415d377b3e9" class="i method">GetResult</a>() == <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#88bdd0ffe53547b5" class="t t">Result</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#8f8883f85bb44a22" class="i field">NOT_ATTEMPTED</a>)
+					{
+						<span class="r10 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#13122576affe458c" class="i method">UpdateType</a>(<span class="r8 r">walk</span>);
+						<a href="RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r11 rd" class="r11 r">ru</span> = <a href="#73997291ff33e8e0" class="i method">NewUpdate</a>(<span class="r10 r">cmd</span>);
+						<b>switch</b> (<span class="r10 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#4ecf30857780e2c4" class="i method">GetType</a>())
+						{
+							<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#b261a0494db6f752" class="i field">DELETE</a>:
+							{
+								<span class="r10 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#df2e7b6723fb0c18" class="i method">SetResult</a>(<span class="r11 r">ru</span>.<a href="RefUpdate.cs.html#28bc616f7fc658ba" class="i method">Delete</a>(<span class="r8 r">walk</span>));
+								<b>continue</b>;
+								<b>goto case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#7e2efbca9ef2f825" class="i field">CREATE</a>;
+							}
+
+							<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#7e2efbca9ef2f825" class="i field">CREATE</a>:
+							<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#cf0cf528c60193f8" class="i field">UPDATE</a>:
+							<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#ccb4e87bff768f29" class="i field">UPDATE_NONFASTFORWARD</a>:
+							{
+								<span class="r10 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#df2e7b6723fb0c18" class="i method">SetResult</a>(<span class="r11 r">ru</span>.<a href="RefUpdate.cs.html#5c4a3bfa2cd5386a" class="i method">Update</a>(<span class="r8 r">walk</span>));
+								<b>continue</b>;
+							}
+						}
+					}
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r12 rd" class="r12 r">err</span>)
+				{
+					<span class="r10 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#83a4f1d9c3ee5507" class="i method">SetResult</a>(<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#88bdd0ffe53547b5" class="t t">Result</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#2fd428c765312a49" class="i field">REJECTED_OTHER_REASON</a>, <a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>
+						.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#cf47d6ec7770a683" class="i field">lockError</a>, <span class="r12 r">err</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>));
+				}
+			}
+			<span class="r9 r">update</span>.<a href="ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a new RefUpdate copying the batch settings.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create a new RefUpdate copying the batch settings.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">cmd</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">specific command the update should be created to copy.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a single reference update command.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the reference database cannot make a new update object for</span>
+		<span class="c">///</span><span class="c"> the given reference.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual</b> <a href="RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <a id="73997291ff33e8e0" href="../R/73997291ff33e8e0.html" target="n" data-glyph="75,1" class="i method">NewUpdate</a>(<a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a> <span id="r13 rd" class="r13 r">cmd</span>)
+		{
+			<a href="RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r14 rd" class="r14 r">ru</span> = <a href="#f4da20f0ef1ec4e2" class="i field">refdb</a>.<a href="RefDatabase.cs.html#8cba2ad0231455ba" class="i method">NewUpdate</a>(<span class="r13 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#e28e4dd899e3bbd1" class="i method">GetRefName</a>(), <b>false</b>);
+			<b>if</b> (<a href="#fc1cbc9ac8ed6498" class="i method">IsRefLogDisabled</a>())
+			{
+				<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#9c674aa42b8f922f" class="i method">DisableRefLog</a>();
+			}
+			<b>else</b>
+			{
+				<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#3682e8eea86ced29" class="i method">SetRefLogIdent</a>(<a href="#06f76bab8322820d" class="i field">refLogIdent</a>);
+				<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#05bba7b15544fe2d" class="i method">SetRefLogMessage</a>(<a href="#4d29a9aa9f79c9f8" class="i field">refLogMessage</a>, <a href="#20f2618e86d5b3e1" class="i field">refLogIncludeResult</a>);
+			}
+			<b>switch</b> (<span class="r13 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#4ecf30857780e2c4" class="i method">GetType</a>())
+			{
+				<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#b261a0494db6f752" class="i field">DELETE</a>:
+				{
+					<b>if</b> (!<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>.<a href="AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<span class="r13 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#9ec49938632cf56d" class="i method">GetOldId</a>()))
+					{
+						<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#0755d2ab83b340b2" class="i method">SetExpectedOldObjectId</a>(<span class="r13 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#9ec49938632cf56d" class="i method">GetOldId</a>());
+					}
+					<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#4758c92b1fdf5234" class="i method">SetForceUpdate</a>(<b>true</b>);
+					<b>return</b> <span class="r14 r">ru</span>;
+				}
+
+				<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#7e2efbca9ef2f825" class="i field">CREATE</a>:
+				<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#cf0cf528c60193f8" class="i field">UPDATE</a>:
+				<b>case</b> <a href="../NGit.Transport/ReceiveCommand.cs.html#23dd4885c77609f2" class="t t">ReceiveCommand</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#23930f75246bc526" class="t t">Type</a>.<a href="../NGit.Transport/ReceiveCommand.cs.html#ccb4e87bff768f29" class="i field">UPDATE_NONFASTFORWARD</a>:
+				<b>default</b>:
+				{
+					<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#4758c92b1fdf5234" class="i method">SetForceUpdate</a>(<a href="#faff24c86182d2ea" class="i method">IsAllowNonFastForwards</a>());
+					<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#0755d2ab83b340b2" class="i method">SetExpectedOldObjectId</a>(<span class="r13 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#9ec49938632cf56d" class="i method">GetOldId</a>());
+					<span class="r14 r">ru</span>.<a href="RefUpdate.cs.html#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r13 r">cmd</span>.<a href="../NGit.Transport/ReceiveCommand.cs.html#f9dd9d6f8badb662" class="i method">GetNewId</a>());
+					<b>return</b> <span class="r14 r">ru</span>;
+					<b>break</b>;
+				}
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

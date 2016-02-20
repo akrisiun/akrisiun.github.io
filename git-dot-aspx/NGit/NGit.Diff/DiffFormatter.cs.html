@@ -1,0 +1,1267 @@
+﻿<!DOCTYPE html>
+<html><head><title>DiffFormatter.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(1258);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/DiffFormatter.cs" target="_top">NGit.Diff\DiffFormatter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Patch</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Storage</span>.<span class="i n">Pack</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format a Git style patch script.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Format a Git style patch script.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="0a3fb36519ef5a5f" href="../R/0a3fb36519ef5a5f.html" target="n" data-glyph="0,0" class="t t">DiffFormatter</a>
+	{
+		<b>private const int</b> <a id="2967939931417546" href="../R/2967939931417546.html" target="n" data-glyph="10,1" class="i field">DEFAULT_BINARY_FILE_THRESHOLD</a> = <a href="../NGit.Storage.Pack/PackConfig.cs.html#31c9d8a6c62d134b" class="t t">PackConfig</a>.<a href="../NGit.Storage.Pack/PackConfig.cs.html#50658bf3800b4bd3" class="i field">DEFAULT_BIG_FILE_THRESHOLD</a>;
+
+		<b>private static readonly byte</b>[] <a id="1ab67fc8e8ef2149" href="../R/1ab67fc8e8ef2149.html" target="n" data-glyph="46,1" class="i field">noNewLine</a> = <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;\\ No newline at end of file\n&quot;</span>
+			);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Magic return content indicating it is empty or no content present.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Magic return content indicating it is empty or no content present.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private static readonly byte</b>[] <a id="02219a0b6ae54aec" href="../R/02219a0b6ae54aec.html" target="n" data-glyph="46,1" class="i field">EMPTY</a> = <b>new</b> <b>byte</b>[] {  };
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Magic return indicating the content is binary.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Magic return indicating the content is binary.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private static readonly byte</b>[] <a id="a82b2011fed6590d" href="../R/a82b2011fed6590d.html" target="n" data-glyph="46,1" class="i field">BINARY</a> = <b>new</b> <b>byte</b>[] {  };
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <a id="c4e7d828b061dcd5" href="../R/c4e7d828b061dcd5.html" target="n" data-glyph="46,1" class="i field">@out</a>;
+
+		<b>private</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="66993065ec2aeb20" href="../R/66993065ec2aeb20.html" target="n" data-glyph="46,1" class="i field">db</a>;
+
+		<b>private</b> <a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="e497645858c20694" href="../R/e497645858c20694.html" target="n" data-glyph="46,1" class="i field">reader</a>;
+
+		<b>private int</b> <a id="1cedea2f6e7d6644" href="../R/1cedea2f6e7d6644.html" target="n" data-glyph="46,1" class="i field">context</a> = 3;
+
+		<b>private int</b> <a id="b31281b9193a8198" href="../R/b31281b9193a8198.html" target="n" data-glyph="46,1" class="i field">abbreviationLength</a> = 7;
+
+		<b>private</b> <a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <a id="4aded56fe1cddc89" href="../R/4aded56fe1cddc89.html" target="n" data-glyph="46,1" class="i field">diffAlgorithm</a>;
+
+		<b>private</b> <a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a> <a id="a85a57b974310fdc" href="../R/a85a57b974310fdc.html" target="n" data-glyph="46,1" class="i field">comparator</a> = <a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#f9121cd06cc9bb9b" class="i field">DEFAULT</a>;
+
+		<b>private int</b> <a id="96caf64fec1f145a" href="../R/96caf64fec1f145a.html" target="n" data-glyph="46,1" class="i field">binaryFileThreshold</a> = <a href="#2967939931417546" class="i field">DEFAULT_BINARY_FILE_THRESHOLD</a>;
+
+		<b>private string</b> <a id="560ea235f9fc939a" href="../R/560ea235f9fc939a.html" target="n" data-glyph="46,1" class="i field">oldPrefix</a> = <span class="s">&quot;a/&quot;</span>;
+
+		<b>private string</b> <a id="7f25e7166d39828f" href="../R/7f25e7166d39828f.html" target="n" data-glyph="46,1" class="i field">newPrefix</a> = <span class="s">&quot;b/&quot;</span>;
+
+		<b>private</b> <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <a id="1cd7ddddbbb984bd" href="../R/1cd7ddddbbb984bd.html" target="n" data-glyph="46,1" class="i field">pathFilter</a> = <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>.<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#2813051f379fbb35" class="i field">ALL</a>;
+
+		<b>private</b> <a href="RenameDetector.cs.html#0820a1e6b993bdc8" class="t t">RenameDetector</a> <a id="ccc4b77968d6cfb1" href="../R/ccc4b77968d6cfb1.html" target="n" data-glyph="46,1" class="i field">renameDetector</a>;
+
+		<b>private</b> <a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <a id="02c98644a3aaec6a" href="../R/02c98644a3aaec6a.html" target="n" data-glyph="46,1" class="i field">progressMonitor</a>;
+
+		<b>private</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#be15a30e291f823d" class="t t">Pair</a> <a id="c041b66dd98e5e16" href="../R/c041b66dd98e5e16.html" target="n" data-glyph="46,1" class="i field">source</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a new formatter with a default level of context.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create a new formatter with a default level of context.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">out</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the stream the formatter will write line data to. This stream</span>
+		<span class="c">///</span><span class="c"> should have buffering arranged by the caller, as many small</span>
+		<span class="c">///</span><span class="c"> writes are performed to it.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="21c506671ef36958" href="../R/21c506671ef36958.html" target="n" data-glyph="72,1" class="i constructor">DiffFormatter</a>(<a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <span id="r0 rd" class="r0 r">@out</span>)
+		{
+			<a href="#0a3fb36519ef5a5f" class="k">this</a>.<a href="#c4e7d828b061dcd5" class="i field">@out</a> = <span class="r0 r">@out</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the stream we are outputting data to.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected internal virtual</b> <a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <a id="53770791c5486d0b" href="../R/53770791c5486d0b.html" target="n" data-glyph="75,1" class="i method">GetOutputStream</a>()
+		{
+			<b>return</b> <a href="#c4e7d828b061dcd5" class="i field">@out</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the repository the formatter can load object contents from.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the repository the formatter can load object contents from.</span>
+		<span class="c">///</span><span class="c"> Once a repository has been set, the formatter must be released to ensure</span>
+		<span class="c">///</span><span class="c"> the internal ObjectReader is able to release its resources.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">source repository holding referenced objects.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="06bdd864707525e3" href="../R/06bdd864707525e3.html" target="n" data-glyph="72,1" class="i method">SetRepository</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r1 rd" class="r1 r">repository</span>)
+		{
+			<b>if</b> (<a href="#e497645858c20694" class="i field">reader</a> != <b>null</b>)
+			{
+				<a href="#e497645858c20694" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#9b75a15983357803" class="i method">Release</a>();
+			}
+			<a href="#66993065ec2aeb20" class="i field">db</a> = <span class="r1 r">repository</span>;
+			<a href="#e497645858c20694" class="i field">reader</a> = <a href="#66993065ec2aeb20" class="i field">db</a>.<a href="../NGit/Repository.cs.html#3a94c2b862584307" class="i method">NewObjectReader</a>();
+			<a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a> <span id="r2 rd" class="r2 r">cs</span> = <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#172ca22e0797bd92" class="i method">Create</a>(<a href="#e497645858c20694" class="i field">reader</a>);
+			<a href="#c041b66dd98e5e16" class="i field">source</a> = <b>new</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#3bfdd77ab343d914" class="t constructor">Pair</a>(<span class="r2 r">cs</span>, <span class="r2 r">cs</span>);
+			<a href="DiffConfig.cs.html#9bc19ed602d58b16" class="t t">DiffConfig</a> <span id="r3 rd" class="r3 r">dc</span> = <a href="#66993065ec2aeb20" class="i field">db</a>.<a href="../NGit/Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>().<a href="../NGit/Config.cs.html#f145ef5e7a9173e1" class="i method">Get</a>(<a href="DiffConfig.cs.html#9bc19ed602d58b16" class="t t">DiffConfig</a>.<a href="DiffConfig.cs.html#04b4e80122eee26c" class="i field">KEY</a>);
+			<b>if</b> (<span class="r3 r">dc</span>.<a href="DiffConfig.cs.html#923019bfd0f58869" class="i method">IsNoPrefix</a>())
+			{
+				<a href="#54cb0a2f54e512ca" class="i method">SetOldPrefix</a>(<b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>);
+				<a href="#cce14cc35b2ec71d" class="i method">SetNewPrefix</a>(<b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>);
+			}
+			<a href="#77235e7a2197448f" class="i method">SetDetectRenames</a>(<span class="r3 r">dc</span>.<a href="DiffConfig.cs.html#f9aec73cebff02e1" class="i method">IsRenameDetectionEnabled</a>());
+			<a href="#4aded56fe1cddc89" class="i field">diffAlgorithm</a> = <a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a>.<a href="DiffAlgorithm.cs.html#e550e2bd94c71f7e" class="i method">GetAlgorithm</a>(<a href="#66993065ec2aeb20" class="i field">db</a>.<a href="../NGit/Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>().<a href="../NGit/Config.cs.html#a8ea5a8a68a761ce" class="i method">GetEnum</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>
+				.<a href="../NGit/ConfigConstants.cs.html#5a15d537dc61f6f6" class="i field">CONFIG_DIFF_SECTION</a>, <b>null</b>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#614a3a3c62c9d7ea" class="i field">CONFIG_KEY_ALGORITHM</a>, <a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a>.<a href="DiffAlgorithm.cs.html#65709621a5395164" class="t t">SupportedAlgorithm</a>
+				.<a href="DiffAlgorithm.cs.html#7a2294c556d7cb92" class="i field">HISTOGRAM</a>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Change the number of lines of context to display.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Change the number of lines of context to display.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">lineCount</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of lines of context to see before the first</span>
+		<span class="c">///</span><span class="c"> modification and after the last modification within a hunk of</span>
+		<span class="c">///</span><span class="c"> the modified file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="89c3bf88546014e3" href="../R/89c3bf88546014e3.html" target="n" data-glyph="72,1" class="i method">SetContext</a>(<b>int</b> <span id="r4 rd" class="r4 r">lineCount</span>)
+		{
+			<b>if</b> (<span class="r4 r">lineCount</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#edcecb188c3a8a1e" class="i field">contextMustBeNonNegative</a>);
+			}
+			<a href="#1cedea2f6e7d6644" class="i field">context</a> = <span class="r4 r">lineCount</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Change the number of digits to show in an ObjectId.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Change the number of digits to show in an ObjectId.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number of digits to show in an ObjectId.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="3f8415179290f400" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetAbbreviationLength</a>(<b>int</b> <span id="r5 rd" class="r5 r">count</span>)
+		{
+			<b>if</b> (<span class="r5 r">count</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#f301830d1b51bbc9" class="i field">abbreviationLengthMustBeNonNegative</a>);
+			}
+			<a href="#b31281b9193a8198" class="i field">abbreviationLength</a> = <span class="r5 r">count</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the algorithm that constructs difference output.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the algorithm that constructs difference output.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">alg</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the algorithm to produce text file differences.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="HistogramDiff.cs.html#91f4e52bc851cc90" class="t t">HistogramDiff</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">HistogramDiff</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="053926c85dde6143" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetDiffAlgorithm</a>(<a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <span id="r6 rd" class="r6 r">alg</span>)
+		{
+			<a href="#4aded56fe1cddc89" class="i field">diffAlgorithm</a> = <span class="r6 r">alg</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the line equivalence function for text file differences.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the line equivalence function for text file differences.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">cmp</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The equivalence function used to determine if two lines of</span>
+		<span class="c">///</span><span class="c"> text are identical. The function can be changed to ignore</span>
+		<span class="c">///</span><span class="c"> various types of whitespace.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#f9121cd06cc9bb9b" class="i field">DEFAULT</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawTextComparator.DEFAULT</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#457261d86d58ec0e" class="i field">WS_IGNORE_ALL</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawTextComparator.WS_IGNORE_ALL</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#92c9c67f72e96caa" class="i field">WS_IGNORE_CHANGE</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawTextComparator.WS_IGNORE_CHANGE</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#d61da1e57cf00db6" class="i field">WS_IGNORE_LEADING</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawTextComparator.WS_IGNORE_LEADING</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#81d80d58621417a2" class="i field">WS_IGNORE_TRAILING</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawTextComparator.WS_IGNORE_TRAILING</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="cb10a0c46542f056" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetDiffComparator</a>(<a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a> <span id="r7 rd" class="r7 r">cmp</span>)
+		{
+			<a href="#a85a57b974310fdc" class="i field">comparator</a> = <span class="r7 r">cmp</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set maximum file size for text files.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set maximum file size for text files.</span>
+		<span class="c">///</span><span class="c"> Files larger than this size will be treated as though they are binary and</span>
+		<span class="c">///</span><span class="c"> not text. Default is</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">value</span><span class="c">&gt;</span><span class="c">#DEFAULT_BINARY_FILE_THRESHOLD</span><span class="c">&lt;/</span><span class="c">value</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">threshold</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the limit, in bytes. Files larger than this size will be</span>
+		<span class="c">///</span><span class="c"> assumed to be binary, even if they aren&#39;t.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="baeb798c4adb0a62" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetBinaryFileThreshold</a>(<b>int</b> <span id="r8 rd" class="r8 r">threshold</span>)
+		{
+			<a href="#0a3fb36519ef5a5f" class="k">this</a>.<a href="#96caf64fec1f145a" class="i field">binaryFileThreshold</a> = <span class="r8 r">threshold</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the prefix applied in front of old file paths.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the prefix applied in front of old file paths.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">prefix</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the prefix in front of old paths. Typically this is the</span>
+		<span class="c">///</span><span class="c"> standard string</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">&quot;a/&quot;</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , but may be any prefix desired by</span>
+		<span class="c">///</span><span class="c"> the caller. Must not be null. Use the empty string to have no</span>
+		<span class="c">///</span><span class="c"> prefix at all.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="54cb0a2f54e512ca" href="../R/54cb0a2f54e512ca.html" target="n" data-glyph="72,1" class="i method">SetOldPrefix</a>(<b>string</b> <span id="r9 rd" class="r9 r">prefix</span>)
+		{
+			<a href="#560ea235f9fc939a" class="i field">oldPrefix</a> = <span class="r9 r">prefix</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the prefix applied in front of old file paths.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the prefix applied in front of old file paths.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the prefix</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">since</span><span class="c">&gt;</span><span class="c">2.0</span><span class="c">&lt;/</span><span class="c">since</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="f6240d54823aab61" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetOldPrefix</a>()
+		{
+			<b>return</b> <a href="#0a3fb36519ef5a5f" class="k">this</a>.<a href="#560ea235f9fc939a" class="i field">oldPrefix</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the prefix applied in front of new file paths.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the prefix applied in front of new file paths.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">prefix</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the prefix in front of new paths. Typically this is the</span>
+		<span class="c">///</span><span class="c"> standard string</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">&quot;b/&quot;</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , but may be any prefix desired by</span>
+		<span class="c">///</span><span class="c"> the caller. Must not be null. Use the empty string to have no</span>
+		<span class="c">///</span><span class="c"> prefix at all.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="cce14cc35b2ec71d" href="../R/cce14cc35b2ec71d.html" target="n" data-glyph="72,1" class="i method">SetNewPrefix</a>(<b>string</b> <span id="r10 rd" class="r10 r">prefix</span>)
+		{
+			<a href="#7f25e7166d39828f" class="i field">newPrefix</a> = <span class="r10 r">prefix</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the prefix applied in front of new file paths.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the prefix applied in front of new file paths.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the prefix</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">since</span><span class="c">&gt;</span><span class="c">2.0</span><span class="c">&lt;/</span><span class="c">since</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="2c3f23515134541b" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetNewPrefix</a>()
+		{
+			<b>return</b> <a href="#0a3fb36519ef5a5f" class="k">this</a>.<a href="#7f25e7166d39828f" class="i field">newPrefix</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if rename detection is enabled.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="2fe3ec2508df1fed" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">IsDetectRenames</a>()
+		{
+			<b>return</b> <a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a> != <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Enable or disable rename detection.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Enable or disable rename detection.</span>
+		<span class="c">///</span><span class="c"> Before enabling rename detection the repository must be set with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#06bdd864707525e3" class="i method">SetRepository</a>(<span class="i n">NGit</span>.<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetRepository(NGit.Repository)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . Once enabled the detector can be</span>
+		<span class="c">///</span><span class="c"> configured away from its defaults by obtaining the instance directly from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#80fc91f024a8b43d" class="i method">GetRenameDetector</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetRenameDetector()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> and invoking configuration.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">on</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">if rename detection should be enabled.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="77235e7a2197448f" href="../R/77235e7a2197448f.html" target="n" data-glyph="72,1" class="i method">SetDetectRenames</a>(<b>bool</b> <span id="r11 rd" class="r11 r">on</span>)
+		{
+			<b>if</b> (<span class="r11 r">on</span> &amp;&amp; <a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a> == <b>null</b>)
+			{
+				<a href="#f53dfd3001f954da" class="i method">AssertHaveRepository</a>();
+				<a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a> = <b>new</b> <a href="RenameDetector.cs.html#d9a5b6a5074c66de" class="t constructor">RenameDetector</a>(<a href="#66993065ec2aeb20" class="i field">db</a>);
+			}
+			<b>else</b>
+			{
+				<b>if</b> (!<span class="r11 r">on</span>)
+				{
+					<a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a> = <b>null</b>;
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the rename detector if rename detection is enabled.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="RenameDetector.cs.html#0820a1e6b993bdc8" class="t t">RenameDetector</a> <a id="80fc91f024a8b43d" href="../R/80fc91f024a8b43d.html" target="n" data-glyph="72,1" class="i method">GetRenameDetector</a>()
+		{
+			<b>return</b> <a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the progress monitor for long running rename detection.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Set the progress monitor for long running rename detection.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">pm</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">progress monitor to receive rename detection status through.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="6dd8c3aabca73d9d" href="../R/6dd8c3aabca73d9d.html" target="n" data-glyph="72,1" class="i method">SetProgressMonitor</a>(<a href="../NGit/ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r12 rd" class="r12 r">pm</span>)
+		{
+			<a href="#02c98644a3aaec6a" class="i field">progressMonitor</a> = <span class="r12 r">pm</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the filter to produce only specific paths.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the filter to produce only specific paths.</span>
+		<span class="c">///</span><span class="c"> If the filter is an instance of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.FollowFilter</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , the filter path</span>
+		<span class="c">///</span><span class="c"> will be updated during successive scan or format invocations. The updated</span>
+		<span class="c">///</span><span class="c"> path can be obtained from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f786321b1bf172cd" class="i method">GetPathFilter</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetPathFilter()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">filter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the tree filter to apply.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="30e2bc51b81a65a6" href="../R/30e2bc51b81a65a6.html" target="n" data-glyph="72,1" class="i method">SetPathFilter</a>(<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <span id="r13 rd" class="r13 r">filter</span>)
+		{
+			<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a> = <span class="r13 r">filter</span> != <b>null</b> ? <span class="r13 r">filter</span> : <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>.<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#2813051f379fbb35" class="i field">ALL</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the current path filter.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <a id="f786321b1bf172cd" href="../R/f786321b1bf172cd.html" target="n" data-glyph="72,1" class="i method">GetPathFilter</a>()
+		{
+			<b>return</b> <a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Flush the underlying output stream of this formatter.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Flush the underlying output stream of this formatter.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the stream&#39;s own flush method threw an exception.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="189ce577bff5386b" href="../R/189ce577bff5386b.html" target="n" data-glyph="72,1" class="i method">Flush</a>()
+		{
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#c075b35eb5730068" class="i method">Flush</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Release the internal ObjectReader state.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Release the internal ObjectReader state.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="932fbfe0906bc9ce" href="../R/932fbfe0906bc9ce.html" target="n" data-glyph="72,1" class="i method">Release</a>()
+		{
+			<b>if</b> (<a href="#e497645858c20694" class="i field">reader</a> != <b>null</b>)
+			{
+				<a href="#e497645858c20694" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#9b75a15983357803" class="i method">Release</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Determine the differences between two trees.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Determine the differences between two trees.</span>
+		<span class="c">///</span><span class="c"> No output is created, instead only the file paths that are different are</span>
+		<span class="c">///</span><span class="c"> returned. Callers may choose to format these paths themselves, or convert</span>
+		<span class="c">///</span><span class="c"> them into</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Patch</span>.<a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Patch.FileHeader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> instances with a complete edit list by</span>
+		<span class="c">///</span><span class="c"> calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f7c960e60be9f65f" class="i method">ToFileHeader</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ToFileHeader(DiffEntry)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old (or previous) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new (or updated) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the paths that are different.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">trees cannot be read or file contents cannot be read.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="e79d1a7f5c18d1fb" href="../R/e79d1a7f5c18d1fb.html" target="n" data-glyph="72,1" class="i method">Scan</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r14 rd" class="r14 r">a</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r15 rd" class="r15 r">b</span>)
+		{
+			<a href="#f53dfd3001f954da" class="i method">AssertHaveRepository</a>();
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r16 rd" class="r16 r">rw</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#21ab32e904dfd8c6" class="t constructor">RevWalk</a>(<a href="#e497645858c20694" class="i field">reader</a>);
+			<b>return</b> <a href="#1e4fc9fc75a2e81b" class="i method">Scan</a>(<span class="r16 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#8e6c53ca5bb2bfc4" class="i method">ParseTree</a>(<span class="r14 r">a</span>), <span class="r16 r">rw</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#8e6c53ca5bb2bfc4" class="i method">ParseTree</a>(<span class="r15 r">b</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Determine the differences between two trees.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Determine the differences between two trees.</span>
+		<span class="c">///</span><span class="c"> No output is created, instead only the file paths that are different are</span>
+		<span class="c">///</span><span class="c"> returned. Callers may choose to format these paths themselves, or convert</span>
+		<span class="c">///</span><span class="c"> them into</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Patch</span>.<a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Patch.FileHeader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> instances with a complete edit list by</span>
+		<span class="c">///</span><span class="c"> calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f7c960e60be9f65f" class="i method">ToFileHeader</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ToFileHeader(DiffEntry)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old (or previous) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new (or updated) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the paths that are different.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">trees cannot be read or file contents cannot be read.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="1e4fc9fc75a2e81b" href="../R/1e4fc9fc75a2e81b.html" target="n" data-glyph="72,1" class="i method">Scan</a>(<a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r17 rd" class="r17 r">a</span>, <a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r18 rd" class="r18 r">b</span>)
+		{
+			<a href="#f53dfd3001f954da" class="i method">AssertHaveRepository</a>();
+			<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r19 rd" class="r19 r">aParser</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+			<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r20 rd" class="r20 r">bParser</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+			<span class="r19 r">aParser</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<a href="#e497645858c20694" class="i field">reader</a>, <span class="r17 r">a</span>);
+			<span class="r20 r">bParser</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<a href="#e497645858c20694" class="i field">reader</a>, <span class="r18 r">b</span>);
+			<b>return</b> <a href="#41b228c43a31f593" class="i method">Scan</a>(<span class="r19 r">aParser</span>, <span class="r20 r">bParser</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Determine the differences between two trees.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Determine the differences between two trees.</span>
+		<span class="c">///</span><span class="c"> No output is created, instead only the file paths that are different are</span>
+		<span class="c">///</span><span class="c"> returned. Callers may choose to format these paths themselves, or convert</span>
+		<span class="c">///</span><span class="c"> them into</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Patch</span>.<a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Patch.FileHeader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> instances with a complete edit list by</span>
+		<span class="c">///</span><span class="c"> calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f7c960e60be9f65f" class="i method">ToFileHeader</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ToFileHeader(DiffEntry)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r21 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old (or previous) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new (or updated) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the paths that are different.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">trees cannot be read or file contents cannot be read.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="41b228c43a31f593" href="../R/41b228c43a31f593.html" target="n" data-glyph="72,1" class="i method">Scan</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r21 rd" class="r21 r">a</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>
+			 <span id="r22 rd" class="r22 r">b</span>)
+		{
+			<a href="#f53dfd3001f954da" class="i method">AssertHaveRepository</a>();
+			<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r23 rd" class="r23 r">walk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#e1052f13476153ef" class="t constructor">TreeWalk</a>(<a href="#e497645858c20694" class="i field">reader</a>);
+			<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r21 r">a</span>);
+			<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r22 r">b</span>);
+			<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+			<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <span id="r24 rd" class="r24 r">filter</span> = <a href="#c74863ef7ca5b80a" class="i method">GetDiffTreeFilterFor</a>(<span class="r21 r">a</span>, <span class="r22 r">b</span>);
+			<b>if</b> (<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a> <b>is</b> <a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a>)
+			{
+				<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#b2bdc1e3a26b2806" class="t t">AndTreeFilter</a>.<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#a162d17f930e199c" class="i method">Create</a>(<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(((<a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a>)<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a>).<a href="../NGit.Revwalk/FollowFilter.cs.html#b31e2a40262d5b8d" class="i method">GetPath</a>
+					()), <span class="r24 r">filter</span>);
+			}
+			<b>else</b>
+			{
+				<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#b2bdc1e3a26b2806" class="t t">AndTreeFilter</a>.<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#a162d17f930e199c" class="i method">Create</a>(<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a>, <span class="r24 r">filter</span>);
+			}
+			<a href="#c041b66dd98e5e16" class="i field">source</a> = <b>new</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#3bfdd77ab343d914" class="t constructor">Pair</a>(<a href="#06220bc1201a06b0" class="i method">Source</a>(<span class="r21 r">a</span>), <a href="#06220bc1201a06b0" class="i method">Source</a>(<span class="r22 r">b</span>));
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r25 rd" class="r25 r">files</span> = <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#fabe1f8a939fc63f" class="i method">Scan</a>(<span class="r23 r">walk</span>);
+			<b>if</b> (<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a> <b>is</b> <a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a> &amp;&amp; <a href="#d5eddbf1a1983527" class="i method">IsAdd</a>(<span class="r25 r">files</span>))
+			{
+				<span class="c">// The file we are following was added here, find where it</span>
+				<span class="c">// came from so we can properly show the rename or copy,</span>
+				<span class="c">// then continue digging backwards.</span>
+				<span class="c">//</span>
+				<span class="r21 r">a</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#d6dc95413e696a63" class="i method">Reset</a>();
+				<span class="r22 r">b</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#d6dc95413e696a63" class="i method">Reset</a>();
+				<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#8374b8406d09f7d4" class="i method">Reset</a>();
+				<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r21 r">a</span>);
+				<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r22 r">b</span>);
+				<span class="r23 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <span class="r24 r">filter</span>;
+				<b>if</b> (<a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a> == <b>null</b>)
+				{
+					<a href="#77235e7a2197448f" class="i method">SetDetectRenames</a>(<b>true</b>);
+				}
+				<span class="r25 r">files</span> = <a href="#b544df180b72a0e1" class="i method">UpdateFollowFilter</a>(<a href="#7973cbca71a5051e" class="i method">DetectRenames</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#fabe1f8a939fc63f" class="i method">Scan</a>(<span class="r23 r">walk</span>)));
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a> != <b>null</b>)
+				{
+					<span class="r25 r">files</span> = <a href="#7973cbca71a5051e" class="i method">DetectRenames</a>(<span class="r25 r">files</span>);
+				}
+			}
+			<b>return</b> <span class="r25 r">files</span>;
+		}
+
+		<b>private static</b> <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <a id="c74863ef7ca5b80a" href="../R/c74863ef7ca5b80a.html" target="n" data-glyph="76,1" class="i method">GetDiffTreeFilterFor</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r26 rd" class="r26 r">a</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>
+			 <span id="r27 rd" class="r27 r">b</span>)
+		{
+			<b>if</b> (<span class="r26 r">a</span> <b>is</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a> &amp;&amp; <span class="r27 r">b</span> <b>is</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>)
+			{
+				<b>return</b> <b>new</b> <a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#60ef40fc4e2b4bdb" class="t constructor">IndexDiffFilter</a>(0, 1);
+			}
+			<b>if</b> (<span class="r26 r">a</span> <b>is</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> &amp;&amp; <span class="r27 r">b</span> <b>is</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a>)
+			{
+				<b>return</b> <b>new</b> <a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#60ef40fc4e2b4bdb" class="t constructor">IndexDiffFilter</a>(1, 0);
+			}
+			<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <span id="r28 rd" class="r28 r">filter</span> = <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>.<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#0797802ba9a37bc5" class="i field">ANY_DIFF</a>;
+			<b>if</b> (<span class="r26 r">a</span> <b>is</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>)
+			{
+				<span class="r28 r">filter</span> = <a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#b2bdc1e3a26b2806" class="t t">AndTreeFilter</a>.<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#a162d17f930e199c" class="i method">Create</a>(<b>new</b> <a href="../NGit.Treewalk.Filter/NotIgnoredFilter.cs.html#e14729d6a3b90e65" class="t constructor">NotIgnoredFilter</a>(0), <span class="r28 r">filter</span>);
+			}
+			<b>if</b> (<span class="r27 r">b</span> <b>is</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>)
+			{
+				<span class="r28 r">filter</span> = <a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#b2bdc1e3a26b2806" class="t t">AndTreeFilter</a>.<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#a162d17f930e199c" class="i method">Create</a>(<b>new</b> <a href="../NGit.Treewalk.Filter/NotIgnoredFilter.cs.html#e14729d6a3b90e65" class="t constructor">NotIgnoredFilter</a>(1), <span class="r28 r">filter</span>);
+			}
+			<b>return</b> <span class="r28 r">filter</span>;
+		}
+
+		<b>private</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a> <a id="06220bc1201a06b0" href="../R/06220bc1201a06b0.html" target="n" data-glyph="76,1" class="i method">Source</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r29 rd" class="r29 r">iterator</span>)
+		{
+			<b>if</b> (<span class="r29 r">iterator</span> <b>is</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>)
+			{
+				<b>return</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#d5a028a651a0ade1" class="i method">Create</a>((<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>)<span class="r29 r">iterator</span>);
+			}
+			<b>return</b> <a href="ContentSource.cs.html#01f540beecc5f454" class="t t">ContentSource</a>.<a href="ContentSource.cs.html#172ca22e0797bd92" class="i method">Create</a>(<a href="#e497645858c20694" class="i field">reader</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="7973cbca71a5051e" href="../R/7973cbca71a5051e.html" target="n" data-glyph="76,1" class="i method">DetectRenames</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r30 rd" class="r30 r">files</span>)
+		{
+			<a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a>.<a href="RenameDetector.cs.html#efd8b76d2228c9f5" class="i method">Reset</a>();
+			<a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a>.<a href="RenameDetector.cs.html#730fdc4202db3df3" class="i method">AddAll</a>(<span class="r30 r">files</span>);
+			<b>return</b> <a href="#ccc4b77968d6cfb1" class="i field">renameDetector</a>.<a href="RenameDetector.cs.html#8fad4300369d4f91" class="i method">Compute</a>(<a href="#e497645858c20694" class="i field">reader</a>, <a href="#02c98644a3aaec6a" class="i field">progressMonitor</a>);
+		}
+
+		<b>private bool</b> <a id="d5eddbf1a1983527" href="../R/d5eddbf1a1983527.html" target="n" data-glyph="76,1" class="i method">IsAdd</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r31 rd" class="r31 r">files</span>)
+		{
+			<b>string</b> <span id="r32 rd" class="r32 r">oldPath</span> = ((<a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a>)<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a>).<a href="../NGit.Revwalk/FollowFilter.cs.html#b31e2a40262d5b8d" class="i method">GetPath</a>();
+			<b>foreach</b> (<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r33 rd" class="r33 r">ent</span> <b>in</b> <span class="r31 r">files</span>)
+			{
+				<b>if</b> (<span class="r33 r">ent</span>.<a href="DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>() == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#c69c68c8c2e98cfc" class="i field">ADD</a> &amp;&amp; <span class="r33 r">ent</span>.<a href="DiffEntry.cs.html#e15ba056919bec45" class="i method">GetNewPath</a>().<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r32 r">oldPath</span>
+					))
+				{
+					<b>return true</b>;
+				}
+			}
+			<b>return false</b>;
+		}
+
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="b544df180b72a0e1" href="../R/b544df180b72a0e1.html" target="n" data-glyph="76,1" class="i method">UpdateFollowFilter</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r34 rd" class="r34 r">files</span>)
+		{
+			<b>string</b> <span id="r35 rd" class="r35 r">oldPath</span> = ((<a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a>)<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a>).<a href="../NGit.Revwalk/FollowFilter.cs.html#b31e2a40262d5b8d" class="i method">GetPath</a>();
+			<b>foreach</b> (<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r36 rd" class="r36 r">ent</span> <b>in</b> <span class="r34 r">files</span>)
+			{
+				<b>if</b> (<a href="#79165f0a7a49d4fa" class="i method">IsRename</a>(<span class="r36 r">ent</span>) &amp;&amp; <span class="r36 r">ent</span>.<a href="DiffEntry.cs.html#e15ba056919bec45" class="i method">GetNewPath</a>().<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r35 r">oldPath</span>))
+				{
+					<a href="#1cd7ddddbbb984bd" class="i field">pathFilter</a> = <a href="../NGit.Revwalk/FollowFilter.cs.html#aec5866378ce912e" class="t t">FollowFilter</a>.<a href="../NGit.Revwalk/FollowFilter.cs.html#626c20a93ec475ad" class="i method">Create</a>(<span class="r36 r">ent</span>.<a href="DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>());
+					<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#55e6f3a228854b03" class="i method">SingletonList</a>(<span class="r36 r">ent</span>);
+				}
+			}
+			<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#af94ab8f07bb9f47" class="i method">EmptyList</a>&lt;<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt;();
+		}
+
+		<b>private static bool</b> <a id="79165f0a7a49d4fa" href="../R/79165f0a7a49d4fa.html" target="n" data-glyph="76,1" class="i method">IsRename</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r37 rd" class="r37 r">ent</span>)
+		{
+			<b>return</b> <span class="r37 r">ent</span>.<a href="DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>() == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a> || <span class="r37 r">ent</span>.<a href="DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>() 
+				== <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#92f05c1e04cf35a9" class="i field">COPY</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format the differences between two trees.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Format the differences between two trees.</span>
+		<span class="c">///</span><span class="c"> The patch is expressed as instructions to modify</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">a</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to make it</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">b</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old (or previous) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r39 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new (or updated) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> trees cannot be read, file contents cannot be read, or the</span>
+		<span class="c">///</span><span class="c"> patch cannot be output.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="9fe3f7b3d41cb5c4" href="../R/9fe3f7b3d41cb5c4.html" target="n" data-glyph="72,1" class="i method">Format</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r38 rd" class="r38 r">a</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r39 rd" class="r39 r">b</span>)
+		{
+			<a href="#69f6ef1c410d79bd" class="i method">Format</a>(<a href="#e79d1a7f5c18d1fb" class="i method">Scan</a>(<span class="r38 r">a</span>, <span class="r39 r">b</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format the differences between two trees.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Format the differences between two trees.</span>
+		<span class="c">///</span><span class="c"> The patch is expressed as instructions to modify</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">a</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to make it</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">b</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r40 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old (or previous) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r41 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new (or updated) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> trees cannot be read, file contents cannot be read, or the</span>
+		<span class="c">///</span><span class="c"> patch cannot be output.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="ba2557672775cd05" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Format</a>(<a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r40 rd" class="r40 r">a</span>, <a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r41 rd" class="r41 r">b</span>)
+		{
+			<a href="#69f6ef1c410d79bd" class="i method">Format</a>(<a href="#1e4fc9fc75a2e81b" class="i method">Scan</a>(<span class="r40 r">a</span>, <span class="r41 r">b</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format the differences between two trees.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Format the differences between two trees.</span>
+		<span class="c">///</span><span class="c"> The patch is expressed as instructions to modify</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">a</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to make it</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">b</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r42 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the old (or previous) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new (or updated) side.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> trees cannot be read, file contents cannot be read, or the</span>
+		<span class="c">///</span><span class="c"> patch cannot be output.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="d9218a0278ed3c33" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Format</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r42 rd" class="r42 r">a</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r43 rd" class="r43 r">b</span>)
+		{
+			<a href="#69f6ef1c410d79bd" class="i method">Format</a>(<a href="#41b228c43a31f593" class="i method">Scan</a>(<span class="r42 r">a</span>, <span class="r43 r">b</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format a patch script from a list of difference entries.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Format a patch script from a list of difference entries. Requires</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#41b228c43a31f593" class="i method">Scan</a>(<span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>, <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>)
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Scan(NGit.Treewalk.AbstractTreeIterator, NGit.Treewalk.AbstractTreeIterator)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to have been</span>
+		<span class="c">///</span><span class="c"> called first.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">entries</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">entries describing the affected files.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a file&#39;s content cannot be read, or the output stream cannot</span>
+		<span class="c">///</span><span class="c"> be written to.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="69f6ef1c410d79bd" href="../R/69f6ef1c410d79bd.html" target="n" data-glyph="72,1" class="i method">Format</a>&lt;<span id="r45 rd t" class="r45 r t">_T0</span>&gt;(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<span class="r45 r t">_T0</span>&gt; <span id="r44 rd" class="r44 r">entries</span>) <b>where</b> <span class="r45 r t">_T0</span>:<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>
+		{
+			<b>foreach</b> (<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r46 rd" class="r46 r">ent</span> <b>in</b> <span class="r44 r">entries</span>)
+			{
+				<a href="#dc931c03e5123558" class="i method">Format</a>(<span class="r46 r">ent</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format a patch script for one file entry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Format a patch script for one file entry.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r47 r">ent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the entry to be formatted.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a file&#39;s content cannot be read, or the output stream cannot</span>
+		<span class="c">///</span><span class="c"> be written to.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="dc931c03e5123558" href="../R/dc931c03e5123558.html" target="n" data-glyph="72,1" class="i method">Format</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r47 rd" class="r47 r">ent</span>)
+		{
+			<a href="#0a3fb36519ef5a5f" class="t t">DiffFormatter</a>.<a href="#07d73196241b6fc6" class="t t">FormatResult</a> <span id="r48 rd" class="r48 r">res</span> = <a href="#5a64ea6ec9a89357" class="i method">CreateFormatResult</a>(<span class="r47 r">ent</span>);
+			<a href="#d051b1a5ef32327c" class="i method">Format</a>(<span class="r48 r">res</span>.<a href="#84ceca18b3d6cb47" class="i field">header</a>, <span class="r48 r">res</span>.<a href="#99f0edcab52c9431" class="i field">a</a>, <span class="r48 r">res</span>.<a href="#e7f871abed60e9f7" class="i field">b</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="db75f16170d4a713" href="../R/db75f16170d4a713.html" target="n" data-glyph="76,1" class="i method">WriteGitLinkDiffText</a>(<a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <span id="r49 rd" class="r49 r">o</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r50 rd" class="r50 r">ent</span>)
+		{
+			<b>if</b> (<span class="r50 r">ent</span>.<a href="DiffEntry.cs.html#fd38cfdc89447f45" class="i method">GetOldMode</a>() == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a>)
+			{
+				<span class="r49 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;-Subproject commit &quot;</span> + <span class="r50 r">ent</span>.<a href="DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#08495489e12b34fc" class="i property">Name</a> + <span class="s">&quot;\n&quot;</span>)
+					);
+			}
+			<b>if</b> (<span class="r50 r">ent</span>.<a href="DiffEntry.cs.html#6d7e8ad6f7d85625" class="i method">GetNewMode</a>() == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a>)
+			{
+				<span class="r49 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;+Subproject commit &quot;</span> + <span class="r50 r">ent</span>.<a href="DiffEntry.cs.html#246e6c0fce9bfeba" class="i method">GetNewId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#08495489e12b34fc" class="i property">Name</a> + <span class="s">&quot;\n&quot;</span>)
+					);
+			}
+		}
+
+		<b>private string</b> <a id="289a834a58e79df7" href="../R/289a834a58e79df7.html" target="n" data-glyph="76,1" class="i method">Format</a>(<a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <span id="r51 rd" class="r51 r">id</span>)
+		{
+			<b>if</b> (<span class="r51 r">id</span>.<a href="../NGit/AbbreviatedObjectId.cs.html#ce45bdbaf0f92fac" class="i property">IsComplete</a> &amp;&amp; <a href="#66993065ec2aeb20" class="i field">db</a> != <b>null</b>)
+			{
+				<b>try</b>
+				{
+					<span class="r51 r">id</span> = <a href="#e497645858c20694" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#7411dcb22013f750" class="i method">Abbreviate</a>(<span class="r51 r">id</span>.<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>(), <a href="#b31281b9193a8198" class="i field">abbreviationLength</a>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+				}
+			}
+			<span class="c">// Ignore this. We&#39;ll report the full identity.</span>
+			<b>return</b> <span class="r51 r">id</span>.<a href="../NGit/AbbreviatedObjectId.cs.html#08495489e12b34fc" class="i property">Name</a>;
+		}
+
+		<b>private static string</b> <a id="06aa89eafea04d33" href="../R/06aa89eafea04d33.html" target="n" data-glyph="76,1" class="i method">QuotePath</a>(<b>string</b> <span id="r52 rd" class="r52 r">name</span>)
+		{
+			<b>return</b> <a href="../NGit.Util/QuotedString.cs.html#2789fbcc68c813d6" class="t t">QuotedString</a>.<a href="../NGit.Util/QuotedString.cs.html#1d248072a5109b4c" class="i field">GIT_PATH</a>.<a href="../NGit.Util/QuotedString.cs.html#ef3aeb21f0020b18" class="i method">Quote</a>(<span class="r52 r">name</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Format a patch script, reusing a previously parsed FileHeader.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Format a patch script, reusing a previously parsed FileHeader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This formatter is primarily useful for editing an existing patch script</span>
+		<span class="c">///</span><span class="c"> to increase or reduce the number of lines of context within the script.</span>
+		<span class="c">///</span><span class="c"> All header lines are reused as-is from the supplied FileHeader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r53 r">head</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">existing file header containing the header lines to copy.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r54 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> text source for the pre-image version of the content. This</span>
+		<span class="c">///</span><span class="c"> must match the content of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">DiffEntry.GetOldId()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r55 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> text source for the post-image version of the content. This</span>
+		<span class="c">///</span><span class="c"> must match the content of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#246e6c0fce9bfeba" class="i method">GetNewId</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">DiffEntry.GetNewId()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">writing to the supplied stream failed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="d051b1a5ef32327c" href="../R/d051b1a5ef32327c.html" target="n" data-glyph="72,1" class="i method">Format</a>(<a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a> <span id="r53 rd" class="r53 r">head</span>, <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r54 rd" class="r54 r">a</span>, <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r55 rd" class="r55 r">b</span>)
+		{
+			<span class="c">// Reuse the existing FileHeader as-is by blindly copying its</span>
+			<span class="c">// header lines, but avoiding its hunks. Instead we recreate</span>
+			<span class="c">// the hunks from the text instances we have been supplied.</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r56 rd" class="r56 r">start</span> = <span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#8813b7b5adbe0f54" class="i method">GetStartOffset</a>();
+			<b>int</b> <span id="r57 rd" class="r57 r">end</span> = <span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#d330b0990cbdeb11" class="i method">GetEndOffset</a>();
+			<b>if</b> (!<span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#f7dfee14b8bfb794" class="i method">GetHunks</a>().<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+			{
+				<span class="r57 r">end</span> = <span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#f7dfee14b8bfb794" class="i method">GetHunks</a>()[0].<a href="../NGit.Patch/HunkHeader.cs.html#a365ce959e587e10" class="i method">GetStartOffset</a>();
+			}
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#54b79431ffc12110" class="i method">Write</a>(<span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#fc2abf002a3a6c86" class="i method">GetBuffer</a>(), <span class="r56 r">start</span>, <span class="r57 r">end</span> - <span class="r56 r">start</span>);
+			<b>if</b> (<span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#8cb045c461d0b7d2" class="i method">GetPatchType</a>() == <a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a>.<a href="../NGit.Patch/FileHeader.cs.html#cdc1e181838530cd" class="t t">PatchType</a>.<a href="../NGit.Patch/FileHeader.cs.html#e78904d1b7f3ac0e" class="i field">UNIFIED</a>)
+			{
+				<a href="#ceb6e0209ba7d92a" class="i method">Format</a>(<span class="r53 r">head</span>.<a href="../NGit.Patch/FileHeader.cs.html#671dd2ad8ecc2840" class="i method">ToEditList</a>(), <span class="r54 r">a</span>, <span class="r55 r">b</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Formats a list of edits in unified diff format</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r58 r">edits</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">some differences which have been calculated between A and B</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r59 r">a</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the text A which was compared</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r60 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the text B which was compared</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="ceb6e0209ba7d92a" href="../R/ceb6e0209ba7d92a.html" target="n" data-glyph="72,1" class="i method">Format</a>(<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r58 rd" class="r58 r">edits</span>, <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r59 rd" class="r59 r">a</span>, <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r60 rd" class="r60 r">b</span>)
+		{
+			<b>for</b> (<b>int</b> <span id="r61 rd" class="r61 r">curIdx</span> = 0; <span class="r61 r">curIdx</span> &lt; <span class="r58 r">edits</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; )
+			{
+				<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r62 rd" class="r62 r">curEdit</span> = <span class="r58 r">edits</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r61 r">curIdx</span>];
+				<b>int</b> <span id="r63 rd" class="r63 r">endIdx</span> = <a href="#ddd01f52bcaf5073" class="i method">FindCombinedEnd</a>(<span class="r58 r">edits</span>, <span class="r61 r">curIdx</span>);
+				<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r64 rd" class="r64 r">endEdit</span> = <span class="r58 r">edits</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r63 r">endIdx</span>];
+				<b>int</b> <span id="r65 rd" class="r65 r">aCur</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(0, <span class="r62 r">curEdit</span>.<a href="Edit.cs.html#ceafc7985e42caec" class="i method">GetBeginA</a>() - <a href="#1cedea2f6e7d6644" class="i field">context</a>);
+				<b>int</b> <span id="r66 rd" class="r66 r">bCur</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(0, <span class="r62 r">curEdit</span>.<a href="Edit.cs.html#4a31803d6e0511c1" class="i method">GetBeginB</a>() - <a href="#1cedea2f6e7d6644" class="i field">context</a>);
+				<b>int</b> <span id="r67 rd" class="r67 r">aEnd</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r59 r">a</span>.<a href="RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>(), <span class="r64 r">endEdit</span>.<a href="Edit.cs.html#2e84ba9f75d885d7" class="i method">GetEndA</a>() + <a href="#1cedea2f6e7d6644" class="i field">context</a>);
+				<b>int</b> <span id="r68 rd" class="r68 r">bEnd</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r60 r">b</span>.<a href="RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>(), <span class="r64 r">endEdit</span>.<a href="Edit.cs.html#fc97870b128f44e7" class="i method">GetEndB</a>() + <a href="#1cedea2f6e7d6644" class="i field">context</a>);
+				<a href="#76d059562b09b43b" class="i method">WriteHunkHeader</a>(<span class="r65 r">aCur</span>, <span class="r67 r">aEnd</span>, <span class="r66 r">bCur</span>, <span class="r68 r">bEnd</span>);
+				<b>while</b> (<span class="r65 r">aCur</span> &lt; <span class="r67 r">aEnd</span> || <span class="r66 r">bCur</span> &lt; <span class="r68 r">bEnd</span>)
+				{
+					<b>if</b> (<span class="r65 r">aCur</span> &lt; <span class="r62 r">curEdit</span>.<a href="Edit.cs.html#ceafc7985e42caec" class="i method">GetBeginA</a>() || <span class="r63 r">endIdx</span> + 1 &lt; <span class="r61 r">curIdx</span>)
+					{
+						<a href="#41c4d35c41c020b2" class="i method">WriteContextLine</a>(<span class="r59 r">a</span>, <span class="r65 r">aCur</span>);
+						<b>if</b> (<a href="#a811152ebf0aa10e" class="i method">IsEndOfLineMissing</a>(<span class="r59 r">a</span>, <span class="r65 r">aCur</span>))
+						{
+							<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="#1ab67fc8e8ef2149" class="i field">noNewLine</a>);
+						}
+						<span class="r65 r">aCur</span>++;
+						<span class="r66 r">bCur</span>++;
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r65 r">aCur</span> &lt; <span class="r62 r">curEdit</span>.<a href="Edit.cs.html#2e84ba9f75d885d7" class="i method">GetEndA</a>())
+						{
+							<a href="#f665389218ce41f1" class="i method">WriteRemovedLine</a>(<span class="r59 r">a</span>, <span class="r65 r">aCur</span>);
+							<b>if</b> (<a href="#a811152ebf0aa10e" class="i method">IsEndOfLineMissing</a>(<span class="r59 r">a</span>, <span class="r65 r">aCur</span>))
+							{
+								<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="#1ab67fc8e8ef2149" class="i field">noNewLine</a>);
+							}
+							<span class="r65 r">aCur</span>++;
+						}
+						<b>else</b>
+						{
+							<b>if</b> (<span class="r66 r">bCur</span> &lt; <span class="r62 r">curEdit</span>.<a href="Edit.cs.html#fc97870b128f44e7" class="i method">GetEndB</a>())
+							{
+								<a href="#3c85086849e5e082" class="i method">WriteAddedLine</a>(<span class="r60 r">b</span>, <span class="r66 r">bCur</span>);
+								<b>if</b> (<a href="#a811152ebf0aa10e" class="i method">IsEndOfLineMissing</a>(<span class="r60 r">b</span>, <span class="r66 r">bCur</span>))
+								{
+									<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="#1ab67fc8e8ef2149" class="i field">noNewLine</a>);
+								}
+								<span class="r66 r">bCur</span>++;
+							}
+						}
+					}
+					<b>if</b> (<a href="#45cb81eb201f9cf9" class="i method">End</a>(<span class="r62 r">curEdit</span>, <span class="r65 r">aCur</span>, <span class="r66 r">bCur</span>) &amp;&amp; ++<span class="r61 r">curIdx</span> &lt; <span class="r58 r">edits</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+					{
+						<span class="r62 r">curEdit</span> = <span class="r58 r">edits</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r61 r">curIdx</span>];
+					}
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Output a line of context (unmodified line).</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Output a line of context (unmodified line).</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r69 r">text</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawText for accessing raw data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r70 r">line</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the line number within text</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="41c4d35c41c020b2" href="../R/41c4d35c41c020b2.html" target="n" data-glyph="75,1" class="i method">WriteContextLine</a>(<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r69 rd" class="r69 r">text</span>, <b>int</b> <span id="r70 rd" class="r70 r">line</span>)
+		{
+			<a href="#05a9afc423de8ccf" class="i method">WriteLine</a>(<span class="s">&#39; &#39;</span>, <span class="r69 r">text</span>, <span class="r70 r">line</span>);
+		}
+
+		<b>private bool</b> <a id="a811152ebf0aa10e" href="../R/a811152ebf0aa10e.html" target="n" data-glyph="76,1" class="i method">IsEndOfLineMissing</a>(<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r71 rd" class="r71 r">text</span>, <b>int</b> <span id="r72 rd" class="r72 r">line</span>)
+		{
+			<b>return</b> <span class="r72 r">line</span> + 1 == <span class="r71 r">text</span>.<a href="RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>() &amp;&amp; <span class="r71 r">text</span>.<a href="RawText.cs.html#48106a0f99ce3adc" class="i method">IsMissingNewlineAtEnd</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Output an added line.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Output an added line.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r73 r">text</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawText for accessing raw data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r74 r">line</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the line number within text</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="3c85086849e5e082" href="../R/3c85086849e5e082.html" target="n" data-glyph="75,1" class="i method">WriteAddedLine</a>(<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r73 rd" class="r73 r">text</span>, <b>int</b> <span id="r74 rd" class="r74 r">line</span>)
+		{
+			<a href="#05a9afc423de8ccf" class="i method">WriteLine</a>(<span class="s">&#39;+&#39;</span>, <span class="r73 r">text</span>, <span class="r74 r">line</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Output a removed line</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r75 r">text</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RawText for accessing raw data</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r76 r">line</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the line number within text</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="f665389218ce41f1" href="../R/f665389218ce41f1.html" target="n" data-glyph="75,1" class="i method">WriteRemovedLine</a>(<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r75 rd" class="r75 r">text</span>, <b>int</b> <span id="r76 rd" class="r76 r">line</span>)
+		{
+			<a href="#05a9afc423de8ccf" class="i method">WriteLine</a>(<span class="s">&#39;-&#39;</span>, <span class="r75 r">text</span>, <span class="r76 r">line</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Output a hunk header</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r77 r">aStartLine</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">within first source</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r78 r">aEndLine</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">within first source</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r79 r">bStartLine</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">within second source</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r80 r">bEndLine</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">within second source</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="76d059562b09b43b" href="../R/76d059562b09b43b.html" target="n" data-glyph="75,1" class="i method">WriteHunkHeader</a>(<b>int</b> <span id="r77 rd" class="r77 r">aStartLine</span>, <b>int</b> <span id="r78 rd" class="r78 r">aEndLine</span>, <b>int</b>
+			 <span id="r79 rd" class="r79 r">bStartLine</span>, <b>int</b> <span id="r80 rd" class="r80 r">bEndLine</span>)
+		{
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;@&#39;</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;@&#39;</span>);
+			<a href="#a0e85d79eca7c386" class="i method">WriteRange</a>(<span class="s">&#39;-&#39;</span>, <span class="r77 r">aStartLine</span> + 1, <span class="r78 r">aEndLine</span> - <span class="r77 r">aStartLine</span>);
+			<a href="#a0e85d79eca7c386" class="i method">WriteRange</a>(<span class="s">&#39;+&#39;</span>, <span class="r79 r">bStartLine</span> + 1, <span class="r80 r">bEndLine</span> - <span class="r79 r">bStartLine</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;@&#39;</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;@&#39;</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="a0e85d79eca7c386" href="../R/a0e85d79eca7c386.html" target="n" data-glyph="76,1" class="i method">WriteRange</a>(<b>char</b> <span id="r81 rd" class="r81 r">prefix</span>, <b>int</b> <span id="r82 rd" class="r82 r">begin</span>, <b>int</b> <span id="r83 rd" class="r83 r">cnt</span>)
+		{
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="r81 r">prefix</span>);
+			<b>switch</b> (<span class="r83 r">cnt</span>)
+			{
+				<b>case</b> 0:
+				{
+					<span class="c">// If the range is empty, its beginning number must be the</span>
+					<span class="c">// line just before the range, or 0 if the range is at the</span>
+					<span class="c">// start of the file stream. Here, begin is always 1 based,</span>
+					<span class="c">// so an empty file would produce &quot;0,0&quot;.</span>
+					<span class="c">//</span>
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d8bfbbf58d67871c" class="i method">EncodeASCII</a>(<span class="r82 r">begin</span> - 1));
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;,&#39;</span>);
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;0&#39;</span>);
+					<b>break</b>;
+				}
+
+				<b>case</b> 1:
+				{
+					<span class="c">// If the range is exactly one line, produce only the number.</span>
+					<span class="c">//</span>
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d8bfbbf58d67871c" class="i method">EncodeASCII</a>(<span class="r82 r">begin</span>));
+					<b>break</b>;
+				}
+
+				<b>default</b>:
+				{
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d8bfbbf58d67871c" class="i method">EncodeASCII</a>(<span class="r82 r">begin</span>));
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;,&#39;</span>);
+					<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d8bfbbf58d67871c" class="i method">EncodeASCII</a>(<span class="r83 r">cnt</span>));
+					<b>break</b>;
+					<b>break</b>;
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Write a standard patch script line.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Write a standard patch script line.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r84 r">prefix</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">prefix before the line, typically &#39;-&#39;, &#39;+&#39;, &#39; &#39;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r85 r">text</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the text object to obtain the line from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r86 r">cur</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">line number to output.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the stream threw an exception while writing to it.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="05a9afc423de8ccf" href="../R/05a9afc423de8ccf.html" target="n" data-glyph="75,1" class="i method">WriteLine</a>(<b>char</b> <span id="r84 rd" class="r84 r">prefix</span>, <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r85 rd" class="r85 r">text</span>, <b>int</b> <span id="r86 rd" class="r86 r">cur</span>)
+		{
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="r84 r">prefix</span>);
+			<span class="r85 r">text</span>.<a href="RawText.cs.html#4573cd8915a70379" class="i method">WriteLine</a>(<a href="#c4e7d828b061dcd5" class="i field">@out</a>, <span class="r86 r">cur</span>);
+			<a href="#c4e7d828b061dcd5" class="i field">@out</a>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Creates a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Patch</span>.<a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Patch.FileHeader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> representing the given</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">DiffEntry</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method does not use the OutputStream associated with this</span>
+		<span class="c">///</span><span class="c"> DiffFormatter instance. It is therefore safe to instantiate this</span>
+		<span class="c">///</span><span class="c"> DiffFormatter instance with a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>.<a href="../NGit.Util.IO/DisabledOutputStream.cs.html#40f3fc8782ea64c0" class="t t">DisabledOutputStream</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Util.IO.DisabledOutputStream</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if this method</span>
+		<span class="c">///</span><span class="c"> is the only one that will be used.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r87 r">ent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the DiffEntry to create the FileHeader for</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a FileHeader representing the DiffEntry. The FileHeader&#39;s buffer</span>
+		<span class="c">///</span><span class="c"> will contain only the header of the diff output. It will also</span>
+		<span class="c">///</span><span class="c"> contain one</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Patch</span>.<a href="../NGit.Patch/HunkHeader.cs.html#2faaf7443ae67502" class="t t">HunkHeader</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Patch.HunkHeader</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the stream threw an exception while writing to it, or one of</span>
+		<span class="c">///</span><span class="c"> the blobs referenced by the DiffEntry could not be read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CorruptObjectException.cs.html#cc0fe9dcd5bb1542" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">one of the blobs referenced by the DiffEntry is corrupt.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">one of the blobs referenced by the DiffEntry is missing.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a> <a id="f7c960e60be9f65f" href="../R/f7c960e60be9f65f.html" target="n" data-glyph="72,1" class="i method">ToFileHeader</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r87 rd" class="r87 r">ent</span>)
+		{
+			<b>return</b> <a href="#5a64ea6ec9a89357" class="i method">CreateFormatResult</a>(<span class="r87 r">ent</span>).<a href="#84ceca18b3d6cb47" class="i field">header</a>;
+		}
+
+		<b>private class</b> <a id="07d73196241b6fc6" href="../R/07d73196241b6fc6.html" target="n" data-glyph="4,1" class="t t"><span id="57551a744f81524a">FormatResult</span></a>
+		{
+			<b>internal</b> <a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a> <a id="84ceca18b3d6cb47" href="../R/84ceca18b3d6cb47.html" target="n" data-glyph="44,2" class="i field">header</a>;
+
+			<b>internal</b> <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <a id="99f0edcab52c9431" href="../R/99f0edcab52c9431.html" target="n" data-glyph="44,2" class="i field">a</a>;
+
+			<b>internal</b> <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <a id="e7f871abed60e9f7" href="../R/e7f871abed60e9f7.html" target="n" data-glyph="44,2" class="i field">b</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CorruptObjectException.cs.html#cc0fe9dcd5bb1542" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="#0a3fb36519ef5a5f" class="t t">DiffFormatter</a>.<a href="#07d73196241b6fc6" class="t t">FormatResult</a> <a id="5a64ea6ec9a89357" href="../R/5a64ea6ec9a89357.html" target="n" data-glyph="76,1" class="i method">CreateFormatResult</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r88 rd" class="r88 r">ent</span>)
+		{
+			<a href="#0a3fb36519ef5a5f" class="t t">DiffFormatter</a>.<a href="#07d73196241b6fc6" class="t t">FormatResult</a> <span id="r89 rd" class="r89 r">res</span> = <b>new</b> <a href="#0a3fb36519ef5a5f" class="t t">DiffFormatter</a>.<a href="#07d73196241b6fc6" class="t constructor">FormatResult</a>();
+			<a href="/Sharpen/A.html#36a042d26bd3cc9b" class="t t">ByteArrayOutputStream</a> <span id="r90 rd" class="r90 r">buf</span> = <b>new</b> <a href="/Sharpen/A.html#78868e8453b93d65" class="t constructor">ByteArrayOutputStream</a>();
+			<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r91 rd" class="r91 r">editList</span>;
+			<a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a>.<a href="../NGit.Patch/FileHeader.cs.html#cdc1e181838530cd" class="t t">PatchType</a> <span id="r92 rd" class="r92 r">type</span>;
+			<a href="#c8deb44dda6e51e2" class="i method">FormatHeader</a>(<span class="r90 r">buf</span>, <span class="r88 r">ent</span>);
+			<b>if</b> (<span class="r88 r">ent</span>.<a href="DiffEntry.cs.html#fd38cfdc89447f45" class="i method">GetOldMode</a>() == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a> || <span class="r88 r">ent</span>.<a href="DiffEntry.cs.html#6d7e8ad6f7d85625" class="i method">GetNewMode</a>() == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a>)
+			{
+				<a href="#ff1abef22fcfec9a" class="i method">FormatOldNewPaths</a>(<span class="r90 r">buf</span>, <span class="r88 r">ent</span>);
+				<a href="#db75f16170d4a713" class="i method">WriteGitLinkDiffText</a>(<span class="r90 r">buf</span>, <span class="r88 r">ent</span>);
+				<span class="r91 r">editList</span> = <b>new</b> <a href="EditList.cs.html#fca0890e299ad69b" class="t constructor">EditList</a>();
+				<span class="r92 r">type</span> = <a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a>.<a href="../NGit.Patch/FileHeader.cs.html#cdc1e181838530cd" class="t t">PatchType</a>.<a href="../NGit.Patch/FileHeader.cs.html#e78904d1b7f3ac0e" class="i field">UNIFIED</a>;
+			}
+			<b>else</b>
+			{
+				<a href="#f53dfd3001f954da" class="i method">AssertHaveRepository</a>();
+				<b>byte</b>[] <span id="r93 rd" class="r93 r">aRaw</span> = <a href="#368beb9b51d2b962" class="i method">Open</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#38f00091a91f0b33" class="i field">OLD</a>, <span class="r88 r">ent</span>);
+				<b>byte</b>[] <span id="r94 rd" class="r94 r">bRaw</span> = <a href="#368beb9b51d2b962" class="i method">Open</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#a60d5923793294e6" class="i field">NEW</a>, <span class="r88 r">ent</span>);
+				<b>if</b> (<span class="r93 r">aRaw</span> == <a href="#a82b2011fed6590d" class="i field">BINARY</a> || <span class="r94 r">bRaw</span> == <a href="#a82b2011fed6590d" class="i field">BINARY</a> || <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a>.<a href="RawText.cs.html#81acca20727f9b1e" class="i method">IsBinary</a>(<span class="r93 r">aRaw</span>) || <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a>.<a href="RawText.cs.html#81acca20727f9b1e" class="i method">IsBinary</a>
+					(<span class="r94 r">bRaw</span>))
+				{
+					<span class="c">//</span>
+					<a href="#ff1abef22fcfec9a" class="i method">FormatOldNewPaths</a>(<span class="r90 r">buf</span>, <span class="r88 r">ent</span>);
+					<span class="r90 r">buf</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;Binary files differ\n&quot;</span>));
+					<span class="r91 r">editList</span> = <b>new</b> <a href="EditList.cs.html#fca0890e299ad69b" class="t constructor">EditList</a>();
+					<span class="r92 r">type</span> = <a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a>.<a href="../NGit.Patch/FileHeader.cs.html#cdc1e181838530cd" class="t t">PatchType</a>.<a href="../NGit.Patch/FileHeader.cs.html#86eebd5ed995c7af" class="i field">BINARY</a>;
+				}
+				<b>else</b>
+				{
+					<span class="r89 r">res</span>.<a href="#99f0edcab52c9431" class="i field">a</a> = <b>new</b> <a href="RawText.cs.html#5e490027f5de8fe5" class="t constructor">RawText</a>(<span class="r93 r">aRaw</span>);
+					<span class="r89 r">res</span>.<a href="#e7f871abed60e9f7" class="i field">b</a> = <b>new</b> <a href="RawText.cs.html#5e490027f5de8fe5" class="t constructor">RawText</a>(<span class="r94 r">bRaw</span>);
+					<span class="r91 r">editList</span> = <a href="#936b7ba05f68579f" class="i method">Diff</a>(<span class="r89 r">res</span>.<a href="#99f0edcab52c9431" class="i field">a</a>, <span class="r89 r">res</span>.<a href="#e7f871abed60e9f7" class="i field">b</a>);
+					<span class="r92 r">type</span> = <a href="../NGit.Patch/FileHeader.cs.html#0b09465b3de02520" class="t t">FileHeader</a>.<a href="../NGit.Patch/FileHeader.cs.html#cdc1e181838530cd" class="t t">PatchType</a>.<a href="../NGit.Patch/FileHeader.cs.html#e78904d1b7f3ac0e" class="i field">UNIFIED</a>;
+					<b>switch</b> (<span class="r88 r">ent</span>.<a href="DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>())
+					{
+						<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a>:
+						<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#92f05c1e04cf35a9" class="i field">COPY</a>:
+						{
+							<b>if</b> (!<span class="r91 r">editList</span>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+							{
+								<a href="#ff1abef22fcfec9a" class="i method">FormatOldNewPaths</a>(<span class="r90 r">buf</span>, <span class="r88 r">ent</span>);
+							}
+							<b>break</b>;
+						}
+
+						<b>default</b>:
+						{
+							<a href="#ff1abef22fcfec9a" class="i method">FormatOldNewPaths</a>(<span class="r90 r">buf</span>, <span class="r88 r">ent</span>);
+							<b>break</b>;
+							<b>break</b>;
+						}
+					}
+				}
+			}
+			<span class="r89 r">res</span>.<a href="#84ceca18b3d6cb47" class="i field">header</a> = <b>new</b> <a href="../NGit.Patch/FileHeader.cs.html#73b321702c0061c1" class="t constructor">FileHeader</a>(<span class="r90 r">buf</span>.<a href="/Sharpen/A.html#ba0ad7260cea63e1" class="i method">ToByteArray</a>(), <span class="r91 r">editList</span>, <span class="r92 r">type</span>);
+			<b>return</b> <span class="r89 r">res</span>;
+		}
+
+		<b>private</b> <a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <a id="936b7ba05f68579f" href="../R/936b7ba05f68579f.html" target="n" data-glyph="76,1" class="i method">Diff</a>(<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r95 rd" class="r95 r">a</span>, <a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r96 rd" class="r96 r">b</span>)
+		{
+			<b>return</b> <a href="#4aded56fe1cddc89" class="i field">diffAlgorithm</a>.<a href="DiffAlgorithm.cs.html#bf43d860311f26cc" class="i method">Diff</a>(<a href="#a85a57b974310fdc" class="i field">comparator</a>, <span class="r95 r">a</span>, <span class="r96 r">b</span>);
+		}
+
+		<b>private void</b> <a id="f53dfd3001f954da" href="../R/f53dfd3001f954da.html" target="n" data-glyph="76,1" class="i method">AssertHaveRepository</a>()
+		{
+			<b>if</b> (<a href="#66993065ec2aeb20" class="i field">db</a> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#b85a48ad4bb9371d" class="i field">repositoryIsRequired</a>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private byte</b>[] <a id="368beb9b51d2b962" href="../R/368beb9b51d2b962.html" target="n" data-glyph="76,1" class="i method">Open</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a> <span id="r97 rd" class="r97 r">side</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r98 rd" class="r98 r">entry</span>)
+		{
+			<b>if</b> (<span class="r98 r">entry</span>.<a href="DiffEntry.cs.html#f097a0f2bf12ae20" class="i method">GetMode</a>(<span class="r97 r">side</span>) == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>)
+			{
+				<b>return</b> <a href="#02219a0b6ae54aec" class="i field">EMPTY</a>;
+			}
+			<b>if</b> (<span class="r98 r">entry</span>.<a href="DiffEntry.cs.html#f097a0f2bf12ae20" class="i method">GetMode</a>(<span class="r97 r">side</span>).<a href="../NGit/FileMode.cs.html#6d8835bb81f9e7ef" class="i method">GetObjectType</a>() != <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>)
+			{
+				<b>return</b> <a href="#02219a0b6ae54aec" class="i field">EMPTY</a>;
+			}
+			<b>if</b> (<a href="#6edb1ff0ffcbed0d" class="i method">IsBinary</a>())
+			{
+				<b>return</b> <a href="#a82b2011fed6590d" class="i field">BINARY</a>;
+			}
+			<a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <span id="r99 rd" class="r99 r">id</span> = <span class="r98 r">entry</span>.<a href="DiffEntry.cs.html#0b86d8914d5b156b" class="i method">GetId</a>(<span class="r97 r">side</span>);
+			<b>if</b> (!<span class="r99 r">id</span>.<a href="../NGit/AbbreviatedObjectId.cs.html#ce45bdbaf0f92fac" class="i property">IsComplete</a>)
+			{
+				<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt; <span id="r100 rd" class="r100 r">ids</span> = <a href="#e497645858c20694" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#6eb31bdf0fbc8145" class="i method">Resolve</a>(<span class="r99 r">id</span>);
+				<b>if</b> (<span class="r100 r">ids</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> == 1)
+				{
+					<span class="r99 r">id</span> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>(<span class="r100 r">ids</span>.<a href="/Sharpen/A.html#9e9a9722119e4290" class="i method">Iterator</a>().<a href="/Sharpen/A.html#6360c9000cc5a921" class="i method">Next</a>());
+					<b>switch</b> (<span class="r97 r">side</span>)
+					{
+						<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#38f00091a91f0b33" class="i field">OLD</a>:
+						{
+							<span class="r98 r">entry</span>.<a href="DiffEntry.cs.html#007119dd64e3133d" class="i field">oldId</a> = <span class="r99 r">id</span>;
+							<b>break</b>;
+						}
+
+						<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#a60d5923793294e6" class="i field">NEW</a>:
+						{
+							<span class="r98 r">entry</span>.<a href="DiffEntry.cs.html#f19303f70c845c7f" class="i field">newId</a> = <span class="r99 r">id</span>;
+							<b>break</b>;
+						}
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r100 r">ids</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> == 0)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Errors/MissingObjectException.cs.html#a31aaba1839e94bf" class="t constructor">MissingObjectException</a>(<span class="r99 r">id</span>, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>);
+					}
+					<b>else</b>
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Errors/AmbiguousObjectException.cs.html#e9f46d44be7144d9" class="t constructor">AmbiguousObjectException</a>(<span class="r99 r">id</span>, <span class="r100 r">ids</span>);
+					}
+				}
+			}
+			<b>try</b>
+			{
+				<a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <span id="r101 rd" class="r101 r">ldr</span> = <a href="#c041b66dd98e5e16" class="i field">source</a>.<a href="ContentSource.cs.html#e388ef2f5ef92f16" class="i method">Open</a>(<span class="r97 r">side</span>, <span class="r98 r">entry</span>);
+				<b>return</b> <span class="r101 r">ldr</span>.<a href="../NGit/ObjectLoader.cs.html#c095ac521a16fc3e" class="i method">GetBytes</a>(<a href="#96caf64fec1f145a" class="i field">binaryFileThreshold</a>);
+			}
+			<b>catch</b> (<a href="../NGit.Errors/LargeObjectException.cs.html#b54c3fbbaa6f8286" class="t t">LargeObjectException</a>.<a href="../NGit.Errors/LargeObjectException.cs.html#8d57f0ffae87d4b2" class="t t">ExceedsLimit</a>)
+			{
+				<b>return</b> <a href="#a82b2011fed6590d" class="i field">BINARY</a>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/LargeObjectException.cs.html#b54c3fbbaa6f8286" class="t t">LargeObjectException</a>.<a href="../NGit.Errors/LargeObjectException.cs.html#c73118966eb69e37" class="t t">ExceedsByteArrayLimit</a>)
+			{
+				<b>return</b> <a href="#a82b2011fed6590d" class="i field">BINARY</a>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/LargeObjectException.cs.html#b54c3fbbaa6f8286" class="t t">LargeObjectException</a>.<a href="../NGit.Errors/LargeObjectException.cs.html#eb022b3824e1c29b" class="t t">OutOfMemory</a>)
+			{
+				<b>return</b> <a href="#a82b2011fed6590d" class="i field">BINARY</a>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/LargeObjectException.cs.html#b54c3fbbaa6f8286" class="t t">LargeObjectException</a> <span id="r102 rd" class="r102 r">tooBig</span>)
+			{
+				<span class="r102 r">tooBig</span>.<a href="../NGit.Errors/LargeObjectException.cs.html#1b9277bc99a711bd" class="i method">SetObjectId</a>(<span class="r99 r">id</span>.<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>());
+				<b>throw</b>;
+			}
+		}
+
+		<b>private bool</b> <a id="6edb1ff0ffcbed0d" href="../R/6edb1ff0ffcbed0d.html" target="n" data-glyph="76,1" class="i method">IsBinary</a>()
+		{
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="c8deb44dda6e51e2" href="../R/c8deb44dda6e51e2.html" target="n" data-glyph="76,1" class="i method">FormatHeader</a>(<a href="/Sharpen/A.html#36a042d26bd3cc9b" class="t t">ByteArrayOutputStream</a> <span id="r103 rd" class="r103 r">o</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r104 rd" class="r104 r">ent</span>)
+		{
+			<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a> <span id="r105 rd" class="r105 r">type</span> = <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>();
+			<b>string</b> <span id="r106 rd" class="r106 r">oldp</span> = <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>();
+			<b>string</b> <span id="r107 rd" class="r107 r">newp</span> = <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#e15ba056919bec45" class="i method">GetNewPath</a>();
+			<a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r108 rd" class="r108 r">oldMode</span> = <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#fd38cfdc89447f45" class="i method">GetOldMode</a>();
+			<a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r109 rd" class="r109 r">newMode</span> = <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#6d7e8ad6f7d85625" class="i method">GetNewMode</a>();
+			<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;diff --git &quot;</span>));
+			<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<a href="#560ea235f9fc939a" class="i field">oldPrefix</a> + (<span class="r105 r">type</span> == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#c69c68c8c2e98cfc" class="i field">ADD</a> ? 
+				<span class="r107 r">newp</span> : <span class="r106 r">oldp</span>))));
+			<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+			<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<a href="#7f25e7166d39828f" class="i field">newPrefix</a> + (<span class="r105 r">type</span> == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#e4a021b81ce9499a" class="i field">DELETE</a>
+				 ? <span class="r106 r">oldp</span> : <span class="r107 r">newp</span>))));
+			<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+			<b>switch</b> (<span class="r105 r">type</span>)
+			{
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#c69c68c8c2e98cfc" class="i field">ADD</a>:
+				{
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;new file mode &quot;</span>));
+					<span class="r109 r">newMode</span>.<a href="../NGit/FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<span class="r103 r">o</span>);
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#e4a021b81ce9499a" class="i field">DELETE</a>:
+				{
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;deleted file mode &quot;</span>));
+					<span class="r108 r">oldMode</span>.<a href="../NGit/FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<span class="r103 r">o</span>);
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a>:
+				{
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;similarity index &quot;</span> + <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#2bd3a1af985042ed" class="i method">GetScore</a>() + <span class="s">&quot;%&quot;</span>));
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="s">&quot;rename from &quot;</span> + <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<span class="r106 r">oldp</span>)));
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="s">&quot;rename to &quot;</span> + <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<span class="r107 r">newp</span>)));
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#92f05c1e04cf35a9" class="i field">COPY</a>:
+				{
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;similarity index &quot;</span> + <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#2bd3a1af985042ed" class="i method">GetScore</a>() + <span class="s">&quot;%&quot;</span>));
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="s">&quot;copy from &quot;</span> + <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<span class="r106 r">oldp</span>)));
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="s">&quot;copy to &quot;</span> + <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<span class="r107 r">newp</span>)));
+					<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					<b>if</b> (!<span class="r108 r">oldMode</span>.<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<span class="r109 r">newMode</span>))
+					{
+						<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;new file mode &quot;</span>));
+						<span class="r109 r">newMode</span>.<a href="../NGit/FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<span class="r103 r">o</span>);
+						<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					}
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#fb632a2f2bba88cc" class="i field">MODIFY</a>:
+				{
+					<b>if</b> (0 &lt; <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#2bd3a1af985042ed" class="i method">GetScore</a>())
+					{
+						<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;dissimilarity index &quot;</span> + (100 - <span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#2bd3a1af985042ed" class="i method">GetScore</a>()) + <span class="s">&quot;%&quot;</span>
+							));
+						<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+					}
+					<b>break</b>;
+				}
+			}
+			<b>if</b> ((<span class="r105 r">type</span> == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#fb632a2f2bba88cc" class="i field">MODIFY</a> || <span class="r105 r">type</span> == <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a>) 
+				&amp;&amp; !<span class="r108 r">oldMode</span>.<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<span class="r109 r">newMode</span>))
+			{
+				<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;old mode &quot;</span>));
+				<span class="r108 r">oldMode</span>.<a href="../NGit/FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<span class="r103 r">o</span>);
+				<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+				<span class="r103 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;new mode &quot;</span>));
+				<span class="r109 r">newMode</span>.<a href="../NGit/FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<span class="r103 r">o</span>);
+				<span class="r103 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+			}
+			<b>if</b> (!<span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#547cb63503a94024" class="i method">Equals</a>(<span class="r104 r">ent</span>.<a href="DiffEntry.cs.html#246e6c0fce9bfeba" class="i method">GetNewId</a>()))
+			{
+				<a href="#a9718625d6ddafe0" class="i method">FormatIndexLine</a>(<span class="r103 r">o</span>, <span class="r104 r">ent</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r110 r">o</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the stream the formatter will write line data to</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r111 r">ent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the DiffEntry to create the FileHeader for</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">writing to the supplied stream failed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="a9718625d6ddafe0" href="../R/a9718625d6ddafe0.html" target="n" data-glyph="75,1" class="i method">FormatIndexLine</a>(<a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <span id="r110 rd" class="r110 r">o</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r111 rd" class="r111 r">ent</span>)
+		{
+			<span class="r110 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#662e6e908c974591" class="i method">EncodeASCII</a>(<span class="s">&quot;index &quot;</span> + <a href="#289a834a58e79df7" class="i method">Format</a>(<span class="r111 r">ent</span>.<a href="DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>()) + <span class="s">&quot;..&quot;</span> + <a href="#289a834a58e79df7" class="i method">Format</a>(<span class="r111 r">ent</span>
+				.<a href="DiffEntry.cs.html#246e6c0fce9bfeba" class="i method">GetNewId</a>())));
+			<span class="c">//</span>
+			<span class="c">//</span>
+			<span class="c">//</span>
+			<b>if</b> (<span class="r111 r">ent</span>.<a href="DiffEntry.cs.html#fd38cfdc89447f45" class="i method">GetOldMode</a>().<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<span class="r111 r">ent</span>.<a href="DiffEntry.cs.html#6d7e8ad6f7d85625" class="i method">GetNewMode</a>()))
+			{
+				<span class="r110 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+				<span class="r111 r">ent</span>.<a href="DiffEntry.cs.html#6d7e8ad6f7d85625" class="i method">GetNewMode</a>().<a href="../NGit/FileMode.cs.html#d67f1a5cf278e585" class="i method">CopyTo</a>(<span class="r110 r">o</span>);
+			}
+			<span class="r110 r">o</span>.<a href="/Sharpen/A.html#acd4639498b60294" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="ff1abef22fcfec9a" href="../R/ff1abef22fcfec9a.html" target="n" data-glyph="76,1" class="i method">FormatOldNewPaths</a>(<a href="/Sharpen/A.html#36a042d26bd3cc9b" class="t t">ByteArrayOutputStream</a> <span id="r112 rd" class="r112 r">o</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r113 rd" class="r113 r">ent</span>)
+		{
+			<b>if</b> (<span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#007119dd64e3133d" class="i field">oldId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#547cb63503a94024" class="i method">Equals</a>(<span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#f19303f70c845c7f" class="i field">newId</a>))
+			{
+				<b>return</b>;
+			}
+			<b>string</b> <span id="r114 rd" class="r114 r">oldp</span>;
+			<b>string</b> <span id="r115 rd" class="r115 r">newp</span>;
+			<b>switch</b> (<span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>())
+			{
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#c69c68c8c2e98cfc" class="i field">ADD</a>:
+				{
+					<span class="r114 r">oldp</span> = <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+					<span class="r115 r">newp</span> = <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<a href="#7f25e7166d39828f" class="i field">newPrefix</a> + <span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#e15ba056919bec45" class="i method">GetNewPath</a>());
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="DiffEntry.cs.html#e4a021b81ce9499a" class="i field">DELETE</a>:
+				{
+					<span class="r114 r">oldp</span> = <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<a href="#560ea235f9fc939a" class="i field">oldPrefix</a> + <span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>());
+					<span class="r115 r">newp</span> = <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+					<b>break</b>;
+				}
+
+				<b>default</b>:
+				{
+					<span class="r114 r">oldp</span> = <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<a href="#560ea235f9fc939a" class="i field">oldPrefix</a> + <span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>());
+					<span class="r115 r">newp</span> = <a href="#06aa89eafea04d33" class="i method">QuotePath</a>(<a href="#7f25e7166d39828f" class="i field">newPrefix</a> + <span class="r113 r">ent</span>.<a href="DiffEntry.cs.html#e15ba056919bec45" class="i method">GetNewPath</a>());
+					<b>break</b>;
+					<b>break</b>;
+				}
+			}
+			<span class="r112 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="s">&quot;--- &quot;</span> + <span class="r114 r">oldp</span> + <span class="s">&quot;\n&quot;</span>));
+			<span class="r112 r">o</span>.<a href="/Sharpen/A.html#ec32e8d9b5054188" class="i method">Write</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#c2296623c900fab2" class="i method">Encode</a>(<span class="s">&quot;+++ &quot;</span> + <span class="r115 r">newp</span> + <span class="s">&quot;\n&quot;</span>));
+		}
+
+		<b>private int</b> <a id="ddd01f52bcaf5073" href="../R/ddd01f52bcaf5073.html" target="n" data-glyph="76,1" class="i method">FindCombinedEnd</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>&gt; <span id="r116 rd" class="r116 r">edits</span>, <b>int</b> <span id="r117 rd" class="r117 r">i</span>)
+		{
+			<b>int</b> <span id="r118 rd" class="r118 r">end</span> = <span class="r117 r">i</span> + 1;
+			<b>while</b> (<span class="r118 r">end</span> &lt; <span class="r116 r">edits</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &amp;&amp; (<a href="#5f997d75bb141d6b" class="i method">CombineA</a>(<span class="r116 r">edits</span>, <span class="r118 r">end</span>) || <a href="#f3e7c988f8e44041" class="i method">CombineB</a>(<span class="r116 r">edits</span>, <span class="r118 r">end</span>)))
+			{
+				<span class="r118 r">end</span>++;
+			}
+			<b>return</b> <span class="r118 r">end</span> - 1;
+		}
+
+		<b>private bool</b> <a id="5f997d75bb141d6b" href="../R/5f997d75bb141d6b.html" target="n" data-glyph="76,1" class="i method">CombineA</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>&gt; <span id="r119 rd" class="r119 r">e</span>, <b>int</b> <span id="r120 rd" class="r120 r">i</span>)
+		{
+			<b>return</b> <span class="r119 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r120 r">i</span>].<a href="Edit.cs.html#ceafc7985e42caec" class="i method">GetBeginA</a>() - <span class="r119 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r120 r">i</span> - 1].<a href="Edit.cs.html#2e84ba9f75d885d7" class="i method">GetEndA</a>() &lt;= 2 * <a href="#1cedea2f6e7d6644" class="i field">context</a>;
+		}
+
+		<b>private bool</b> <a id="f3e7c988f8e44041" href="../R/f3e7c988f8e44041.html" target="n" data-glyph="76,1" class="i method">CombineB</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>&gt; <span id="r121 rd" class="r121 r">e</span>, <b>int</b> <span id="r122 rd" class="r122 r">i</span>)
+		{
+			<b>return</b> <span class="r121 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r122 r">i</span>].<a href="Edit.cs.html#4a31803d6e0511c1" class="i method">GetBeginB</a>() - <span class="r121 r">e</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r122 r">i</span> - 1].<a href="Edit.cs.html#fc97870b128f44e7" class="i method">GetEndB</a>() &lt;= 2 * <a href="#1cedea2f6e7d6644" class="i field">context</a>;
+		}
+
+		<b>private static bool</b> <a id="45cb81eb201f9cf9" href="../R/45cb81eb201f9cf9.html" target="n" data-glyph="76,1" class="i method">End</a>(<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r123 rd" class="r123 r">edit</span>, <b>int</b> <span id="r124 rd" class="r124 r">a</span>, <b>int</b> <span id="r125 rd" class="r125 r">b</span>)
+		{
+			<b>return</b> <span class="r123 r">edit</span>.<a href="Edit.cs.html#2e84ba9f75d885d7" class="i method">GetEndA</a>() &lt;= <span class="r124 r">a</span> &amp;&amp; <span class="r123 r">edit</span>.<a href="Edit.cs.html#fc97870b128f44e7" class="i method">GetEndB</a>() &lt;= <span class="r125 r">b</span>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

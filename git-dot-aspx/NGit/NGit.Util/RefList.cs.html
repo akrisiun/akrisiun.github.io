@@ -1,0 +1,552 @@
+﻿<!DOCTYPE html>
+<html><head><title>RefList.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(543);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Util/RefList.cs" target="_top">NGit.Util\RefList.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Util</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Specialized variant of an ArrayList to support a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">RefDatabase</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> .</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This list is a hybrid of a Map</span><span class="c">&amp;lt;</span><span class="c">String,Ref</span><span class="c">&amp;gt;</span><span class="c"> and of a List</span><span class="c">&amp;lt;</span><span class="c">Ref</span><span class="c">&amp;gt;</span><span class="c">. It</span>
+	<span class="c">///</span><span class="c"> tracks reference instances by name by keeping them sorted and performing</span>
+	<span class="c">///</span><span class="c"> binary search to locate an entry. Lookup time is O(log N), but addition and</span>
+	<span class="c">///</span><span class="c"> removal is O(N + log N) due to the list expansion or contraction costs.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This list type is copy-on-write. Mutation methods return a new copy of the</span>
+	<span class="c">///</span><span class="c"> list, leaving</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> unmodified. As a result we cannot easily implement</span>
+	<span class="c">///</span><span class="c"> the</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i">IList</span>{<span class="r0 r t">E</span>}<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.Collections.IList</span><span class="c">&amp;lt;</span><span class="c">E</span><span class="c">&amp;gt;</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> interface contract.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+	<b>public class</b> <a id="2cf7fd4f4c70fe9d" href="../R/2cf7fd4f4c70fe9d.html" target="n" data-glyph="0,0" class="t t">RefList</a>&lt;<span id="r1 rd t" class="r1 r t">T</span>&gt; : <a href="/Sharpen/A.html#f5302991756850e2" class="t t">Iterable</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <b>where</b> <span class="r1 r t">T</span>:<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>
+	{
+		<b>private static readonly</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="1b6d70399d0b9929" href="../R/1b6d70399d0b9929.html" target="n" data-glyph="46,1" class="i field">EMPTY</a> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;
+			(<b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[0], 0);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">an empty unmodifiable reference list.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+		<b>public static</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r2 r t">T</span>&gt; <a id="1077dd2af329026f" href="../R/1077dd2af329026f.html" target="n" data-glyph="72,1" class="i method">EmptyList</a>&lt;<span id="r2 rd t" class="r2 r t">T</span>&gt;() <b>where</b> <span class="r2 r t">T</span>:<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>
+		{
+			<b>return</b> <b>new</b> <a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<span class="r2 r t">T</span>&gt;(<b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[0], 0);
+		}
+
+		<b>public static</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="50cd2cf4d2cd2e1c" href="../R/50cd2cf4d2cd2e1c.html" target="n" data-glyph="72,1" class="i method">EmptyList</a>()
+		{
+			<b>return</b> <a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt;.<a href="#1b6d70399d0b9929" class="i field">EMPTY</a>;
+		}
+		
+		<b>private readonly</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <a id="cb15cd2b8f8e145d" href="../R/cb15cd2b8f8e145d.html" target="n" data-glyph="46,1" class="i field">list</a>;
+
+		<b>private readonly int</b> <a id="3b364b928000d157" href="../R/3b364b928000d157.html" target="n" data-glyph="46,1" class="i field">cnt</a>;
+
+		<b>internal</b> <a id="b47898a03c88279b" href="../R/b47898a03c88279b.html" target="n" data-glyph="74,1" class="i constructor">RefList</a>(<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r3 rd" class="r3 r">list</span>, <b>int</b> <span id="r4 rd" class="r4 r">cnt</span>)
+		{
+			<a href="#2cf7fd4f4c70fe9d" class="k">this</a>.<a href="#cb15cd2b8f8e145d" class="i field">list</a> = <span class="r3 r">list</span>;
+			<a href="#2cf7fd4f4c70fe9d" class="k">this</a>.<a href="#3b364b928000d157" class="i field">cnt</a> = <span class="r4 r">cnt</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Initialize this list to use the same backing array as another list.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Initialize this list to use the same backing array as another list.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">src</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the source list.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="56c21a268003c7a6" href="../R/56c21a268003c7a6.html" target="n" data-glyph="75,1" class="i constructor">RefList</a>(<span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <span id="r5 rd" class="r5 r">src</span>)
+		{
+			<a href="#2cf7fd4f4c70fe9d" class="k">this</a>.<a href="#cb15cd2b8f8e145d" class="i field">list</a> = <span class="r5 r">src</span>.<a href="#cb15cd2b8f8e145d" class="i field">list</a>;
+			<a href="#2cf7fd4f4c70fe9d" class="k">this</a>.<a href="#3b364b928000d157" class="i field">cnt</a> = <span class="r5 r">src</span>.<a href="#3b364b928000d157" class="i field">cnt</a>;
+		}
+
+		<b>public override</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="7106247ab8331e0c" href="../R/7106247ab8331e0c.html" target="n" data-glyph="72,1" class="i method">Iterator</a>()
+		{
+			<b>return</b> <b>new</b> <a href="#852518617105bc14" class="t constructor">_Iterator_104</a>(<a href="#2cf7fd4f4c70fe9d" class="k">this</a>);
+		}
+
+		<b>private sealed class</b> <a id="43a4ccecbebf1c8d" href="../R/43a4ccecbebf1c8d.html" target="n" data-glyph="4,1" class="t t">_Iterator_104</a> : <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#16c261597e9ed97b" class="t t">Iterator</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;
+		{
+			<b>public</b> <a id="852518617105bc14" href="../R/852518617105bc14.html" target="n" data-glyph="72,2" class="i constructor">_Iterator_104</a>(<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <span id="r6 rd" class="r6 r">_enclosing</span>)
+			{
+				<a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#891fce2d5c952ecc" class="i field">_enclosing</a> = <span class="r6 r">_enclosing</span>;
+			}
+
+			<b>private int</b> <a id="5f7e12b06d2bad34" href="../R/5f7e12b06d2bad34.html" target="n" data-glyph="46,2" class="i field">idx</a>;
+
+			<b>public override bool</b> <a id="ef0f4f2a3d7350a3" href="../R/ef0f4f2a3d7350a3.html" target="n" data-glyph="72,2" class="i method">HasNext</a>()
+			{
+				<b>return</b> <a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#5f7e12b06d2bad34" class="i field">idx</a> &lt; <a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#891fce2d5c952ecc" class="i field">_enclosing</a>.<a href="#3b364b928000d157" class="i field">cnt</a>;
+			}
+
+			<b>public override</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <a id="de06334ef93b848c" href="../R/de06334ef93b848c.html" target="n" data-glyph="72,2" class="i method">Next</a>()
+			{
+				<b>if</b> (<a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#5f7e12b06d2bad34" class="i field">idx</a> &lt; <a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#891fce2d5c952ecc" class="i field">_enclosing</a>.<a href="#3b364b928000d157" class="i field">cnt</a>)
+				{
+					<b>return</b> <a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#891fce2d5c952ecc" class="i field">_enclosing</a>.<a href="#cb15cd2b8f8e145d" class="i field">list</a>[<a href="#43a4ccecbebf1c8d" class="k">this</a>.<a href="#5f7e12b06d2bad34" class="i field">idx</a>++];
+				}
+				<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#a4ddd2cf78975afc" class="t constructor">NoSuchElementException</a>();
+			}
+
+			<b>public override void</b> <a id="16d4c5c57d1abe05" href="../R/16d4c5c57d1abe05.html" target="n" data-glyph="72,2" class="i method">Remove</a>()
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+			}
+
+			<b>private readonly</b> <a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <a id="891fce2d5c952ecc" href="../R/891fce2d5c952ecc.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> this cast as an immutable, standard</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i">IList</span>{<span class="r7 r t">E</span>}<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.Collections.IList</span><span class="c">&amp;lt;</span><span class="c">E</span><span class="c">&amp;gt;</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="741edfaae2b99999" href="../R/741edfaae2b99999.html" target="n" data-glyph="72,1" class="i method">AsList</a>()
+		{
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <span id="r8 rd" class="r8 r">r</span> = <a href="/Sharpen/A.html#7342d8d23595dd8e" class="t t">Arrays</a>.<a href="/Sharpen/A.html#18670a37be3c4a08" class="i method">AsList</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>).<a href="/Sharpen/A.html#291856b9d47a931e" class="i method">SubList</a>(0, <a href="#3b364b928000d157" class="i field">cnt</a>);
+			<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#c6c5e0f0816e9860" class="i method">UnmodifiableList</a>(<span class="r8 r">r</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">number of items in this list.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="399063abc5d2525f" href="../R/399063abc5d2525f.html" target="n" data-glyph="72,1" class="i method">Size</a>()
+		{
+			<b>return</b> <a href="#3b364b928000d157" class="i field">cnt</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if the size of this list is 0.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="78afbab0a0af1188" href="../R/78afbab0a0af1188.html" target="n" data-glyph="72,1" class="i method">IsEmpty</a>()
+		{
+			<b>return</b> <a href="#3b364b928000d157" class="i field">cnt</a> == 0;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Locate an entry by name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Locate an entry by name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the name of the reference to find.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the index the reference is at. If the entry is not present</span>
+		<span class="c">///</span><span class="c"> returns a negative value. The insertion position for the given</span>
+		<span class="c">///</span><span class="c"> name can be computed from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">-(index + 1)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public int</b> <a id="3a49301f24c1d430" href="../R/3a49301f24c1d430.html" target="n" data-glyph="72,1" class="i method">Find</a>(<b>string</b> <span id="r9 rd" class="r9 r">name</span>)
+		{
+			<b>int</b> <span id="r10 rd" class="r10 r">high</span> = <a href="#3b364b928000d157" class="i field">cnt</a>;
+			<b>if</b> (<span class="r10 r">high</span> == 0)
+			{
+				<b>return</b> -1;
+			}
+			<b>int</b> <span id="r11 rd" class="r11 r">low</span> = 0;
+			<b>do</b>
+			{
+				<b>int</b> <span id="r12 rd" class="r12 r">mid</span> = (<b>int</b>)(((<b>uint</b>)(<span class="r11 r">low</span> + <span class="r10 r">high</span>)) &gt;&gt; 1);
+				<b>int</b> <span id="r13 rd" class="r13 r">cmp</span> = <a href="../NGit/RefComparator.cs.html#5d4efdffcddb09a9" class="t t">RefComparator</a>.<a href="../NGit/RefComparator.cs.html#3e9f1d0e5284a1ac" class="i method">CompareTo</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>[<span class="r12 r">mid</span>], <span class="r9 r">name</span>);
+				<b>if</b> (<span class="r13 r">cmp</span> &lt; 0)
+				{
+					<span class="r11 r">low</span> = <span class="r12 r">mid</span> + 1;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r13 r">cmp</span> == 0)
+					{
+						<b>return</b> <span class="r12 r">mid</span>;
+					}
+					<b>else</b>
+					{
+						<span class="r10 r">high</span> = <span class="r12 r">mid</span>;
+					}
+				}
+			}
+			<b>while</b> (<span class="r11 r">low</span> &lt; <span class="r10 r">high</span>);
+			<b>return</b> -(<span class="r11 r">low</span> + 1);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Determine if a reference is present.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Determine if a reference is present.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the reference to find.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if the reference is present; false if it is not.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="c79a90b6522e6c90" href="../R/c79a90b6522e6c90.html" target="n" data-glyph="72,1" class="i method">Contains</a>(<b>string</b> <span id="r14 rd" class="r14 r">name</span>)
+		{
+			<b>return</b> 0 &lt;= <a href="#3a49301f24c1d430" class="i method">Find</a>(<span class="r14 r">name</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get a reference object by name.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get a reference object by name.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the name of the reference.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the reference object; null if it does not exist in this list.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <span class="r1 r t">T</span> <a id="f65055c901d42359" href="../R/f65055c901d42359.html" target="n" data-glyph="72,1" class="i method">Get</a>(<b>string</b> <span id="r15 rd" class="r15 r">name</span>)
+		{
+			<b>int</b> <span id="r16 rd" class="r16 r">idx</span> = <a href="#3a49301f24c1d430" class="i method">Find</a>(<span class="r15 r">name</span>);
+			<b>return</b> 0 &lt;= <span class="r16 r">idx</span> ? <a href="#0ae84bcbb3cff6d8" class="i method">Get</a>(<span class="r16 r">idx</span>) : <b>default</b>(<span class="r1 r t">T</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the reference at a particular index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the reference at a particular index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the index to obtain. Must be</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">0 </span><span class="c">&amp;lt;</span><span class="c">= idx </span><span class="c">&amp;lt;</span><span class="c"> size()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the reference value, never null.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <span class="r1 r t">T</span> <a id="0ae84bcbb3cff6d8" href="../R/0ae84bcbb3cff6d8.html" target="n" data-glyph="72,1" class="i method">Get</a>(<b>int</b> <span id="r17 rd" class="r17 r">idx</span>)
+		{
+			<b>return</b> (<span class="r1 r t">T</span>)<a href="#cb15cd2b8f8e145d" class="i field">list</a>[<span class="r17 r">idx</span>];
+		}
+
+		<b>internal static</b> <a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt; <a id="cc327d41af8ad137" href="../R/cc327d41af8ad137.html" target="n" data-glyph="74,1" class="i method">Copy</a>&lt;<span id="r18 rd t" class="r18 r t">U</span>&gt;(<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r18 r t">U</span>&gt; <span id="r19 rd" class="r19 r">other</span>) <b>where</b> <span class="r18 r t">U</span>: <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>
+		{
+		    <b>return</b> <b>new</b> <a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;(<span class="r19 r">other</span>.<a href="#cb15cd2b8f8e145d" class="i field">list</a>, <span class="r19 r">other</span>.<a href="#3b364b928000d157" class="i field">cnt</a>);
+		}
+ 
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain a builder initialized with the first</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">n</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> elements.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Copies the first</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">n</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> elements from this list into a new builder,</span>
+		<span class="c">///</span><span class="c"> which can be used by the caller to add additional elements.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">n</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the number of elements to copy.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a new builder with the first</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">n</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> elements already added.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#f18feddaa56227a9" class="t t">RefListBuilder</a>&lt;<span class="r1 r t">T</span>&gt; <a id="80ee13e28b1b8ebd" href="../R/80ee13e28b1b8ebd.html" target="n" data-glyph="72,1" class="i method">Copy</a>(<b>int</b> <span id="r20 rd" class="r20 r">n</span>)
+		{
+			<a href="#f18feddaa56227a9" class="t t">RefListBuilder</a>&lt;<span class="r1 r t">T</span>&gt; <span id="r21 rd" class="r21 r">r</span> = <b>new</b> <a href="#29788baf40ac51ac" class="t constructor">RefListBuilder</a>&lt;<span class="r1 r t">T</span>&gt;(<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(16, <span class="r20 r">n</span>));
+			<span class="r21 r">r</span>.<a href="#c190555eddfad9d8" class="i method">AddAll</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>, 0, <span class="r20 r">n</span>);
+			<b>return</b> <span class="r21 r">r</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain a new copy of the list after changing one element.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain a new copy of the list after changing one element.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This list instance is not affected by the replacement. Because this</span>
+		<span class="c">///</span><span class="c"> method copies the entire list, it runs in O(N) time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">index of the element to change.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new value, must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> copy of this list, after replacing</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> with</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ref</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <a id="863fc5c41ed62791" href="../R/863fc5c41ed62791.html" target="n" data-glyph="72,1" class="i method">Set</a>(<b>int</b> <span id="r22 rd" class="r22 r">idx</span>, <span class="r1 r t">T</span> <span id="r23 rd" class="r23 r">@ref</span>)
+		{
+			<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r24 rd" class="r24 r">newList</span> = <b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[<a href="#3b364b928000d157" class="i field">cnt</a>];
+			<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>, 0, <span class="r24 r">newList</span>, 0, <a href="#3b364b928000d157" class="i field">cnt</a>);
+			<span class="r24 r">newList</span>[<span class="r22 r">idx</span>] = <span class="r23 r">@ref</span>;
+			<b>return</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<span class="r1 r t">T</span>&gt;(<span class="r24 r">newList</span>, <a href="#3b364b928000d157" class="i field">cnt</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add an item at a specific index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add an item at a specific index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This list instance is not affected by the addition. Because this method</span>
+		<span class="c">///</span><span class="c"> copies the entire list, it runs in O(N) time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> position to add the item at. If negative the method assumes it</span>
+		<span class="c">///</span><span class="c"> was a direct return value from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>{<span class="r26 r t">T</span>}.<a href="#3a49301f24c1d430" class="i method">Find</a>(<b>string</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">RefList</span><span class="c">&amp;lt;</span><span class="c">T</span><span class="c">&amp;gt;</span><span class="c">.Find(string)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> and will</span>
+		<span class="c">///</span><span class="c"> adjust it to the correct position.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new reference to insert.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> copy of this list, after making space for and adding</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">ref</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <a id="9df9aa584774fc2e" href="../R/9df9aa584774fc2e.html" target="n" data-glyph="72,1" class="i method">Add</a>(<b>int</b> <span id="r25 rd" class="r25 r">idx</span>, <span class="r1 r t">T</span> <span id="r27 rd" class="r27 r">@ref</span>)
+		{
+			<b>if</b> (<span class="r25 r">idx</span> &lt; 0)
+			{
+				<span class="r25 r">idx</span> = -(<span class="r25 r">idx</span> + 1);
+			}
+			<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r28 rd" class="r28 r">newList</span> = <b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[<a href="#3b364b928000d157" class="i field">cnt</a> + 1];
+			<b>if</b> (0 &lt; <span class="r25 r">idx</span>)
+			{
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>, 0, <span class="r28 r">newList</span>, 0, <span class="r25 r">idx</span>);
+			}
+			<span class="r28 r">newList</span>[<span class="r25 r">idx</span>] = <span class="r27 r">@ref</span>;
+			<b>if</b> (<span class="r25 r">idx</span> &lt; <a href="#3b364b928000d157" class="i field">cnt</a>)
+			{
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>, <span class="r25 r">idx</span>, <span class="r28 r">newList</span>, <span class="r25 r">idx</span> + 1, <a href="#3b364b928000d157" class="i field">cnt</a> - <span class="r25 r">idx</span>);
+			}
+			<b>return</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<span class="r1 r t">T</span>&gt;(<span class="r28 r">newList</span>, <a href="#3b364b928000d157" class="i field">cnt</a> + 1);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Remove an item at a specific index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Remove an item at a specific index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This list instance is not affected by the addition. Because this method</span>
+		<span class="c">///</span><span class="c"> copies the entire list, it runs in O(N) time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">position to remove the item from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> copy of this list, after making removing the item at</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <a id="93ced3b4884525e2" href="../R/93ced3b4884525e2.html" target="n" data-glyph="72,1" class="i method">Remove</a>(<b>int</b> <span id="r29 rd" class="r29 r">idx</span>)
+		{
+			<b>if</b> (<a href="#3b364b928000d157" class="i field">cnt</a> == 1)
+			{
+				<b>return</b> <a href="#1077dd2af329026f" class="i method">EmptyList</a>&lt;<span class="r1 r t">T</span>&gt;();
+			}
+			<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r30 rd" class="r30 r">newList</span> = <b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[<a href="#3b364b928000d157" class="i field">cnt</a> - 1];
+			<b>if</b> (0 &lt; <span class="r29 r">idx</span>)
+			{
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>, 0, <span class="r30 r">newList</span>, 0, <span class="r29 r">idx</span>);
+			}
+			<b>if</b> (<span class="r29 r">idx</span> + 1 &lt; <a href="#3b364b928000d157" class="i field">cnt</a>)
+			{
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>, <span class="r29 r">idx</span> + 1, <span class="r30 r">newList</span>, <span class="r29 r">idx</span>, <a href="#3b364b928000d157" class="i field">cnt</a> - (<span class="r29 r">idx</span> + 1));
+			}
+			<b>return</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<span class="r1 r t">T</span>&gt;(<span class="r30 r">newList</span>, <a href="#3b364b928000d157" class="i field">cnt</a> - 1);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Store a reference, adding or replacing as necessary.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Store a reference, adding or replacing as necessary.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This list instance is not affected by the store. The correct position is</span>
+		<span class="c">///</span><span class="c"> determined, and the item is added if missing, or replaced if existing.</span>
+		<span class="c">///</span><span class="c"> Because this method copies the entire list, it runs in O(N + log N) time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r31 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the reference to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">copy of this list, after performing the addition or replacement.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r1 r t">T</span>&gt; <a id="1ad81655a71c1647" href="../R/1ad81655a71c1647.html" target="n" data-glyph="72,1" class="i method">Put</a>(<span class="r1 r t">T</span> <span id="r31 rd" class="r31 r">@ref</span>)
+		{
+			<b>int</b> <span id="r32 rd" class="r32 r">idx</span> = <a href="#3a49301f24c1d430" class="i method">Find</a>(<span class="r31 r">@ref</span>.<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>());
+			<b>if</b> (0 &lt;= <span class="r32 r">idx</span>)
+			{
+				<b>return</b> <a href="#863fc5c41ed62791" class="i method">Set</a>(<span class="r32 r">idx</span>, <span class="r31 r">@ref</span>);
+			}
+			<b>return</b> <a href="#9df9aa584774fc2e" class="i method">Add</a>(<span class="r32 r">idx</span>, <span class="r31 r">@ref</span>);
+		}
+
+		<b>public override string</b> <a id="2a1c7736c7f37e6d" href="../R/2a1c7736c7f37e6d.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+		{
+			<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r33 rd" class="r33 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+			<span class="r33 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;[&#39;</span>);
+			<b>if</b> (<a href="#3b364b928000d157" class="i field">cnt</a> &gt; 0)
+			{
+				<span class="r33 r">r</span>.<a href="@0@mscorlib/A.html#7685cb28f3648166" class="i method">Append</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>[0]);
+				<b>for</b> (<b>int</b> <span id="r34 rd" class="r34 r">i</span> = 1; <span class="r34 r">i</span> &lt; <a href="#3b364b928000d157" class="i field">cnt</a>; <span class="r34 r">i</span>++)
+				{
+					<span class="r33 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;, &quot;</span>);
+					<span class="r33 r">r</span>.<a href="@0@mscorlib/A.html#7685cb28f3648166" class="i method">Append</a>(<a href="#cb15cd2b8f8e145d" class="i field">list</a>[<span class="r34 r">i</span>]);
+				}
+			}
+			<span class="r33 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;]&#39;</span>);
+			<b>return</b> <span class="r33 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+		}
+	}
+
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Builder to facilitate fast construction of an immutable RefList.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Builder to facilitate fast construction of an immutable RefList.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+	<b>public class</b> <a id="f18feddaa56227a9" href="../R/f18feddaa56227a9.html" target="n" data-glyph="0,0" class="t t">RefListBuilder</a>&lt;<span id="r35 rd t" class="r35 r t">T</span>&gt; <b>where</b> <span class="r35 r t">T</span>:<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>
+	{
+		<b>private</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <a id="e1e16f49f5b1cce6" href="../R/e1e16f49f5b1cce6.html" target="n" data-glyph="46,1" class="i field">list</a>;
+
+		<b>private int</b> <a id="1665b12494ca60ad" href="../R/1665b12494ca60ad.html" target="n" data-glyph="46,1" class="i field">size</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create an empty list ready for items to be added.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create an empty list ready for items to be added.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public</b> <a id="89610ac13d00deaa" href="../R/89610ac13d00deaa.html" target="n" data-glyph="72,1" class="i constructor">RefListBuilder</a>() : <a href="#29788baf40ac51ac" class="k">this</a>(16)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create an empty list with at least the specified capacity.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Create an empty list with at least the specified capacity.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">capacity</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new capacity.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="29788baf40ac51ac" href="../R/29788baf40ac51ac.html" target="n" data-glyph="72,1" class="i constructor">RefListBuilder</a>(<b>int</b> <span id="r36 rd" class="r36 r">capacity</span>)
+		{
+			<a href="#e1e16f49f5b1cce6" class="i field">list</a> = <b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[<span class="r36 r">capacity</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">number of items in this builder&#39;s internal collection.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="8e2320d26a02f66e" href="../R/8e2320d26a02f66e.html" target="n" data-glyph="72,1" class="i method">Size</a>()
+		{
+			<b>return</b> <a href="#1665b12494ca60ad" class="i field">size</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the reference at a particular index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the reference at a particular index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the index to obtain. Must be</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">0 </span><span class="c">&amp;lt;</span><span class="c">= idx </span><span class="c">&amp;lt;</span><span class="c"> size()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the reference value, never null.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="r35 r t">T</span> <a id="c1b061c010bceb03" href="../R/c1b061c010bceb03.html" target="n" data-glyph="72,1" class="i method">Get</a>(<b>int</b> <span id="r37 rd" class="r37 r">idx</span>)
+		{
+			<b>return</b> (<span class="r35 r t">T</span>)<a href="#e1e16f49f5b1cce6" class="i field">list</a>[<span class="r37 r">idx</span>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Remove an item at a specific index.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Remove an item at a specific index.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">position to remove the item from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="61f71ab8960ed08b" href="../R/61f71ab8960ed08b.html" target="n" data-glyph="72,1" class="i method">Remove</a>(<b>int</b> <span id="r38 rd" class="r38 r">idx</span>)
+		{
+			<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#e1e16f49f5b1cce6" class="i field">list</a>, <span class="r38 r">idx</span> + 1, <a href="#e1e16f49f5b1cce6" class="i field">list</a>, <span class="r38 r">idx</span>, <a href="#1665b12494ca60ad" class="i field">size</a> - (<span class="r38 r">idx</span> + 1));
+			<a href="#1665b12494ca60ad" class="i field">size</a>--;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add the reference to the end of the array.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add the reference to the end of the array.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> References must be added in sort order, or the array must be sorted</span>
+		<span class="c">///</span><span class="c"> after additions are complete using</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i">Builder</span>{<span class="r39 r t">T</span>}.<span class="i">Sort</span>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Builder</span><span class="c">&amp;lt;</span><span class="c">T</span><span class="c">&amp;gt;</span><span class="c">.Sort()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r40 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="e533790650ec3870" href="../R/e533790650ec3870.html" target="n" data-glyph="72,1" class="i method">Add</a>(<span class="r35 r t">T</span> <span id="r40 rd" class="r40 r">@ref</span>)
+		{
+			<b>if</b> (<a href="#e1e16f49f5b1cce6" class="i field">list</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == <a href="#1665b12494ca60ad" class="i field">size</a>)
+			{
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r41 rd" class="r41 r">n</span> = <b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[<a href="#1665b12494ca60ad" class="i field">size</a> * 2];
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#e1e16f49f5b1cce6" class="i field">list</a>, 0, <span class="r41 r">n</span>, 0, <a href="#1665b12494ca60ad" class="i field">size</a>);
+				<a href="#e1e16f49f5b1cce6" class="i field">list</a> = <span class="r41 r">n</span>;
+			}
+			<a href="#e1e16f49f5b1cce6" class="i field">list</a>[<a href="#1665b12494ca60ad" class="i field">size</a>++] = <span class="r40 r">@ref</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add all items from a source array.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Add all items from a source array.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> References must be added in sort order, or the array must be sorted</span>
+		<span class="c">///</span><span class="c"> after additions are complete using</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i">Builder</span>{<span class="r42 r t">T</span>}.<span class="i">Sort</span>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Builder</span><span class="c">&amp;lt;</span><span class="c">T</span><span class="c">&amp;gt;</span><span class="c">.Sort()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">src</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the source array.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">off</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> position within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">src</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to start copying from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r45 r">cnt</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of items to copy from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">src</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="c190555eddfad9d8" href="../R/c190555eddfad9d8.html" target="n" data-glyph="72,1" class="i method">AddAll</a>(<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r43 rd" class="r43 r">src</span>, <b>int</b> <span id="r44 rd" class="r44 r">off</span>, <b>int</b> <span id="r45 rd" class="r45 r">cnt</span>)
+		{
+			<b>if</b> (<a href="#e1e16f49f5b1cce6" class="i field">list</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <a href="#1665b12494ca60ad" class="i field">size</a> + <span class="r45 r">cnt</span>)
+			{
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[] <span id="r46 rd" class="r46 r">n</span> = <b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(<a href="#1665b12494ca60ad" class="i field">size</a> * 2, <a href="#1665b12494ca60ad" class="i field">size</a> + <span class="r45 r">cnt</span>)];
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="#e1e16f49f5b1cce6" class="i field">list</a>, 0, <span class="r46 r">n</span>, 0, <a href="#1665b12494ca60ad" class="i field">size</a>);
+				<a href="#e1e16f49f5b1cce6" class="i field">list</a> = <span class="r46 r">n</span>;
+			}
+			<span class="i n">System</span>.<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r43 r">src</span>, <span class="r44 r">off</span>, <a href="#e1e16f49f5b1cce6" class="i field">list</a>, <a href="#1665b12494ca60ad" class="i field">size</a>, <span class="r45 r">cnt</span>);
+			<a href="#1665b12494ca60ad" class="i field">size</a> += <span class="r45 r">cnt</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Replace a single existing element.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Replace a single existing element.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r47 r">idx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">index, must have already been added previously.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r48 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the new reference.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="f54acdd7121ccec9" href="../R/f54acdd7121ccec9.html" target="n" data-glyph="72,1" class="i method">Set</a>(<b>int</b> <span id="r47 rd" class="r47 r">idx</span>, <span class="r35 r t">T</span> <span id="r48 rd" class="r48 r">@ref</span>)
+		{
+			<a href="#e1e16f49f5b1cce6" class="i field">list</a>[<span class="r47 r">idx</span>] = <span class="r48 r">@ref</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Sort the list&#39;s backing array in-place.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Sort the list&#39;s backing array in-place.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="713c7dacc936b627" href="../R/713c7dacc936b627.html" target="n" data-glyph="72,1" class="i method">Sort</a>()
+		{
+			<a href="/Sharpen/A.html#7342d8d23595dd8e" class="t t">Arrays</a>.<a href="/Sharpen/A.html#386e56c35774f7a3" class="i method">Sort</a>(<a href="#e1e16f49f5b1cce6" class="i field">list</a>, 0, <a href="#1665b12494ca60ad" class="i field">size</a>, <a href="../NGit/RefComparator.cs.html#5d4efdffcddb09a9" class="t t">RefComparator</a>.<a href="../NGit/RefComparator.cs.html#106639fdf44360d3" class="i field">INSTANCE</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">an unmodifiable list using this collection&#39;s backing array.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<span class="r35 r t">T</span>&gt; <a id="c36972722b182648" href="../R/c36972722b182648.html" target="n" data-glyph="72,1" class="i method">ToRefList</a>()
+		{
+			<b>return</b> <b>new</b> <a href="#b47898a03c88279b" class="t constructor">RefList</a>&lt;<span class="r35 r t">T</span>&gt;(<a href="#e1e16f49f5b1cce6" class="i field">list</a>, <a href="#1665b12494ca60ad" class="i field">size</a>);
+		}
+
+		<b>public override string</b> <a id="0a3c6814e54eed66" href="../R/0a3c6814e54eed66.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+		{
+			<b>return</b> <a href="#c36972722b182648" class="i method">ToRefList</a>().<a href="#2a1c7736c7f37e6d" class="i method">ToString</a>();
+		}
+	}
+
+	<b>internal class</b> <a id="a28253d9def2495b" href="../R/a28253d9def2495b.html" target="n" data-glyph="2,0" class="t t">RefList</a> : <a href="#2cf7fd4f4c70fe9d" class="t t">RefList</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;
+	{
+		<span class="c">// Methods</span>
+		<b>public</b> <a id="639ecfd935522fb8" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">RefList</a>() : <a href="#b47898a03c88279b" class="k">base</a>(<b>new</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>[0], 0)
+		{
+		}
+	}
+	
+	
+}
+</pre></td></tr></table></div></body></html>

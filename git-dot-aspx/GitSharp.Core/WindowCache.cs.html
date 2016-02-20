@@ -1,0 +1,306 @@
+﻿<!DOCTYPE html>
+<html><head><title>WindowCache.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(297);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/WindowCache.cs" target="_top">WindowCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Google Inc.
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyrigth (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Caches slices of a </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> in memory for faster read access.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> The WindowCache serves as a Java based &quot;buffer cache&quot;, loading segments of a</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> into the JVM heap prior to use. As JGit often wants to do reads of</span>
+    <span class="c">///</span><span class="c"> only tiny slices of a file, the WindowCache tries to smooth out these tiny</span>
+    <span class="c">///</span><span class="c"> reads into larger block-sized IO operations.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>internal class</b> <a id="d914cae44569e9e3" href="R/d914cae44569e9e3.html" target="n" data-glyph="2,0" class="t t">WindowCache</a> : <a href="OffsetCache.cs.html#bf1665fcda70845b" class="t t">OffsetCache</a>&lt;<a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a>, <a href="#d914cae44569e9e3" class="t t">WindowCache</a>.<a href="#1af427db66b2191a" class="t t">WindowRef</a>&gt;
+    {
+        <b>private static volatile</b> <a href="#d914cae44569e9e3" class="t t">WindowCache</a> <a id="85ffa69626e7b148" href="R/85ffa69626e7b148.html" target="n" data-glyph="46,1" class="i field">_cache</a>;
+
+        <b>private readonly int</b> <a id="f81d58b07714ebd2" href="R/f81d58b07714ebd2.html" target="n" data-glyph="46,1" class="i field">_maxFiles</a>;
+        <b>private readonly long</b> <a id="c55baffe4aa51b6f" href="R/c55baffe4aa51b6f.html" target="n" data-glyph="46,1" class="i field">_maxBytes</a>;
+        <b>private readonly bool</b> <a id="41a8c4b044d7a6bb" href="R/41a8c4b044d7a6bb.html" target="n" data-glyph="46,1" class="i field">_memoryMap</a>;
+        <b>private readonly int</b> <a id="9b6d0eeabb0ae5e9" href="R/9b6d0eeabb0ae5e9.html" target="n" data-glyph="46,1" class="i field">_windowSizeShift</a>;
+        <b>private readonly int</b> <a id="bc5d30657ef06332" href="R/bc5d30657ef06332.html" target="n" data-glyph="46,1" class="i field">_windowSize</a>;
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#5fbf804243225a1e" class="t t">AtomicInteger</a> <a id="61929e8509c69e9a" href="R/61929e8509c69e9a.html" target="n" data-glyph="46,1" class="i field">_openFiles</a>;
+        <b>private readonly</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#2c4e412995336284" class="t t">AtomicLong</a> <a id="d5cec953a9c7aa60" href="R/d5cec953a9c7aa60.html" target="n" data-glyph="46,1" class="i field">_openBytes</a>;
+
+        <b>static</b> <a id="f0fe0d97d7b1450d" href="R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">WindowCache</a>()
+        {
+            <a href="#5c8a872e8bac58fe" class="i method">reconfigure</a>(<b>new</b> <a href="WindowCacheConfig.cs.html#b79d341459d7fd58" class="t constructor">WindowCacheConfig</a>());
+        }
+
+        <b>private static int</b> <a id="075a3a0bc2d6b582" href="R/075a3a0bc2d6b582.html" target="n" data-glyph="76,1" class="i method">Bits</a>(<b>int</b> <span id="r0 rd" class="r0 r">newSize</span>)
+        {
+            <b>if</b> (<span class="r0 r">newSize</span> &lt; 4096)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid window size&quot;</span>);
+            }
+
+            <b>if</b> (<span class="r0 r">newSize</span>.<a href="Util/Int32.cs.html#4e8437bdb01547b7" class="i method">BitCount</a>() != 1)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Window size must be power of 2&quot;</span>);
+            }
+
+            <b>return</b> <span class="r0 r">newSize</span>.<a href="Util/Int32.cs.html#64992c7995de4ca3" class="i method">NumberOfTrailingZeros</a>();
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Modify the configuration of the window cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The new configuration is applied immediately. If the new limits are</span>
+        <span class="c">///</span><span class="c"> smaller than what what is currently cached, older entries will be purged</span>
+        <span class="c">///</span><span class="c"> as soon as possible to allow the cache to meet the new limit.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">packedGitLimit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Maximum number of bytes to hold within this instance.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">packedGitWindowSize</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Number of bytes per window within the cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">packedGitMMAP</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True to enable use of mmap when creating windows.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">deltaBaseCacheLimit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Number of bytes to hold in the delta base cache.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        [<a href="@0@mscorlib/A.html#66ed4e142f4e14e7" class="t constructor">Obsolete</a>(<span class="s">&quot;Use WindowCache.reconfigure(WindowCacheConfig) instead.&quot;</span>)]
+        <b>public static void</b> <a id="b6bde9d8ffca04d7" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">reconfigure</a>(<b>int</b> <span id="r1 rd" class="r1 r">packedGitLimit</span>, <b>int</b> <span id="r2 rd" class="r2 r">packedGitWindowSize</span>, <b>bool</b> <span id="r3 rd" class="r3 r">packedGitMMAP</span>, <b>int</b> <span id="r4 rd" class="r4 r">deltaBaseCacheLimit</span>)
+        {
+            <a href="WindowCacheConfig.cs.html#7ccf4232b4c0baef" class="k">var</a> <span id="r5 rd" class="r5 r">c</span> = <b>new</b> <a href="WindowCacheConfig.cs.html#b79d341459d7fd58" class="t constructor">WindowCacheConfig</a>
+                        {
+                            <a href="WindowCacheConfig.cs.html#ff9b6952c06ab77e" class="i property">PackedGitLimit</a> = <span class="r1 r">packedGitLimit</span>,
+                            <a href="WindowCacheConfig.cs.html#894f169e77edd0d2" class="i property">PackedGitWindowSize</a> = <span class="r2 r">packedGitWindowSize</span>,
+                            <a href="WindowCacheConfig.cs.html#eeda789d28d8b52e" class="i property">PackedGitMMAP</a> = <span class="r3 r">packedGitMMAP</span>,
+                            <a href="WindowCacheConfig.cs.html#f9ee79b0516f4045" class="i property">DeltaBaseCacheLimit</a> = <span class="r4 r">deltaBaseCacheLimit</span>
+                        };
+            <a href="#5c8a872e8bac58fe" class="i method">reconfigure</a>(<span class="r5 r">c</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Modify the configuration of the window cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The new configuration is applied immediately. If the new limits are</span>
+        <span class="c">///</span><span class="c"> smaller than what what is currently cached, older entries will be purged</span>
+        <span class="c">///</span><span class="c"> as soon as possible to allow the cache to meet the new limit.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">cfg</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The new window cache configuration.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public static void</b> <a id="5c8a872e8bac58fe" href="R/5c8a872e8bac58fe.html" target="n" data-glyph="72,1" class="i method">reconfigure</a>(<a href="WindowCacheConfig.cs.html#7ccf4232b4c0baef" class="t t">WindowCacheConfig</a> <span id="r6 rd" class="r6 r">cfg</span>)
+        {
+            <a href="#d914cae44569e9e3" class="k">var</a> <span id="r7 rd" class="r7 r">newCache</span> = <b>new</b> <a href="#0dd8793f1383b10c" class="t constructor">WindowCache</a>(<span class="r6 r">cfg</span>);
+            <a href="#d914cae44569e9e3" class="t t">WindowCache</a> <span id="r8 rd" class="r8 r">oldCache</span> = <a href="#85ffa69626e7b148" class="i field">_cache</a>;
+
+            <b>if</b> (<span class="r8 r">oldCache</span> != <b>null</b>)
+            {
+                <span class="r8 r">oldCache</span>.<a href="OffsetCache.cs.html#e7f39fc02ecab103" class="i method">removeAll</a>();
+            }
+
+            <a href="#85ffa69626e7b148" class="i field">_cache</a> = <span class="r7 r">newCache</span>;
+
+            <a href="UnpackedObjectCache.cs.html#3625a455bac5bbf6" class="t t">UnpackedObjectCache</a>.<a href="UnpackedObjectCache.cs.html#fe701f6f172d5ab0" class="i method">Reconfigure</a>(<span class="r6 r">cfg</span>);
+        }
+
+        <b>internal static</b> <a href="#d914cae44569e9e3" class="t t">WindowCache</a> <a id="e2e394fdd5adb788" href="R/../../0000000000.html" target="n" data-glyph="104,1" class="i property">Instance</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#85ffa69626e7b148" class="i field">_cache</a>; }
+        }
+
+        <b>public static</b> <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <a id="d8d5f849927e5053" href="R/d8d5f849927e5053.html" target="n" data-glyph="72,1" class="i method">get</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r9 rd" class="r9 r">pack</span>, <b>long</b> <span id="r10 rd" class="r10 r">offset</span>)
+        {
+            <a href="#d914cae44569e9e3" class="t t">WindowCache</a> <span id="r11 rd" class="r11 r">c</span> = <a href="#85ffa69626e7b148" class="i field">_cache</a>;
+            <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <span id="r12 rd" class="r12 r">r</span> = <span class="r11 r">c</span>.<a href="OffsetCache.cs.html#b03188b09564a29c" class="i method">getOrLoad</a>(<span class="r9 r">pack</span>, <span class="r11 r">c</span>.<a href="#926325956b8dc1a2" class="i method">ToStart</a>(<span class="r10 r">offset</span>));
+            <b>if</b> (<span class="r11 r">c</span> != <a href="#85ffa69626e7b148" class="i field">_cache</a>)
+            {
+                <span class="c">// The cache was reconfigured while we were using the old one</span>
+                <span class="c">// to load this window. The window is still valid, but our</span>
+                <span class="c">// cache may think its still live. Ensure the window is removed</span>
+                <span class="c">// from the old cache so resources can be released.</span>
+                <span class="c">//</span>
+                <span class="r11 r">c</span>.<a href="OffsetCache.cs.html#e7f39fc02ecab103" class="i method">removeAll</a>();
+            }
+            <b>return</b> <span class="r12 r">r</span>;
+        }
+
+        <b>public static void</b> <a id="8c3eb0ff786f80cc" href="R/8c3eb0ff786f80cc.html" target="n" data-glyph="72,1" class="i method">Purge</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r13 rd" class="r13 r">pack</span>)
+        {
+            <a href="#85ffa69626e7b148" class="i field">_cache</a>.<a href="OffsetCache.cs.html#d72599e650bbf0af" class="i method">removeAll</a>(<span class="r13 r">pack</span>);
+        }
+
+        <b>private</b> <a id="0dd8793f1383b10c" href="R/0dd8793f1383b10c.html" target="n" data-glyph="76,1" class="i constructor">WindowCache</a>(<a href="WindowCacheConfig.cs.html#7ccf4232b4c0baef" class="t t">WindowCacheConfig</a> <span id="r14 rd" class="r14 r">cfg</span>)
+            : <a href="OffsetCache.cs.html#c6353ba7ef8a6da8" class="k">base</a>(<a href="#b898e421e88044ad" class="i method">TableSize</a>(<span class="r14 r">cfg</span>), <a href="#fa4056c6a7773cc5" class="i method">LockCount</a>(<span class="r14 r">cfg</span>))
+        {
+            <a href="#f81d58b07714ebd2" class="i field">_maxFiles</a> = <span class="r14 r">cfg</span>.<a href="WindowCacheConfig.cs.html#8a58cca3e787c515" class="i property">PackedGitOpenFiles</a>;
+            <a href="#c55baffe4aa51b6f" class="i field">_maxBytes</a> = <span class="r14 r">cfg</span>.<a href="WindowCacheConfig.cs.html#ff9b6952c06ab77e" class="i property">PackedGitLimit</a>;
+            <a href="#41a8c4b044d7a6bb" class="i field">_memoryMap</a> = <span class="r14 r">cfg</span>.<a href="WindowCacheConfig.cs.html#eeda789d28d8b52e" class="i property">PackedGitMMAP</a>;
+            <a href="#9b6d0eeabb0ae5e9" class="i field">_windowSizeShift</a> = <a href="#075a3a0bc2d6b582" class="i method">Bits</a>(<span class="r14 r">cfg</span>.<a href="WindowCacheConfig.cs.html#894f169e77edd0d2" class="i property">PackedGitWindowSize</a>);
+            <a href="#bc5d30657ef06332" class="i field">_windowSize</a> = 1 &lt;&lt; <a href="#9b6d0eeabb0ae5e9" class="i field">_windowSizeShift</a>;
+
+            <a href="#61929e8509c69e9a" class="i field">_openFiles</a> = <b>new</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#22d9e8b88d672a19" class="t constructor">AtomicInteger</a>();
+            <a href="#d5cec953a9c7aa60" class="i field">_openBytes</a> = <b>new</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#41e2779994211c24" class="t constructor">AtomicLong</a>();
+
+            <b>if</b> (<a href="#f81d58b07714ebd2" class="i field">_maxFiles</a> &lt; 1)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Open files must be &gt;= 1&quot;</span>);
+            }
+
+            <b>if</b> (<a href="#c55baffe4aa51b6f" class="i field">_maxBytes</a> &lt; <a href="#bc5d30657ef06332" class="i field">_windowSize</a>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Window size must be &lt; limit&quot;</span>);
+            }
+        }
+
+        <b>public int</b> <a id="937ba48b3497a453" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getOpenFiles</a>()
+        {
+            <b>return</b> <a href="#61929e8509c69e9a" class="i field">_openFiles</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+        }
+
+        <b>public long</b> <a id="3c4721d0867c88d9" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getOpenBytes</a>()
+        {
+            <b>return</b> <a href="#d5cec953a9c7aa60" class="i field">_openBytes</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+        }
+
+        <b>internal override int</b> <a id="f342686ae3f5e6d0" href="R/f342686ae3f5e6d0.html" target="n" data-glyph="74,1" class="i method">hash</a>(<b>int</b> <span id="r15 rd" class="r15 r">packHash</span>, <b>long</b> <span id="r16 rd" class="r16 r">position</span>)
+        {
+            <b>return</b> <span class="r15 r">packHash</span> + (<b>int</b>)((<b>ulong</b>)<span class="r16 r">position</span> &gt;&gt; <a href="#9b6d0eeabb0ae5e9" class="i field">_windowSizeShift</a>);
+        }
+
+        <b>internal override</b> <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <a id="8ab834b9a58c6d9e" href="R/8ab834b9a58c6d9e.html" target="n" data-glyph="74,1" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r17 rd" class="r17 r">pack</span>, <b>long</b> <span id="r18 rd" class="r18 r">offset</span>)
+        {
+            <b>if</b> (<span class="r17 r">pack</span>.<a href="PackFile.cs.html#2f4ede0c3f74e52b" class="i method">beginWindowCache</a>())
+            {
+                <a href="#61929e8509c69e9a" class="i field">_openFiles</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+            }
+            <b>try</b>
+            {
+                <b>if</b> (<a href="#41a8c4b044d7a6bb" class="i field">_memoryMap</a>)
+                {
+                    <b>return</b> <span class="r17 r">pack</span>.<a href="PackFile.cs.html#f60e0e94688a3960" class="i method">MemoryMappedByteWindow</a>(<span class="r18 r">offset</span>, <a href="#bc5d30657ef06332" class="i field">_windowSize</a>);
+                }
+
+                <b>return</b> <span class="r17 r">pack</span>.<a href="PackFile.cs.html#d3c78e1fa17ccc36" class="i method">Read</a>(<span class="r18 r">offset</span>, <a href="#bc5d30657ef06332" class="i field">_windowSize</a>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+            {
+                <a href="#b5a85fd2f4749dfe" class="i method">Close</a>(<span class="r17 r">pack</span>);
+                <b>throw</b>;
+            }
+        }
+
+        <b>internal override</b> <a href="#1af427db66b2191a" class="t t">WindowRef</a> <a id="9b15269a79b00920" href="R/9b15269a79b00920.html" target="n" data-glyph="74,1" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r19 rd" class="r19 r">p</span>, <b>long</b> <span id="r20 rd" class="r20 r">o</span>, <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <span id="r21 rd" class="r21 r">v</span>)
+        {
+            <a href="#1af427db66b2191a" class="k">var</a> <span id="r22 rd" class="r22 r">@ref</span> = <b>new</b> <a href="#3f64024871cc640f" class="t constructor">WindowRef</a>(<span class="r19 r">p</span>, <span class="r20 r">o</span>, <span class="r21 r">v</span>, <a href="OffsetCache.cs.html#c1b4acfdac8b93e1" class="i field">queue</a>);
+            <a href="#d5cec953a9c7aa60" class="i field">_openBytes</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#736013ce524afbe5" class="i method">addAndGet</a>(<span class="r22 r">@ref</span>.<a href="#180c48741f046d85" class="i property">Size</a>);
+            <b>return</b> <span class="r22 r">@ref</span>;
+        }
+
+        <b>internal override void</b> <a id="afb85cac7edd273b" href="R/afb85cac7edd273b.html" target="n" data-glyph="74,1" class="i method">clear</a>(<a href="#1af427db66b2191a" class="t t">WindowRef</a> <span id="r23 rd" class="r23 r">@ref</span>)
+        {
+            <a href="#d5cec953a9c7aa60" class="i field">_openBytes</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#736013ce524afbe5" class="i method">addAndGet</a>(-<span class="r23 r">@ref</span>.<a href="#180c48741f046d85" class="i property">Size</a>);
+            <a href="#b5a85fd2f4749dfe" class="i method">Close</a>(<span class="r23 r">@ref</span>.<a href="OffsetCache.cs.html#f1ba50aca8206142" class="i field">pack</a>);
+        }
+
+        <b>private void</b> <a id="b5a85fd2f4749dfe" href="R/b5a85fd2f4749dfe.html" target="n" data-glyph="76,1" class="i method">Close</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r24 rd" class="r24 r">pack</span>)
+        {
+            <b>if</b> (!<span class="r24 r">pack</span>.<a href="PackFile.cs.html#e2981dbe2c2b42c0" class="i method">endWindowCache</a>()) <b>return</b>;
+            <a href="#61929e8509c69e9a" class="i field">_openFiles</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#2dff7918197b9b16" class="i method">decrementAndGet</a>();
+        }
+
+        <b>internal override bool</b> <a id="0a5f84c934471e1d" href="R/0a5f84c934471e1d.html" target="n" data-glyph="74,1" class="i method">isFull</a>()
+        {
+            <b>return</b> <a href="#f81d58b07714ebd2" class="i field">_maxFiles</a> &lt; <a href="#61929e8509c69e9a" class="i field">_openFiles</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>() || <a href="#c55baffe4aa51b6f" class="i field">_maxBytes</a> &lt; <a href="#d5cec953a9c7aa60" class="i field">_openBytes</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+        }
+
+        <b>private long</b> <a id="926325956b8dc1a2" href="R/926325956b8dc1a2.html" target="n" data-glyph="76,1" class="i method">ToStart</a>(<b>long</b> <span id="r25 rd" class="r25 r">offset</span>)
+        {
+            <b>return</b> (<b>long</b>)((<b>ulong</b>)<span class="r25 r">offset</span> &gt;&gt; <a href="#9b6d0eeabb0ae5e9" class="i field">_windowSizeShift</a>) &lt;&lt; <a href="#9b6d0eeabb0ae5e9" class="i field">_windowSizeShift</a>;
+        }
+
+        <b>private static int</b> <a id="b898e421e88044ad" href="R/b898e421e88044ad.html" target="n" data-glyph="76,1" class="i method">TableSize</a>(<a href="WindowCacheConfig.cs.html#7ccf4232b4c0baef" class="t t">WindowCacheConfig</a> <span id="r26 rd" class="r26 r">cfg</span>)
+        {
+            <b>int</b> <span id="r27 rd" class="r27 r">wsz</span> = <span class="r26 r">cfg</span>.<a href="WindowCacheConfig.cs.html#894f169e77edd0d2" class="i property">PackedGitWindowSize</a>;
+            <b>long</b> <span id="r28 rd" class="r28 r">limit</span> = <span class="r26 r">cfg</span>.<a href="WindowCacheConfig.cs.html#ff9b6952c06ab77e" class="i property">PackedGitLimit</a>;
+            
+            <b>if</b> (<span class="r27 r">wsz</span> &lt;= 0)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid window size&quot;</span>);
+            }
+
+            <b>if</b> (<span class="r28 r">limit</span> &lt; <span class="r27 r">wsz</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Window size must be &lt; limit&quot;</span>);
+            }
+
+            <b>return</b> (<b>int</b>) <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(5*(<span class="r28 r">limit</span>/<span class="r27 r">wsz</span>)/2, 2000000000);
+        }
+
+        <b>private static int</b> <a id="fa4056c6a7773cc5" href="R/fa4056c6a7773cc5.html" target="n" data-glyph="76,1" class="i method">LockCount</a>(<a href="WindowCacheConfig.cs.html#7ccf4232b4c0baef" class="t t">WindowCacheConfig</a> <span id="r29 rd" class="r29 r">cfg</span>)
+        {
+            <b>return</b> <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(<span class="r29 r">cfg</span>.<a href="WindowCacheConfig.cs.html#8a58cca3e787c515" class="i property">PackedGitOpenFiles</a>, 32);
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+        <b>internal class</b> <a id="1af427db66b2191a" href="R/1af427db66b2191a.html" target="n" data-glyph="2,1" class="t t">WindowRef</a> : <a href="OffsetCache.cs.html#bf1665fcda70845b" class="t t">OffsetCache</a>&lt;<a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a>, <a href="#d914cae44569e9e3" class="t t">WindowCache</a>.<a href="#1af427db66b2191a" class="t t">WindowRef</a>&gt;.<a href="OffsetCache.cs.html#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a>&gt;
+        {
+            <b>public</b> <a id="3f64024871cc640f" href="R/3f64024871cc640f.html" target="n" data-glyph="72,2" class="i constructor">WindowRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r30 rd" class="r30 r">pack</span>, <b>long</b> <span id="r31 rd" class="r31 r">position</span>, <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <span id="r32 rd" class="r32 r">v</span>, <a href="@0@mscorlib/A.html#f7cdfd0f848ca249" class="t t">Queue</a> <span id="r33 rd" class="r33 r">queue</span>)
+                : <a href="OffsetCache.cs.html#a622209deb5f6be5" class="k">base</a>(<span class="r30 r">pack</span>, <span class="r31 r">position</span>, <span class="r32 r">v</span>, <span class="r33 r">queue</span>)
+            {
+                <a href="#180c48741f046d85" class="i property">Size</a> = <span class="r32 r">v</span>.<a href="ByteWindow.cs.html#ee45a032ba6ef5d5" class="i property">Size</a>;
+            }
+
+            <b>public int</b> <a id="180c48741f046d85" href="R/180c48741f046d85.html" target="n" data-glyph="102,2" class="i property">Size</a> { <b>get</b>; <b>private set</b>; }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+    }
+}</pre></td></tr></table></div></body></html>

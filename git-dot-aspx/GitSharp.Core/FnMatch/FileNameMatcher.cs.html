@@ -1,0 +1,413 @@
+﻿<!DOCTYPE html>
+<html><head><title>FileNameMatcher.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(404);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/FnMatch/FileNameMatcher.cs" target="_top">FnMatch\FileNameMatcher.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Florian Köberle &lt;florianskarten@web.de&gt;
+ * Copyright (C) 2009, Adriano Machado &lt;adriano.m.machado@hotmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>.<span class="i n">RegularExpressions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">FnMatch</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This class can be used to match filenames against fnmatch like patterns. </span>
+	<span class="c">///</span><span class="c"> It is not thread save.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> Supported are the wildcard characters * and ? and groups with:</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c"> characters e.g. [abc]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c"> ranges e.g. [a-z]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c"> the following character classes</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:alnum:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:alpha:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:blank:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:cntrl:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:digit:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:graph:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:lower:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:print:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:punct:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:space:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:upper:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:word:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">[:xdigit:]</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> e. g. [[:xdigit:]] </span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public sealed class</b> <a id="7e6f19984f20d333" href="../R/7e6f19984f20d333.html" target="n" data-glyph="0,0" class="t t">FileNameMatcher</a>
+	{
+		<b>internal static readonly</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <a id="31c9e6247daf94da" href="../R/31c9e6247daf94da.html" target="n" data-glyph="44,1" class="i field">EmptyHeadList</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;();
+		<b>private static readonly</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt; <a id="d468b12bf70c30b4" href="../R/d468b12bf70c30b4.html" target="n" data-glyph="46,1" class="i field">EmptyAbstractHeadList</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt;();
+
+		<b>private const string</b> <a id="e0433185eeb5ba24" href="../R/e0433185eeb5ba24.html" target="n" data-glyph="10,1" class="i field">CharacterClassStartPattern</a> = <span class="s">&quot;\\[[.:=]&quot;</span>;
+
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <a id="d73e29a986e534a0" href="../R/d73e29a986e534a0.html" target="n" data-glyph="46,1" class="i field">_headsStartValue</a>;
+		<b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <a id="d6c68ccbecc4da53" href="../R/d6c68ccbecc4da53.html" target="n" data-glyph="46,1" class="i field">_heads</a>;
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d6ecbf0277b8d141" class="i method">ExtendStringToMatchByOneCharacter</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> needs a list for the</span>
+		<span class="c">///</span><span class="c"> new heads, allocating a new array would be bad for the performance, as</span>
+		<span class="c">///</span><span class="c"> the method gets called very often.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <a id="6e4eb77088f974ef" href="../R/6e4eb77088f974ef.html" target="n" data-glyph="46,1" class="i field">_listForLocalUseage</a>;
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">headsStartValue</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	Must be a list which will never be modified.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>private</b> <a id="6cc90266c2567960" href="../R/6cc90266c2567960.html" target="n" data-glyph="76,1" class="i constructor">FileNameMatcher</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r0 rd" class="r0 r">headsStartValue</span>)
+			: <a href="#4466120b6db51f19" class="k">this</a>(<span class="r0 r">headsStartValue</span>, <span class="r0 r">headsStartValue</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">headsStartValue</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">must be a list which will never be modified.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">heads</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a list which will be cloned and then used as current head list. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>private</b> <a id="4466120b6db51f19" href="../R/4466120b6db51f19.html" target="n" data-glyph="76,1" class="i constructor">FileNameMatcher</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r1 rd" class="r1 r">headsStartValue</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r2 rd" class="r2 r">heads</span>)
+		{
+			<a href="#d73e29a986e534a0" class="i field">_headsStartValue</a> = <span class="r1 r">headsStartValue</span>;
+			<a href="#d6c68ccbecc4da53" class="i field">_heads</a> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;(<span class="r2 r">heads</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+			<a href="#d6c68ccbecc4da53" class="i field">_heads</a>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<span class="r2 r">heads</span>);
+			<a href="#6e4eb77088f974ef" class="i field">_listForLocalUseage</a> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;(<span class="r2 r">heads</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">patternString</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">must contain a pattern which fnmatch would accept.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">invalidWildgetCharacter</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if this parameter isn&#39;t null then this character will not</span>
+		<span class="c">///</span><span class="c"> match at wildcards(* and ? are wildcards). </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../Exceptions/InvalidPatternException.cs.html#a9ed5cdd4098762a" class="t t">InvalidPatternException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the patternString contains a invalid fnmatch pattern.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="02933eb0258f44ac" href="../R/02933eb0258f44ac.html" target="n" data-glyph="72,1" class="i constructor">FileNameMatcher</a>(<b>string</b> <span id="r3 rd" class="r3 r">patternString</span>, <b>char</b>? <span id="r4 rd" class="r4 r">invalidWildgetCharacter</span>)
+			: <a href="#6cc90266c2567960" class="k">this</a>(<a href="#f366fb543e1ebbf9" class="i method">CreateHeadsStartValues</a>(<span class="r3 r">patternString</span>, <span class="r4 r">invalidWildgetCharacter</span>))
+		{
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A copy constructor which creates a new </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7e6f19984f20d333" class="t t">FileNameMatcher</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> with the</span>
+		<span class="c">///</span><span class="c"> same state and Reset point like </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">other</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">other</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> another </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7e6f19984f20d333" class="t t">FileNameMatcher</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="e4d1e7454af87892" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">FileNameMatcher</a>(<a href="#7e6f19984f20d333" class="t t">FileNameMatcher</a> <span id="r5 rd" class="r5 r">other</span>)
+			: <a href="#4466120b6db51f19" class="k">this</a>(<span class="r5 r">other</span>.<a href="#d73e29a986e534a0" class="i field">_headsStartValue</a>, <span class="r5 r">other</span>.<a href="#d6c68ccbecc4da53" class="i field">_heads</a>)
+		{
+			<b>if</b> (<span class="r5 r">other</span> == <b>null</b>)
+				<b>throw</b> <b>new</b> <span class="i n">System</span>.<a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a> (<span class="s">&quot;other&quot;</span>);
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <a id="f366fb543e1ebbf9" href="../R/f366fb543e1ebbf9.html" target="n" data-glyph="76,1" class="i method">CreateHeadsStartValues</a>(<b>string</b> <span id="r6 rd" class="r6 r">patternString</span>, <b>char</b>? <span id="r7 rd" class="r7 r">invalidWildgetCharacter</span>)
+		{
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt; <span id="r8 rd" class="r8 r">allHeads</span> = <a href="#6407dbccf9a756aa" class="i method">ParseHeads</a>(<span class="r6 r">patternString</span>, <span class="r7 r">invalidWildgetCharacter</span>);
+
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r9 rd" class="r9 r">nextHeadsSuggestion</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;(2) { <a href="LastHead.cs.html#eac9bb7a71ed30b7" class="t t">LastHead</a>.<a href="LastHead.cs.html#900320cd36f668c1" class="i field">Instance</a> };
+			<b>for</b> (<b>int</b> <span id="r10 rd" class="r10 r">i</span> = <span class="r8 r">allHeads</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> - 1; <span class="r10 r">i</span> &gt;= 0; <span class="r10 r">i</span>--)
+			{
+				<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a> <span id="r11 rd" class="r11 r">head</span> = <span class="r8 r">allHeads</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r10 r">i</span>];
+
+				<span class="c">// explanation:</span>
+				<span class="c">// a and * of the pattern &quot;a*b&quot;</span>
+				<span class="c">// need *b as newHeads</span>
+				<span class="c">// that&#39;s why * extends the list for it self and it&#39;s left neighbor.</span>
+				<b>if</b> (<span class="r11 r">head</span>.<a href="AbstractHead.cs.html#66c10fa1061a0831" class="i property">IsStar</a>)
+				{
+					<span class="r9 r">nextHeadsSuggestion</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<span class="r11 r">head</span>);
+					<span class="r11 r">head</span>.<a href="AbstractHead.cs.html#71b44594a4412a7e" class="i method">setNewHeads</a>(<span class="r9 r">nextHeadsSuggestion</span>);
+				}
+				<b>else</b>
+				{
+					<span class="r11 r">head</span>.<a href="AbstractHead.cs.html#71b44594a4412a7e" class="i method">setNewHeads</a>(<span class="r9 r">nextHeadsSuggestion</span>);
+					<span class="r9 r">nextHeadsSuggestion</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;(2) { <span class="r11 r">head</span> };
+				}
+			}
+
+			<b>return</b> <span class="r9 r">nextHeadsSuggestion</span>;
+		}
+
+		<b>private static int</b> <a id="56bfac476796c6ca" href="../R/56bfac476796c6ca.html" target="n" data-glyph="76,1" class="i method">FindGroupEnd</a>(<b>int</b> <span id="r12 rd" class="r12 r">indexOfStartBracket</span>, <b>string</b> <span id="r13 rd" class="r13 r">pattern</span>)
+		{
+			<b>int</b> <span id="r14 rd" class="r14 r">firstValidCharClassIndex</span> = <span class="r12 r">indexOfStartBracket</span> + 1;
+			<b>int</b> <span id="r15 rd" class="r15 r">firstValidEndBracketIndex</span> = <span class="r12 r">indexOfStartBracket</span> + 2;
+
+			<b>if</b> (<span class="r12 r">indexOfStartBracket</span> + 1 &gt;= <span class="r13 r">pattern</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="../Exceptions/NoClosingBracketException.cs.html#a2087ca37dc2f9dd" class="t constructor">NoClosingBracketException</a>(<span class="r12 r">indexOfStartBracket</span>, <span class="s">&quot;[&quot;</span>, <span class="s">&quot;]&quot;</span>, <span class="r13 r">pattern</span>);
+			}
+
+			<b>if</b> (<span class="r13 r">pattern</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r14 r">firstValidCharClassIndex</span>] == <span class="s">&#39;!&#39;</span>)
+			{
+				<span class="r14 r">firstValidCharClassIndex</span>++;
+				<span class="r15 r">firstValidEndBracketIndex</span>++;
+			}
+
+			<b>int</b> <span id="r16 rd" class="r16 r">groupEnd</span> = -1;
+			<b>do</b>
+			{
+				<b>int</b> <span id="r17 rd" class="r17 r">possibleGroupEnd</span> = <span class="r13 r">pattern</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;]&#39;</span>, <span class="r15 r">firstValidEndBracketIndex</span>);
+				<b>if</b> (<span class="r17 r">possibleGroupEnd</span> == -1)
+				{
+					<b>throw</b> <b>new</b> <a href="../Exceptions/NoClosingBracketException.cs.html#a2087ca37dc2f9dd" class="t constructor">NoClosingBracketException</a>(<span class="r12 r">indexOfStartBracket</span>, <span class="s">&quot;[&quot;</span>, <span class="s">&quot;]&quot;</span>, <span class="r13 r">pattern</span>);
+				}
+
+				<a href="@0@System/A.html#d8a604d3af777b1c" class="t t">Match</a> <span id="r18 rd" class="r18 r">charClassStartMatch</span> = <a href="@0@System/A.html#bbe3b2eb80ae5526" class="t t">Regex</a>.<a href="@0@System/A.html#c5bd3cd0e4ed488f" class="i method">Match</a>(<span class="r13 r">pattern</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r14 r">firstValidCharClassIndex</span>), <a href="#e0433185eeb5ba24" class="i field">CharacterClassStartPattern</a>);
+
+				<b>bool</b> <span id="r19 rd" class="r19 r">foundCharClass</span> = <span class="r18 r">charClassStartMatch</span>.<a href="@0@System/A.html#6e96d62f437bdbb7" class="i property">Success</a>;
+				<b>int</b> <span id="r20 rd" class="r20 r">charClassStartMatchIndex</span> = <span class="r18 r">charClassStartMatch</span>.<a href="@0@System/A.html#d33b0131e21561d5" class="i property">Index</a> + <span class="r14 r">firstValidCharClassIndex</span>;
+
+				<b>if</b> (<span class="r19 r">foundCharClass</span> &amp;&amp; <span class="r20 r">charClassStartMatchIndex</span> &lt; <span class="r17 r">possibleGroupEnd</span>)
+				{
+					<b>string</b> <span id="r21 rd" class="r21 r">classStart</span> = <span class="r18 r">charClassStartMatch</span>.<a href="@0@System/A.html#882064d8e42ed216" class="i property">Groups</a>[0].<a href="@0@System/A.html#5cf0d171c91c6cc1" class="i property">Value</a>;
+					<b>string</b> <span id="r22 rd" class="r22 r">classEnd</span> = <span class="r21 r">classStart</span>[1] + <span class="s">&quot;]&quot;</span>;
+
+					<b>int</b> <span id="r23 rd" class="r23 r">classStartIndex</span> = <span class="r20 r">charClassStartMatchIndex</span>;
+					<b>int</b> <span id="r24 rd" class="r24 r">classEndIndex</span> = <span class="r13 r">pattern</span>.<a href="@0@mscorlib/A.html#458eb43a8be97cd7" class="i method">IndexOf</a>(<span class="r22 r">classEnd</span>, <span class="r23 r">classStartIndex</span> + 2);
+
+					<b>if</b> (<span class="r24 r">classEndIndex</span> == -1)
+					{
+						<b>throw</b> <b>new</b> <a href="../Exceptions/NoClosingBracketException.cs.html#a2087ca37dc2f9dd" class="t constructor">NoClosingBracketException</a>(<span class="r23 r">classStartIndex</span>, <span class="r21 r">classStart</span>, <span class="r22 r">classEnd</span>, <span class="r13 r">pattern</span>);
+					}
+
+					<span class="r14 r">firstValidCharClassIndex</span> = <span class="r24 r">classEndIndex</span> + 2;
+					<span class="r15 r">firstValidEndBracketIndex</span> = <span class="r14 r">firstValidCharClassIndex</span>;
+				}
+				<b>else</b>
+				{
+					<span class="r16 r">groupEnd</span> = <span class="r17 r">possibleGroupEnd</span>;
+				}
+			} <b>while</b> (<span class="r16 r">groupEnd</span> == -1);
+
+			<b>return</b> <span class="r16 r">groupEnd</span>;
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt; <a id="6407dbccf9a756aa" href="../R/6407dbccf9a756aa.html" target="n" data-glyph="76,1" class="i method">ParseHeads</a>(<b>string</b> <span id="r25 rd" class="r25 r">pattern</span>, <b>char</b>? <span id="r26 rd" class="r26 r">invalidWildgetCharacter</span>)
+		{
+			<b>if</b> (<b>string</b>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r25 r">pattern</span>))
+			{
+				<b>return</b> <a href="#d468b12bf70c30b4" class="i field">EmptyAbstractHeadList</a>;
+			}
+
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r27 rd" class="r27 r">heads</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt;();
+			<b>int</b> <span id="r28 rd" class="r28 r">currentIndex</span> = 0;
+
+            <b>while</b> (<span class="r28 r">currentIndex</span> &lt; <span class="r25 r">pattern</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+			{
+				<b>int</b> <span id="r29 rd" class="r29 r">groupStart</span> = <span class="r25 r">pattern</span>.<a href="@0@mscorlib/A.html#a3e563d9d6528abf" class="i method">IndexOf</a>(<span class="s">&#39;[&#39;</span>, <span class="r28 r">currentIndex</span>);
+				<b>if</b> (<span class="r29 r">groupStart</span> == -1)
+				{
+					<b>string</b> <span id="r30 rd" class="r30 r">patternPart</span> = <span class="r25 r">pattern</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r28 r">currentIndex</span>);
+					<span class="r27 r">heads</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<a href="#efd5918b9315d106" class="i method">CreateSimpleHeads</a>(<span class="r30 r">patternPart</span>, <span class="r26 r">invalidWildgetCharacter</span>));
+					<span class="r28 r">currentIndex</span> = <span class="r25 r">pattern</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>;
+				}
+				<b>else</b>
+				{
+					<b>string</b> <span id="r31 rd" class="r31 r">patternPart</span> = <span class="r25 r">pattern</span>.<a href="../Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(<span class="r28 r">currentIndex</span>, <span class="r29 r">groupStart</span>);
+					<span class="r27 r">heads</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<a href="#efd5918b9315d106" class="i method">CreateSimpleHeads</a>(<span class="r31 r">patternPart</span>, <span class="r26 r">invalidWildgetCharacter</span>));
+
+                    <b>int</b> <span id="r32 rd" class="r32 r">groupEnd</span> = <a href="#56bfac476796c6ca" class="i method">FindGroupEnd</a>(<span class="r29 r">groupStart</span>, <span class="r25 r">pattern</span>);
+					<b>string</b> <span id="r33 rd" class="r33 r">groupPart</span> = <span class="r25 r">pattern</span>.<a href="../Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(<span class="r29 r">groupStart</span> + 1, <span class="r32 r">groupEnd</span>);
+					<span class="r27 r">heads</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="GroupHead.cs.html#96f788767db5711d" class="t constructor">GroupHead</a>(<span class="r33 r">groupPart</span>, <span class="r25 r">pattern</span>));
+					<span class="r28 r">currentIndex</span> = <span class="r32 r">groupEnd</span> + 1;
+				}
+			}
+
+			<b>return</b> <span class="r27 r">heads</span>;
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt; <a id="efd5918b9315d106" href="../R/efd5918b9315d106.html" target="n" data-glyph="76,1" class="i method">CreateSimpleHeads</a>(<b>string</b> <span id="r34 rd" class="r34 r">patternPart</span>, <b>char</b>? <span id="r35 rd" class="r35 r">invalidWildgetCharacter</span>)
+		{
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt; <span id="r36 rd" class="r36 r">heads</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a>&gt;(<span class="r34 r">patternPart</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+
+			<b>for</b> (<b>int</b> <span id="r37 rd" class="r37 r">i</span> = 0; <span class="r37 r">i</span> &lt; <span class="r34 r">patternPart</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; <span class="r37 r">i</span>++)
+			{
+				<a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a> <span id="r38 rd" class="r38 r">head</span>;
+
+				<b>char</b> <span id="r39 rd" class="r39 r">c</span> = <span class="r34 r">patternPart</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r37 r">i</span>];
+				<b>switch</b> (<span class="r39 r">c</span>)
+				{
+					<b>case</b> <span class="s">&#39;*&#39;</span>:
+						<span class="r38 r">head</span> = <a href="#3ec9bc3d10fa8bd8" class="i method">CreateWildCardHead</a>(<span class="r35 r">invalidWildgetCharacter</span>, <b>true</b>);
+						<span class="r36 r">heads</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<span class="r38 r">head</span>);
+						<b>break</b>;
+
+					<b>case</b> <span class="s">&#39;?&#39;</span>:
+						<span class="r38 r">head</span> = <a href="#3ec9bc3d10fa8bd8" class="i method">CreateWildCardHead</a>(<span class="r35 r">invalidWildgetCharacter</span>, <b>false</b>);
+						<span class="r36 r">heads</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<span class="r38 r">head</span>);
+						<b>break</b>;
+
+					<b>default</b>:
+						<span class="r38 r">head</span> = <b>new</b> <a href="CharacterHead.cs.html#6934b4bd4bab6e38" class="t constructor">CharacterHead</a>(<span class="r39 r">c</span>);
+						<span class="r36 r">heads</span>.<a href="@0@mscorlib/A.html#a9319db8c62ae453" class="i method">Add</a>(<span class="r38 r">head</span>);
+						<b>break</b>;
+				}
+			}
+
+			<b>return</b> <span class="r36 r">heads</span>;
+		}
+
+		<b>private static</b> <a href="AbstractHead.cs.html#b3073e4e152c3ddb" class="t t">AbstractHead</a> <a id="3ec9bc3d10fa8bd8" href="../R/3ec9bc3d10fa8bd8.html" target="n" data-glyph="76,1" class="i method">CreateWildCardHead</a>(<b>char</b>? <span id="r40 rd" class="r40 r">invalidWildgetCharacter</span>, <b>bool</b> <span id="r41 rd" class="r41 r">star</span>)
+		{
+			<b>if</b> (<span class="r40 r">invalidWildgetCharacter</span> != <b>null</b>)
+			{
+				<b>return</b> <b>new</b> <a href="RestrictedWildCardHead.cs.html#9a5fcae01c5a78c2" class="t constructor">RestrictedWildCardHead</a>(<span class="r40 r">invalidWildgetCharacter</span>.<a href="@0@mscorlib/A.html#7b38d1fa76071c95" class="i property">Value</a>, <span class="r41 r">star</span>);
+			}
+
+			<b>return</b> <b>new</b> <a href="WildCardHead.cs.html#a58a9555c7536694" class="t constructor">WildCardHead</a>(<span class="r41 r">star</span>);
+		}
+
+		<b>private void</b> <a id="d6ecbf0277b8d141" href="../R/d6ecbf0277b8d141.html" target="n" data-glyph="76,1" class="i method">ExtendStringToMatchByOneCharacter</a>(<b>char</b> <span id="r42 rd" class="r42 r">c</span>)
+		{
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r43 rd" class="r43 r">newHeads</span> = <a href="#6e4eb77088f974ef" class="i field">_listForLocalUseage</a>;
+			<span class="r43 r">newHeads</span>.<a href="@0@mscorlib/A.html#ca7bce81a50b0aeb" class="i method">Clear</a>();
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r44 rd" class="r44 r">lastAddedHeads</span> = <b>null</b>;
+			<b>for</b> (<b>int</b> <span id="r45 rd" class="r45 r">i</span> = 0; <span class="r45 r">i</span> &lt; <a href="#d6c68ccbecc4da53" class="i field">_heads</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r45 r">i</span>++)
+			{
+				<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a> <span id="r46 rd" class="r46 r">head</span> = <a href="#d6c68ccbecc4da53" class="i field">_heads</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r45 r">i</span>];
+				<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt; <span id="r47 rd" class="r47 r">headsToAdd</span> = <span class="r46 r">head</span>.<a href="IHead.cs.html#c35a53fa44031448" class="i method">GetNextHeads</a>(<span class="r42 r">c</span>);
+
+				<span class="c">// Why the next performance optimization isn&#39;t wrong:</span>
+				<span class="c">// Some times two heads return the very same list.</span>
+				<span class="c">// We save future effort if we don&#39;t add these heads again.</span>
+				<span class="c">// This is the case with the heads &quot;a&quot; and &quot;*&quot; of &quot;a*b&quot; which</span>
+				<span class="c">// both can return the list [&quot;*&quot;,&quot;b&quot;]</span>
+				<b>if</b> (<span class="r47 r">headsToAdd</span> != <span class="r44 r">lastAddedHeads</span>)
+				{
+					<span class="r43 r">newHeads</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<span class="r47 r">headsToAdd</span>);
+					<span class="r44 r">lastAddedHeads</span> = <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;(<span class="r47 r">headsToAdd</span>);
+				}
+			}
+
+			<a href="#6e4eb77088f974ef" class="i field">_listForLocalUseage</a> = <a href="#d6c68ccbecc4da53" class="i field">_heads</a>;
+			<a href="#d6c68ccbecc4da53" class="i field">_heads</a> = <span class="r43 r">newHeads</span>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r48 r">stringToMatch</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Extends the string which is matched against the patterns of this class.</span>
+		<span class="c">///</span><span class="c">  </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="dacbaf941f1066d3" href="../R/dacbaf941f1066d3.html" target="n" data-glyph="72,1" class="i method">Append</a>(<b>string</b> <span id="r48 rd" class="r48 r">stringToMatch</span>)
+		{
+			<b>if</b> (<span class="r48 r">stringToMatch</span> == <b>null</b>)
+				<b>throw</b> <b>new</b> <span class="i n">System</span>.<a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a> (<span class="s">&quot;stringToMatch&quot;</span>);
+			
+			<b>for</b> (<b>int</b> <span id="r49 rd" class="r49 r">i</span> = 0; <span class="r49 r">i</span> &lt; <span class="r48 r">stringToMatch</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; <span class="r49 r">i</span>++)
+			{
+				<b>char</b> <span id="r50 rd" class="r50 r">c</span> = <span class="r48 r">stringToMatch</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r49 r">i</span>];
+				<a href="#d6ecbf0277b8d141" class="i method">ExtendStringToMatchByOneCharacter</a>(<span class="r50 r">c</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Resets this matcher to it&#39;s state right After construction.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="b9059dcc4065719a" href="../R/b9059dcc4065719a.html" target="n" data-glyph="72,1" class="i method">Reset</a>()
+		{
+			<a href="#d6c68ccbecc4da53" class="i field">_heads</a>.<a href="@0@mscorlib/A.html#ca7bce81a50b0aeb" class="i method">Clear</a>();
+			<a href="#d6c68ccbecc4da53" class="i field">_heads</a>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<a href="#d73e29a986e534a0" class="i field">_headsStartValue</a>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7e6f19984f20d333" class="t t">FileNameMatcher</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> instance which uses the same pattern</span>
+		<span class="c">///</span><span class="c">	like this matcher, but has the current state of this matcher as</span>
+		<span class="c">///</span><span class="c">	Reset and start point.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="#7e6f19984f20d333" class="t t">FileNameMatcher</a> <a id="088f1c1cfc7f0cbe" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">CreateMatcherForSuffix</a>()
+		{
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r51 rd" class="r51 r">copyOfHeads</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a>&gt;(<a href="#d6c68ccbecc4da53" class="i field">_heads</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>);
+			<span class="r51 r">copyOfHeads</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<a href="#d6c68ccbecc4da53" class="i field">_heads</a>);
+			<b>return</b> <b>new</b> <a href="#6cc90266c2567960" class="t constructor">FileNameMatcher</a>(<span class="r51 r">copyOfHeads</span>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> True, if the string currently being matched does match.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="cc448e77f1172fd3" href="../R/cc448e77f1172fd3.html" target="n" data-glyph="72,1" class="i method">IsMatch</a>()
+		{
+			<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="k">var</a> <span id="r52 rd" class="r52 r">reverseList</span> = <a href="@0@System.Core/A.html#577032c8811e20d3" class="t t">Enumerable</a>.<a href="@0@System.Core/A.html#3af306c560f8c669" class="i method">Reverse</a>(<a href="#d6c68ccbecc4da53" class="i field">_heads</a>);
+
+			<b>foreach</b> (<a href="IHead.cs.html#48e81006aa1fd324" class="t t">IHead</a> <span id="r53 rd" class="r53 r">head</span> <b>in</b> <span class="r52 r">reverseList</span>)
+			{
+				<b>if</b> (<a href="@0@mscorlib/A.html#4d607d6d56a93c7e" class="i method">ReferenceEquals</a>(<span class="r53 r">head</span>, <a href="LastHead.cs.html#eac9bb7a71ed30b7" class="t t">LastHead</a>.<a href="LastHead.cs.html#900320cd36f668c1" class="i field">Instance</a>))
+				{
+					<b>return true</b>;
+				}
+			}
+
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> False, if the string being matched will not match when the string gets extended.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="82062e1a2199b873" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">CanAppendMatch</a>()
+		{
+			<b>for</b> (<b>int</b> <span id="r54 rd" class="r54 r">i</span> = 0; <span class="r54 r">i</span> &lt; <a href="#d6c68ccbecc4da53" class="i field">_heads</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r54 r">i</span>++)
+			{
+				<b>if</b> (!<a href="@0@mscorlib/A.html#4d607d6d56a93c7e" class="i method">ReferenceEquals</a>(<a href="#d6c68ccbecc4da53" class="i field">_heads</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r54 r">i</span>], <a href="LastHead.cs.html#eac9bb7a71ed30b7" class="t t">LastHead</a>.<a href="LastHead.cs.html#900320cd36f668c1" class="i field">Instance</a>))
+				{
+					<b>return true</b>;
+				}
+			}
+
+			<b>return false</b>;
+		}
+	}
+}</pre></td></tr></table></div></body></html>

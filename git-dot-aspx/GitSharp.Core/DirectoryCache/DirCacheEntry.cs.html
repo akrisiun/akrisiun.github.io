@@ -1,0 +1,584 @@
+﻿<!DOCTYPE html>
+<html><head><title>DirCacheEntry.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(575);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/DirectoryCache/DirCacheEntry.cs" target="_top">DirectoryCache\DirCacheEntry.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">DirectoryCache</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> A single file (or stage of a file) in a </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DirCache.cs.html#16e3752ca8ac126c" class="t t">DirCache</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> An entry represents exactly one stage of a file. If a file path is unmerged</span>
+    <span class="c">///</span><span class="c"> then multiple DirCacheEntry instances may appear for the same path name.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="67251d8fe8f4870f" href="../R/67251d8fe8f4870f.html" target="n" data-glyph="0,0" class="t t">DirCacheEntry</a>
+    {
+        <b>private static readonly byte</b>[] <a id="ea227eebafd27b3a" href="../R/ea227eebafd27b3a.html" target="n" data-glyph="46,1" class="i field">NullPad</a> = <b>new</b> <b>byte</b>[8];
+
+        <span class="c">/**</span><span class="c"> The standard (fully merged) stage for an entry. </span><span class="c">*/</span>
+        <b>public const int</b> <a id="ad37d0b747e259e3" href="../R/ad37d0b747e259e3.html" target="n" data-glyph="6,1" class="i field">STAGE_0</a> = 0;
+
+        <span class="c">/**</span><span class="c"> The base tree revision for an entry. </span><span class="c">*/</span>
+        <b>public const int</b> <a id="7f8c5d2cf694fdfb" href="../R/7f8c5d2cf694fdfb.html" target="n" data-glyph="6,1" class="i field">STAGE_1</a> = 1;
+
+        <span class="c">/**</span><span class="c"> The first tree revision (usually called &quot;ours&quot;). </span><span class="c">*/</span>
+        <b>public const int</b> <a id="4a74a36083d26162" href="../R/4a74a36083d26162.html" target="n" data-glyph="6,1" class="i field">STAGE_2</a> = 2;
+
+        <span class="c">/**</span><span class="c"> The second tree revision (usually called &quot;theirs&quot;). </span><span class="c">*/</span>
+        <b>public const int</b> <a id="38d81669ebb184d3" href="../R/38d81669ebb184d3.html" target="n" data-glyph="6,1" class="i field">STAGE_3</a> = 3;
+
+        <span class="c">// private const  int P_CTIME = 0;</span>
+        <span class="c">// private const  int P_CTIME_NSEC = 4;</span>
+        <b>private const int</b> <a id="ab20d2ebcdc634ab" href="../R/ab20d2ebcdc634ab.html" target="n" data-glyph="10,1" class="i field">PMtime</a> = 8;
+        <span class="c">// private const  int P_MTIME_NSEC = 12;</span>
+        <span class="c">// private const  int P_DEV = 16;</span>
+        <span class="c">// private const  int P_INO = 20;</span>
+        <b>private const int</b> <a id="abfd998aded8265e" href="../R/abfd998aded8265e.html" target="n" data-glyph="10,1" class="i field">PMode</a> = 24;
+        <span class="c">// private const  int P_UID = 28;</span>
+        <span class="c">// private const  int P_GID = 32;</span>
+        <b>private const int</b> <a id="9ccf5c1da06318cc" href="../R/9ccf5c1da06318cc.html" target="n" data-glyph="10,1" class="i field">PSize</a> = 36;
+        <b>private const int</b> <a id="f4b3a8e41ca1bd41" href="../R/f4b3a8e41ca1bd41.html" target="n" data-glyph="10,1" class="i field">PObjectid</a> = 40;
+        <b>private const int</b> <a id="8d3329304842fe68" href="../R/8d3329304842fe68.html" target="n" data-glyph="10,1" class="i field">PFlags</a> = 60;
+
+        <b>public const int</b> <a id="bafee4c0c8016156" href="../R/bafee4c0c8016156.html" target="n" data-glyph="6,1" class="i field">INFO_LEN</a> = 62;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Mask applied to data in </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8d3329304842fe68" class="i field">PFlags</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to get the name Length.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private const int</b> <a id="a04e5866b6eb300c" href="../R/a04e5866b6eb300c.html" target="n" data-glyph="10,1" class="i field">NameMask</a> = 0xfff;
+        <b>private const int</b> <a id="c2114d361d90ee61" href="../R/c2114d361d90ee61.html" target="n" data-glyph="10,1" class="i field">AssumeValid</a> = 0x80;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> (Possibly shared) header information storage.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly byte</b>[] <a id="6a82c44d2bdc1ebc" href="../R/6a82c44d2bdc1ebc.html" target="n" data-glyph="46,1" class="i field">_info</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> First location within </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6a82c44d2bdc1ebc" class="i field">_info</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> where our header starts.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly int</b> <a id="f60b38c01df80ce1" href="../R/f60b38c01df80ce1.html" target="n" data-glyph="46,1" class="i field">_infoOffset</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Our encoded path name, from the root of the repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly byte</b>[] <a id="1c5c5e5b8810ff99" href="../R/1c5c5e5b8810ff99.html" target="n" data-glyph="46,1" class="i field">_path</a>;
+
+        <b>public</b> <a id="96120207ea8c7cc5" href="../R/96120207ea8c7cc5.html" target="n" data-glyph="72,1" class="i constructor">DirCacheEntry</a>(<b>byte</b>[] <span id="r0 rd" class="r0 r">sharedInfo</span>, <b>int</b> <span id="r1 rd" class="r1 r">infoAt</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r2 rd" class="r2 r">@in</span>, <a href="../Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <span id="r3 rd" class="r3 r">md</span>)
+        {
+            <a href="#6a82c44d2bdc1ebc" class="i field">_info</a> = <span class="r0 r">sharedInfo</span>;
+            <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> = <span class="r1 r">infoAt</span>;
+
+            <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r2 r">@in</span>, <a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a>, <a href="#bafee4c0c8016156" class="i field">INFO_LEN</a>);
+            <span class="r3 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a>, <a href="#bafee4c0c8016156" class="i field">INFO_LEN</a>);
+
+            <b>int</b> <span id="r4 rd" class="r4 r">pathLen</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#0793c195d63462e0" class="i method">decodeUInt16</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>) &amp; <a href="#a04e5866b6eb300c" class="i field">NameMask</a>;
+            <b>int</b> <span id="r5 rd" class="r5 r">skipped</span> = 0;
+            <b>if</b> (<span class="r4 r">pathLen</span> &lt; <a href="#a04e5866b6eb300c" class="i field">NameMask</a>)
+            {
+                <a href="#1c5c5e5b8810ff99" class="i field">_path</a> = <b>new</b> <b>byte</b>[<span class="r4 r">pathLen</span>];
+                <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r2 r">@in</span>, <a href="#1c5c5e5b8810ff99" class="i field">_path</a>, 0, <span class="r4 r">pathLen</span>);
+                <span class="r3 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<a href="#1c5c5e5b8810ff99" class="i field">_path</a>, 0, <span class="r4 r">pathLen</span>);
+            }
+            <b>else</b>
+            {
+                <a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r6 rd" class="r6 r">tmp</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>();
+                {
+                    <b>var</b> <span id="r7 rd" class="r7 r">buf</span> = <b>new</b> <b>byte</b>[<a href="#a04e5866b6eb300c" class="i field">NameMask</a>];
+                    <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r2 r">@in</span>, <span class="r7 r">buf</span>, 0, <a href="#a04e5866b6eb300c" class="i field">NameMask</a>);
+                    <span class="r6 r">tmp</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<span class="r7 r">buf</span>, 0, <span class="r7 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                }
+
+                <b>while</b> (<b>true</b>)
+                {
+                    <b>int</b> <span id="r8 rd" class="r8 r">c</span> = <span class="r2 r">@in</span>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>();
+                    <b>if</b> (<span class="r8 r">c</span> &lt; 0)
+                    {
+                        <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#da81e2a33d64e827" class="t constructor">EndOfStreamException</a>(<span class="s">&quot;Short Read of block.&quot;</span>);
+                    }
+
+                    <b>if</b> (<span class="r8 r">c</span> == 0) <b>break</b>;
+
+                    <span class="r6 r">tmp</span>.<a href="@0@mscorlib/A.html#a27df287b28d9a2a" class="i method">Write</a>(<b>new</b>[] { (<b>byte</b>)<span class="r8 r">c</span> }, 0, 1);
+                }
+
+                <a href="#1c5c5e5b8810ff99" class="i field">_path</a> = <span class="r6 r">tmp</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>();
+                <span class="r4 r">pathLen</span> = <a href="#1c5c5e5b8810ff99" class="i field">_path</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+                <span class="r5 r">skipped</span> = 1; <span class="c">// we already skipped 1 &#39;\0&#39; above to break the loop.</span>
+                <span class="r3 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<a href="#1c5c5e5b8810ff99" class="i field">_path</a>, 0, <span class="r4 r">pathLen</span>);
+                <span class="r3 r">md</span>.<a href="../Util/MessageDigest.cs.html#8efff86bd6253854" class="i method">Update</a>(0);
+            }
+
+            <span class="c">// Index records are padded out to the next 8 byte alignment</span>
+            <span class="c">// for historical reasons related to how C Git Read the files.</span>
+            <span class="c">//</span>
+            <b>int</b> <span id="r9 rd" class="r9 r">actLen</span> = <a href="#bafee4c0c8016156" class="i field">INFO_LEN</a> + <span class="r4 r">pathLen</span>;
+            <b>int</b> <span id="r10 rd" class="r10 r">expLen</span> = (<span class="r9 r">actLen</span> + 8) &amp; ~7;
+            <b>int</b> <span id="r11 rd" class="r11 r">padLen</span> = <span class="r10 r">expLen</span> - <span class="r9 r">actLen</span> - <span class="r5 r">skipped</span>;
+            <b>if</b> (<span class="r11 r">padLen</span> &gt; 0)
+            {
+                <a href="../Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="../Util/IO.cs.html#cd59e98551dddaa0" class="i method">skipFully</a>(<span class="r2 r">@in</span>, <span class="r11 r">padLen</span>);
+                <span class="r3 r">md</span>.<a href="../Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<a href="#ea227eebafd27b3a" class="i field">NullPad</a>, 0, <span class="r11 r">padLen</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an empty entry at stage 0.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">newPath</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of the cache entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="e8c003f37f4d7939" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">DirCacheEntry</a>(<b>string</b> <span id="r12 rd" class="r12 r">newPath</span>)
+            : <a href="#f0a6290f8a102a80" class="k">this</a>(<a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r12 r">newPath</span>))
+        {
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an empty entry at the specified stage.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">newPath</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the cache entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">stage</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the stage index of the new entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="aaefa4b5b9976374" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">DirCacheEntry</a>(<b>string</b> <span id="r13 rd" class="r13 r">newPath</span>, <b>int</b> <span id="r14 rd" class="r14 r">stage</span>)
+            : <a href="#6a60b6bbc9cba2e8" class="k">this</a>(<a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#9e89e5eca9c06222" class="i method">encode</a>(<span class="r13 r">newPath</span>), <span class="r14 r">stage</span>)
+        {
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an empty entry at stage 0.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">newPath</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> name of the cache entry, in the standard encoding.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="f0a6290f8a102a80" href="../R/f0a6290f8a102a80.html" target="n" data-glyph="72,1" class="i constructor">DirCacheEntry</a>(<b>byte</b>[] <span id="r15 rd" class="r15 r">newPath</span>)
+            : <a href="#6a60b6bbc9cba2e8" class="k">this</a>(<span class="r15 r">newPath</span>, <a href="#ad37d0b747e259e3" class="i field">STAGE_0</a>)
+        {
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an empty entry at the specified stage.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">newPath</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Name of the cache entry, in the standard encoding.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">stage</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stage index of the new entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="6a60b6bbc9cba2e8" href="../R/6a60b6bbc9cba2e8.html" target="n" data-glyph="72,1" class="i constructor">DirCacheEntry</a>(<b>byte</b>[] <span id="r16 rd" class="r16 r">newPath</span>, <b>int</b> <span id="r17 rd" class="r17 r">stage</span>)
+        {
+            <b>if</b> (!<a href="#59e5072185ca2b70" class="i method">isValidPath</a>(<span class="r16 r">newPath</span>))
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid path: &quot;</span>
+                        + <a href="#48fc3296b2770d76" class="i method">toString</a>(<span class="r16 r">newPath</span>));
+            <b>if</b> (<span class="r17 r">stage</span> &lt; 0 || 3 &lt; <span class="r17 r">stage</span>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid stage &quot;</span> + <span class="r17 r">stage</span>
+                    + <span class="s">&quot; for path &quot;</span> + <a href="#48fc3296b2770d76" class="i method">toString</a>(<span class="r16 r">newPath</span>));
+
+            <a href="#6a82c44d2bdc1ebc" class="i field">_info</a> = <b>new</b> <b>byte</b>[<a href="#bafee4c0c8016156" class="i field">INFO_LEN</a>];
+            <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> = 0;
+            <a href="#1c5c5e5b8810ff99" class="i field">_path</a> = <span class="r16 r">newPath</span>;
+
+            <b>int</b> <span id="r18 rd" class="r18 r">flags</span> = ((<span class="r17 r">stage</span> &amp; 0x3) &lt;&lt; 12);
+            <b>if</b> (<a href="#1c5c5e5b8810ff99" class="i field">_path</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &lt; <a href="#a04e5866b6eb300c" class="i field">NameMask</a>)
+            {
+                <span class="r18 r">flags</span> |= <a href="#1c5c5e5b8810ff99" class="i field">_path</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            }
+            <b>else</b>
+            {
+                <span class="r18 r">flags</span> |= <a href="#a04e5866b6eb300c" class="i field">NameMask</a>;
+            }
+
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#e60a89c5bf786ac1" class="i method">encodeInt16</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>, <span class="r18 r">flags</span>);
+        }
+
+        <b>public void</b> <a id="6e5cd1dc629b1ac4" href="../R/6e5cd1dc629b1ac4.html" target="n" data-glyph="72,1" class="i method">write</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r19 rd" class="r19 r">os</span>)
+        {
+            <b>int</b> <span id="r20 rd" class="r20 r">pathLen</span> = <a href="#1c5c5e5b8810ff99" class="i field">_path</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+            <span class="r19 r">os</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a>, <a href="#bafee4c0c8016156" class="i field">INFO_LEN</a>);
+            <span class="r19 r">os</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<a href="#1c5c5e5b8810ff99" class="i field">_path</a>, 0, <span class="r20 r">pathLen</span>);
+
+            <span class="c">// Index records are padded out to the next 8 byte alignment</span>
+            <span class="c">// for historical reasons related to how C Git Read the files.</span>
+            <span class="c">//</span>
+            <b>int</b> <span id="r21 rd" class="r21 r">actLen</span> = <a href="#bafee4c0c8016156" class="i field">INFO_LEN</a> + <span class="r20 r">pathLen</span>;
+            <b>int</b> <span id="r22 rd" class="r22 r">expLen</span> = (<span class="r21 r">actLen</span> + 8) &amp; ~7;
+            <b>if</b> (<span class="r21 r">actLen</span> != <span class="r22 r">expLen</span>)
+            {
+                <span class="r19 r">os</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<a href="#ea227eebafd27b3a" class="i field">NullPad</a>, 0, <span class="r22 r">expLen</span> - <span class="r21 r">actLen</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Is it possible for this entry to be accidentally assumed clean?</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The &quot;racy git&quot; problem happens when a work file can be updated faster</span>
+        <span class="c">///</span><span class="c"> than the filesystem records file modification timestamps. It is possible</span>
+        <span class="c">///</span><span class="c"> for an application to edit a work file, update the index, then edit it</span>
+        <span class="c">///</span><span class="c"> again before the filesystem will give the work file a new modification</span>
+        <span class="c">///</span><span class="c"> timestamp. This method tests to see if file was written out at the same</span>
+        <span class="c">///</span><span class="c"> time as the index.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">smudge_s</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Seconds component of the index&#39;s last modified time.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">smudge_ns</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Nanoseconds component of the index&#39;s last modified time.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if extra careful checks should be used.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="754c038ab3246a94" href="../R/754c038ab3246a94.html" target="n" data-glyph="72,1" class="i method">mightBeRacilyClean</a>(<b>int</b> <span id="r23 rd" class="r23 r">smudge_s</span>, <b>int</b> <span id="r24 rd" class="r24 r">smudge_ns</span>)
+        {
+            <span class="c">// If the index has a modification time then it came from disk</span>
+            <span class="c">// and was not generated from scratch in memory. In such cases</span>
+            <span class="c">// the entry is &#39;racily clean&#39; if the entry&#39;s cached modification</span>
+            <span class="c">// time is equal to or later than the index modification time. In</span>
+            <span class="c">// such cases the work file is too close to the index to tell if</span>
+            <span class="c">// it is clean or not based on the modification time alone.</span>
+            <span class="c">//</span>
+            <b>int</b> <span id="r25 rd" class="r25 r">@base</span> = <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#ab20d2ebcdc634ab" class="i field">PMtime</a>;
+            <b>int</b> <span id="r26 rd" class="r26 r">mtime</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r25 r">@base</span>);
+            <b>if</b> (<span class="r23 r">smudge_s</span> &lt; <span class="r26 r">mtime</span>) <b>return true</b>;
+
+            <b>if</b> (<span class="r23 r">smudge_s</span> == <span class="r26 r">mtime</span>)
+                <b>return</b> <span class="r24 r">smudge_ns</span> &lt;= <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r25 r">@base</span> + 4) / 1000000;
+
+            <b>return false</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Force this entry to no longer match its working tree file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This avoids the &quot;racy git&quot; problem by making this index entry no longer</span>
+        <span class="c">///</span><span class="c"> match the file in the working directory. Later git will be forced to</span>
+        <span class="c">///</span><span class="c"> compare the file content to ensure the file matches the working tree.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="ddfebca30dcdb1b9" href="../R/ddfebca30dcdb1b9.html" target="n" data-glyph="72,1" class="i method">smudgeRacilyClean</a>()
+        {
+            <span class="c">// We don&#39;t use the same approach as C Git to smudge the entry,</span>
+            <span class="c">// as we cannot compare the working tree file to our SHA-1 and</span>
+            <span class="c">// thus cannot use the &quot;size to 0&quot; trick without accidentally</span>
+            <span class="c">// thinking a zero Length file is clean.</span>
+            <span class="c">//</span>
+            <span class="c">// Instead we force the mtime to the largest possible value, so</span>
+            <span class="c">// it is certainly After the index&#39;s own modification time and</span>
+            <span class="c">// on a future Read will cause mightBeRacilyClean to say &quot;yes!&quot;.</span>
+            <span class="c">// It is also unlikely to match with the working tree file.</span>
+            <span class="c">//</span>
+            <span class="c">// I&#39;ll see you again before Jan 19, 2038, 03:14:07 AM GMT.</span>
+            <span class="c">//</span>
+            <b>int</b> <span id="r27 rd" class="r27 r">@base</span> = <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#ab20d2ebcdc634ab" class="i field">PMtime</a>;
+            <a href="#6a82c44d2bdc1ebc" class="i field">_info</a>.<a href="../Util/ArrayExtensions.cs.html#61ee928b7672208f" class="i method">Fill</a>(<span class="r27 r">@base</span>, <span class="r27 r">@base</span> + 8, (<b>byte</b>)127);
+        }
+
+        <b>public byte</b>[] <a id="e8b726fa66af4a66" href="../R/e8b726fa66af4a66.html" target="n" data-glyph="72,1" class="i method">idBuffer</a>()
+        {
+            <b>return</b> <a href="#6a82c44d2bdc1ebc" class="i field">_info</a>;
+        }
+
+        <b>public int</b> <a id="3e19fdad5092880b" href="../R/3e19fdad5092880b.html" target="n" data-glyph="72,1" class="i method">idOffset</a>()
+        {
+            <b>return</b> <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#f4b3a8e41ca1bd41" class="i field">PObjectid</a>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Is this entry always thought to be unmodified?</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Most entries in the index do not have this flag set. Users may however</span>
+        <span class="c">///</span><span class="c"> set them on if the file system stat() costs are too high on this working</span>
+        <span class="c">///</span><span class="c"> directory, such as on NFS or SMB volumes.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> true if we must assume the entry is unmodified. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="14790dc6b5172e39" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">isAssumeValid</a>()
+        {
+            <b>return</b> (<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>[<a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>] &amp; <a href="#c2114d361d90ee61" class="i field">AssumeValid</a>) != 0;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set the assume valid flag for this entry,</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">assume</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True to ignore apparent modifications; false to look at last</span>
+        <span class="c">///</span><span class="c"> modified to detect file modifications. </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="12ea95d235fa5879" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">setAssumeValid</a>(<b>bool</b> <span id="r28 rd" class="r28 r">assume</span>)
+        {
+            <b>unchecked</b>
+            {
+                <b>if</b> (<span class="r28 r">assume</span>)
+                    <a href="#6a82c44d2bdc1ebc" class="i field">_info</a>[<a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>] |= (<b>byte</b>)<a href="#c2114d361d90ee61" class="i field">AssumeValid</a>;
+                <b>else</b>
+                    <a href="#6a82c44d2bdc1ebc" class="i field">_info</a>[<a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>] &amp;= (<b>byte</b>)~<a href="#c2114d361d90ee61" class="i field">AssumeValid</a>; <span class="c">// [henon] (byte)-129 results in an overflow</span>
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the stage of this entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Entries have one of 4 possible stages: 0-3.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> the stage of this entry. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="0926ebb73c5f69a5" href="../R/0926ebb73c5f69a5.html" target="n" data-glyph="72,1" class="i method">getStage</a>()
+        {
+            <b>return</b> (<b>int</b>)((<b>uint</b>)(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>[<a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>]) &gt;&gt; 4) &amp; 0x3;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain the raw </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> bits for this entry.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> mode bits for the entry. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#1103a407cfbbb194" class="i method">FromBits</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">/&gt;</span>
+        <b>public int</b> <a id="8c4ee444ad1d2dc8" href="../R/8c4ee444ad1d2dc8.html" target="n" data-glyph="72,1" class="i method">getRawMode</a>()
+        {
+            <b>return</b> <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#abfd998aded8265e" class="i field">PMode</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain the </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for this entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The file mode singleton for this entry.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a> <a id="8bc5ca3d3d3f014a" href="../R/8bc5ca3d3d3f014a.html" target="n" data-glyph="72,1" class="i method">getFileMode</a>()
+        {
+            <b>return</b> <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#1103a407cfbbb194" class="i method">FromBits</a>(<a href="#8c4ee444ad1d2dc8" class="i method">getRawMode</a>());
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set the file mode for this entry.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> The new mode constant. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="9e3648738c910330" href="../R/9e3648738c910330.html" target="n" data-glyph="72,1" class="i method">setFileMode</a>(<a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a> <span id="r29 rd" class="r29 r">mode</span>)
+        {
+            <b>switch</b> (<span class="r29 r">mode</span>.<a href="../FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a> &amp; <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#fc461b2a7515c6ca" class="i field">TYPE_MASK</a>)
+            {
+                <b>case</b> <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#2256ca7bdf05fb67" class="i field">TYPE_MISSING</a>:
+                <b>case</b> <a href="../FileMode.cs.html#2686d9196f6bc5fe" class="t t">FileMode</a>.<a href="../FileMode.cs.html#c2bf958a18942ac5" class="i field">TYPE_TREE</a>:
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid mode &quot;</span> + <span class="r29 r">mode</span>.<a href="../FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>
+                        + <span class="s">&quot; for path &quot;</span> + <a href="#7ee987977b56640f" class="i method">getPathString</a>());
+            }
+
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#abfd998aded8265e" class="i field">PMode</a>, <span class="r29 r">mode</span>.<a href="../FileMode.cs.html#7d4c5f3129ccce3b" class="i property">Bits</a>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the cached last modification date of this file, in milliseconds.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> One of the indicators that the file has been modified by an application</span>
+        <span class="c">///</span><span class="c"> changing the working tree is if the last modification time for the file</span>
+        <span class="c">///</span><span class="c"> differs from the time stored in this entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> last modification time of this file, in milliseconds since the</span>
+        <span class="c">///</span><span class="c"> Java epoch (midnight Jan 1, 1970 UTC).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public long</b> <a id="66ee5898624137df" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getLastModified</a>()
+        {
+            <b>return</b> <a href="#6d2892a280053f03" class="i method">DecodeTimestamp</a>(<a href="#ab20d2ebcdc634ab" class="i field">PMtime</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set the cached last modification date of this file, using milliseconds.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">when</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> new cached modification date of the file, in milliseconds.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="d2f80368f14abcd9" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">setLastModified</a>(<b>long</b> <span id="r30 rd" class="r30 r">when</span>)
+        {
+            <a href="#8c09e507c65f6779" class="i method">EncodeTimestamp</a>(<a href="#ab20d2ebcdc634ab" class="i field">PMtime</a>, <span class="r30 r">when</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the cached size (in bytes) of this file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> One of the indicators that the file has been modified by an application</span>
+        <span class="c">///</span><span class="c"> changing the working tree is if the size of the file (in bytes) differs</span>
+        <span class="c">///</span><span class="c"> from the size stored in this entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Note that this is the length of the file in the working directory, which</span>
+        <span class="c">///</span><span class="c"> may differ from the size of the decompressed blob if work tree filters</span>
+        <span class="c">///</span><span class="c"> are being used, such as LF</span><span class="c">&amp;lt;</span><span class="c">-</span><span class="c">&amp;gt;</span><span class="c">CRLF conversion.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> cached size of the working directory file, in bytes. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="fb21d7fbb1b1af9d" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getLength</a>()
+        {
+            <b>return</b> <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#9ccf5c1da06318cc" class="i field">PSize</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set the cached size (in bytes) of this file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r31 r">sz</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">new cached size of the file, as bytes.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="b3513df510775357" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">setLength</a>(<b>int</b> <span id="r31 rd" class="r31 r">sz</span>)
+        {
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#9ccf5c1da06318cc" class="i field">PSize</a>, <span class="r31 r">sz</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain the ObjectId for the entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> Using this method to compare ObjectId values between entries is</span>
+        <span class="c">///</span><span class="c"> inefficient as it causes memory allocation.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> object identifier for the entry. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="8ce936aecd0ad5ee" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">getObjectId</a>()
+        {
+            <b>return</b> <a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="../ObjectId.cs.html#6c7378267feaae09" class="i method">FromRaw</a>(<a href="#e8b726fa66af4a66" class="i method">idBuffer</a>(), <a href="#3e19fdad5092880b" class="i method">idOffset</a>());
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set the ObjectId for the entry.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> New object identifier for the entry. May be</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="../ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="../ObjectId.cs.html#a6ee7b4e86a6eafa" class="i property">ZeroId</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to remove the current identifier.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="0e1ddad07f740e62" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">setObjectId</a>(<a href="../AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r32 rd" class="r32 r">id</span>)
+        {
+            <span class="r32 r">id</span>.<a href="../AnyObjectId.cs.html#b2599f05e8f4ca38" class="i method">copyRawTo</a>(<a href="#e8b726fa66af4a66" class="i method">idBuffer</a>(), <a href="#3e19fdad5092880b" class="i method">idOffset</a>());
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set the ObjectId for the entry from the raw binary representation.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">bs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The raw byte buffer to read from. At least 20 bytes after </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">p</span><span class="c">&quot;</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> must be available within this byte array. </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">p</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">position to read the first byte of data from. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="405a02505fb71fe1" href="../R/405a02505fb71fe1.html" target="n" data-glyph="72,1" class="i method">setObjectIdFromRaw</a>(<b>byte</b>[] <span id="r33 rd" class="r33 r">bs</span>, <b>int</b> <span id="r34 rd" class="r34 r">p</span>)
+        {
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r33 r">bs</span>, <span class="r34 r">p</span>, <a href="#e8b726fa66af4a66" class="i method">idBuffer</a>(), <a href="#3e19fdad5092880b" class="i method">idOffset</a>(), <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the entry&#39;s complete path.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method is not very efficient and is primarily meant for debugging</span>
+        <span class="c">///</span><span class="c"> and final output generation. Applications should try to avoid calling it,</span>
+        <span class="c">///</span><span class="c"> and if invoked do so only once per interesting entry, where the name is</span>
+        <span class="c">///</span><span class="c"> absolutely required for correct function.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Complete path of the entry, from the root of the repository. If</span>
+        <span class="c">///</span><span class="c"> the entry is in a subtree there will be at least one &#39;/&#39; in the</span>
+        <span class="c">///</span><span class="c"> returned string. </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="7ee987977b56640f" href="../R/7ee987977b56640f.html" target="n" data-glyph="72,1" class="i method">getPathString</a>()
+        {
+            <b>return</b> <a href="#48fc3296b2770d76" class="i method">toString</a>(<a href="#1c5c5e5b8810ff99" class="i field">_path</a>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Copy the ObjectId and other meta fields from an existing entry.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	This method copies everything except the path from one entry to another,</span>
+        <span class="c">///</span><span class="c">	supporting renaming.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">src</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The entry to copy ObjectId and meta fields from.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="e21ebf89e01faed4" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">copyMetaData</a>(<a href="#67251d8fe8f4870f" class="t t">DirCacheEntry</a> <span id="r35 rd" class="r35 r">src</span>)
+        {
+            <b>int</b> <span id="r36 rd" class="r36 r">pLen</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#0793c195d63462e0" class="i method">decodeUInt16</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>) &amp; <a href="#a04e5866b6eb300c" class="i field">NameMask</a>;
+            <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r35 r">src</span>.<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r35 r">src</span>.<a href="#f60b38c01df80ce1" class="i field">_infoOffset</a>, <a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a>, <a href="#bafee4c0c8016156" class="i field">INFO_LEN</a>);
+
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#e60a89c5bf786ac1" class="i method">encodeInt16</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>, <span class="r36 r">pLen</span>
+                    | <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#0793c195d63462e0" class="i method">decodeUInt16</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <a href="#8d3329304842fe68" class="i field">PFlags</a>) &amp; ~<a href="#a04e5866b6eb300c" class="i field">NameMask</a>);
+        }
+
+        <b>private long</b> <a id="6d2892a280053f03" href="../R/6d2892a280053f03.html" target="n" data-glyph="76,1" class="i method">DecodeTimestamp</a>(<b>int</b> <span id="r37 rd" class="r37 r">pIdx</span>)
+        {
+            <b>int</b> <span id="r38 rd" class="r38 r">@base</span> = <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <span class="r37 r">pIdx</span>;
+            <b>int</b> <span id="r39 rd" class="r39 r">sec</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r38 r">@base</span>);
+            <b>int</b> <span id="r40 rd" class="r40 r">ms</span> = <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r38 r">@base</span> + 4) / 1000000;
+            <b>return</b> 1000L * <span class="r39 r">sec</span> + <span class="r40 r">ms</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r41 r">pIdx</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r42 r">when</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> New cached modification date of the file, in milliseconds.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>private void</b> <a id="8c09e507c65f6779" href="../R/8c09e507c65f6779.html" target="n" data-glyph="76,1" class="i method">EncodeTimestamp</a>(<b>int</b> <span id="r41 rd" class="r41 r">pIdx</span>, <b>long</b> <span id="r42 rd" class="r42 r">when</span>)
+        {
+            <b>int</b> <span id="r43 rd" class="r43 r">@base</span> = <a href="#f60b38c01df80ce1" class="i field">_infoOffset</a> + <span class="r41 r">pIdx</span>;
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r43 r">@base</span>, (<b>int</b>)(<span class="r42 r">when</span> / 1000));
+            <a href="../Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="../Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#6a82c44d2bdc1ebc" class="i field">_info</a>, <span class="r43 r">@base</span> + 4, ((<b>int</b>)(<span class="r42 r">when</span> % 1000)) * 1000000);
+        }
+
+        <b>public byte</b>[] <a id="282ddf744069a51b" href="../R/282ddf744069a51b.html" target="n" data-glyph="102,1" class="i property">Path</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#1c5c5e5b8810ff99" class="i field">_path</a>; }
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <a id="48fc3296b2770d76" href="../R/48fc3296b2770d76.html" target="n" data-glyph="76,1" class="i method">toString</a>(<b>byte</b>[] <span id="r44 rd" class="r44 r">path</span>)
+        {
+            <b>return</b> <a href="../Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="../Constants.cs.html#b2fcdc67ec48e578" class="i field">CHARSET</a>.<a href="@0@mscorlib/A.html#7310c9cccfaecd17" class="i method">GetString</a>(<span class="r44 r">path</span>);
+        }
+
+        <b>public static bool</b> <a id="59e5072185ca2b70" href="../R/59e5072185ca2b70.html" target="n" data-glyph="72,1" class="i method">isValidPath</a>(<b>byte</b>[] <span id="r45 rd" class="r45 r">path</span>)
+        {
+            <b>if</b> (<span class="r45 r">path</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0)
+                <b>return false</b>; <span class="c">// empty path is not permitted.</span>
+
+            <b>bool</b> <span id="r46 rd" class="r46 r">componentHasChars</span> = <b>false</b>;
+            <b>foreach</b> (<b>byte</b> <span id="r47 rd" class="r47 r">c</span> <b>in</b> <span class="r45 r">path</span>)
+            {
+                <b>switch</b> (<span class="r47 r">c</span>)
+                {
+                    <b>case</b> 0:
+                        <b>return false</b>; <span class="c">// NUL is never allowed within the path.</span>
+
+                    <b>case</b> (<b>byte</b>)<span class="s">&#39;/&#39;</span>:
+                        <b>if</b> (<span class="r46 r">componentHasChars</span>)
+                            <span class="r46 r">componentHasChars</span> = <b>false</b>;
+                        <b>else
+                            return false</b>;
+                        <b>break</b>;
+
+                    <b>default</b>:
+                        <span class="r46 r">componentHasChars</span> = <b>true</b>;
+                        <b>break</b>;
+                }
+            }
+            <b>return</b> <span class="r46 r">componentHasChars</span>;
+        }
+    }
+}</pre></td></tr></table></div></body></html>

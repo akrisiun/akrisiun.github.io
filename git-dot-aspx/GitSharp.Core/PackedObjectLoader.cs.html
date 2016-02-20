@@ -1,0 +1,199 @@
+﻿<!DOCTYPE html>
+<html><head><title>PackedObjectLoader.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(190);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/PackedObjectLoader.cs" target="_top">PackedObjectLoader.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Base class for a set of object loader classes for packed objects.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public abstract class</b> <a id="a2110e69ed08fb94" href="R/a2110e69ed08fb94.html" target="n" data-glyph="0,0" class="t t">PackedObjectLoader</a> : <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a>, <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+	{
+		<b>private readonly</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <a id="e003d6cfc1ca427c" href="R/e003d6cfc1ca427c.html" target="n" data-glyph="46,1" class="i field">_packFile</a>;
+		<b>private readonly long</b> <a id="5124c3f170d337e1" href="R/5124c3f170d337e1.html" target="n" data-glyph="46,1" class="i field">_dataOffset</a>;
+		<b>private readonly long</b> <a id="e542786e25c84768" href="R/e542786e25c84768.html" target="n" data-glyph="46,1" class="i field">_objectOffset</a>;
+
+		<b>protected</b> <a id="3ce04dd0b55a2124" href="R/3ce04dd0b55a2124.html" target="n" data-glyph="75,1" class="i constructor">PackedObjectLoader</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r0 rd" class="r0 r">packFile</span>, <b>long</b> <span id="r1 rd" class="r1 r">dataOffset</span>, <b>long</b> <span id="r2 rd" class="r2 r">objectOffset</span>)
+		{
+			<a href="#e003d6cfc1ca427c" class="i field">_packFile</a> = <span class="r0 r">packFile</span>;
+			<a href="#5124c3f170d337e1" class="i field">_dataOffset</a> = <span class="r1 r">dataOffset</span>;
+			<a href="#e542786e25c84768" class="i field">_objectOffset</a> = <span class="r2 r">objectOffset</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Force this object to be loaded into memory and pinned in this loader.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Once materialized, subsequent get operations for the following methods</span>
+		<span class="c">///</span><span class="c"> will always succeed without raising an exception, as all information is</span>
+		<span class="c">///</span><span class="c"> pinned in memory by this loader instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">{@link Type}</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">{@link Size}</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">{@link #getBytes()}, {@link #getCachedBytes}</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">{@link #getRawSize()}</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">{@link #getRawType()}</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">curs</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">temporary thread storage during data access.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public abstract void</b> <a id="2350a4cbc505c3cb" href="R/2350a4cbc505c3cb.html" target="n" data-glyph="72,1" class="i method">Materialize</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r3 rd" class="r3 r">curs</span>);
+
+		<b>public override int</b> <a id="8f940e850bc11873" href="R/8f940e850bc11873.html" target="n" data-glyph="102,1" class="i property">Type</a> { <b>get</b>; <b>protected set</b>; }
+
+		<b>public override long</b> <a id="a16c87f0f7d1e023" href="R/a16c87f0f7d1e023.html" target="n" data-glyph="102,1" class="i property">Size</a> { <b>get</b>; <b>protected set</b>; }
+
+		<b>public override byte</b>[] <a id="9fcf9d87cfed7d91" href="R/9fcf9d87cfed7d91.html" target="n" data-glyph="102,1" class="i property">CachedBytes</a> { <b>get</b>; <b>protected set</b>; }
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets the offset of object header within pack file</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public long</b> <a id="9f002984a0224ad9" href="R/9f002984a0224ad9.html" target="n" data-glyph="102,1" class="i property">ObjectOffset</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#e542786e25c84768" class="i field">_objectOffset</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets the offset of object data within pack file</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public long</b> <a id="eb5f301e9c2d3b6d" href="R/eb5f301e9c2d3b6d.html" target="n" data-glyph="102,1" class="i property">DataOffset</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#5124c3f170d337e1" class="i field">_dataOffset</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets if this loader is capable of fast raw-data copying basing on</span>
+		<span class="c">///</span><span class="c"> compressed data checksum; false if raw-data copying needs</span>
+		<span class="c">///</span><span class="c"> uncompressing and compressing data</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="4cd2b915516a55f9" href="R/4cd2b915516a55f9.html" target="n" data-glyph="102,1" class="i property">SupportsFastCopyRawData</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#e003d6cfc1ca427c" class="i field">_packFile</a>.<a href="PackFile.cs.html#a2d1167b01f14f6b" class="i property">SupportsFastCopyRawData</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets the id of delta base object for this object representation. </span>
+		<span class="c">///</span><span class="c"> It returns null if object is not stored as delta.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="1a003876f35bf04a" href="R/1a003876f35bf04a.html" target="n" data-glyph="102,1" class="i property">DeltaBase</a> { <b>get</b>; }
+
+		<b>protected</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <a id="5bf7bbad4047335e" href="R/5bf7bbad4047335e.html" target="n" data-glyph="105,1" class="i property">PackFile</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#e003d6cfc1ca427c" class="i field">_packFile</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Peg the pack file open to support data copying.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Applications trying to copy raw pack data should ensure the pack stays</span>
+		<span class="c">///</span><span class="c"> open and available throughout the entire copy. To do that use:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">example</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> loader.beginCopyRawData();</span>
+		<span class="c">///</span><span class="c"> try </span>
+		<span class="c">///</span><span class="c"> {</span>
+		<span class="c">///</span><span class="c">		loader.CopyRawData(out, tmpbuf, curs);</span>
+		<span class="c">///</span><span class="c">	}</span>
+		<span class="c">///</span><span class="c"> finally</span>
+		<span class="c">///</span><span class="c"> {</span>
+		<span class="c">///</span><span class="c">		loader.endCopyRawData();</span>
+		<span class="c">///</span><span class="c">	}</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">example</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This loader contains stale information and cannot be used.</span>
+		<span class="c">///</span><span class="c"> The most likely cause is the underlying pack file has been</span>
+		<span class="c">///</span><span class="c"> deleted, and the object has moved to another pack file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="e9f33a86d160aff9" href="R/e9f33a86d160aff9.html" target="n" data-glyph="72,1" class="i method">beginCopyRawData</a>()
+		{
+			<a href="#e003d6cfc1ca427c" class="i field">_packFile</a>.<a href="PackFile.cs.html#526fa022156aae96" class="i method">beginCopyRawData</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Release resources after </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e9f33a86d160aff9" class="i method">beginCopyRawData</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="0e3cb5b8c28d5d8c" href="R/0e3cb5b8c28d5d8c.html" target="n" data-glyph="72,1" class="i method">endCopyRawData</a>()
+		{
+			<a href="#e003d6cfc1ca427c" class="i field">_packFile</a>.<a href="PackFile.cs.html#cf05c50781f6947d" class="i method">endCopyRawData</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Copy raw object representation from storage to provided output stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Copied data doesn&#39;t include object header. User must provide temporary</span>
+		<span class="c">///</span><span class="c"> buffer used during copying by underlying I/O layer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r t">T</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">out</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Output stream when data is copied. No buffering is guaranteed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">buf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Temporary buffer used during copying. Recommended size is at</span>
+		<span class="c">///</span><span class="c"> least few kB.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">curs</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">temporary thread storage during data access.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When the object cannot be read.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e9f33a86d160aff9" class="i method">beginCopyRawData</a><span class="c">&quot;</span><span class="c">/&gt;</span>
+		<b>public void</b> <a id="ab72b0e0661a2e98" href="R/ab72b0e0661a2e98.html" target="n" data-glyph="72,1" class="i method">CopyRawData</a>&lt;<span id="r4 rd t" class="r4 r t">T</span>&gt;(<span class="r4 r t">T</span> <span id="r5 rd" class="r5 r">@out</span>, <b>byte</b>[] <span id="r6 rd" class="r6 r">buf</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r7 rd" class="r7 r">curs</span>)
+			<b>where</b> <span class="r4 r t">T</span> : <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>
+		{
+			<a href="#e003d6cfc1ca427c" class="i field">_packFile</a>.<a href="PackFile.cs.html#90e5295f9f9b05f7" class="i method">CopyRawData</a>(<a href="#a2110e69ed08fb94" class="k">this</a>, <span class="r5 r">@out</span>, <span class="r6 r">buf</span>, <span class="r7 r">curs</span>);
+		}
+		
+		<b>public void</b> <a id="6513c8f5dd220578" href="R/6513c8f5dd220578.html" target="n" data-glyph="72,1" class="i method">Dispose</a> ()
+		{
+			<a href="#e003d6cfc1ca427c" class="i field">_packFile</a>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+		}
+		
+	}
+}</pre></td></tr></table></div></body></html>

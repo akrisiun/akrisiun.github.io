@@ -1,0 +1,443 @@
+﻿<!DOCTYPE html>
+<html><head><title>OutputCacheAttribute.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(434);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/OutputCacheAttribute.cs" target="_top">OutputCacheAttribute.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Runtime</span>.<span class="i n">Caching</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Cryptography</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">UI</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">WebPages</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Performance&quot;</span>, <span class="s">&quot;CA1813:AvoidUnsealedAttributes&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;Unsealed so that subclassed types can set properties in the default constructor.&quot;</span>)]
+    [<a href="@0@mscorlib/A.html#2b75b4729f275854" class="t constructor">AttributeUsage</a>(<a href="@0@mscorlib/A.html#bbeab60ef22e6977" class="t t">AttributeTargets</a>.<a href="@0@mscorlib/A.html#16349e8915c7392b" class="i field">Class</a> | <a href="@0@mscorlib/A.html#bbeab60ef22e6977" class="t t">AttributeTargets</a>.<a href="@0@mscorlib/A.html#b5e7311a202ba2d4" class="i field">Method</a>, <a href="@0@mscorlib/A.html#390271738e01f721" class="i property">Inherited</a> = <b>true</b>, <a href="@0@mscorlib/A.html#d903bd9308253ef8" class="i property">AllowMultiple</a> = <b>false</b>)]
+    <b>public class</b> <a id="e479d1677f124eaa" href="R/e479d1677f124eaa.html" target="n" data-glyph="0,0" class="t t">OutputCacheAttribute</a> : <a href="ActionFilterAttribute.cs.html#9eafa153c634a09f" class="t t">ActionFilterAttribute</a>, <a href="IExceptionFilter.cs.html#21627f436425ea64" class="t t">IExceptionFilter</a>
+    {
+        <b>private const string</b> <a id="d4319ddec0222871" href="R/d4319ddec0222871.html" target="n" data-glyph="10,1" class="i field">CacheKeyPrefix</a> = <span class="s">&quot;_MvcChildActionCache_&quot;</span>;
+        <b>private static readonly char</b>[] <a id="fb637c779ea17c08" href="R/fb637c779ea17c08.html" target="n" data-glyph="46,1" class="i field">_splitParameter</a> = <b>new</b>[] { <span class="s">&#39;;&#39;</span> };
+        <b>private static</b> <a href="@0@System.Runtime.Caching/A.html#56974ec9e73a0420" class="t t">ObjectCache</a> <a id="6855dc891bda4d3c" href="R/6855dc891bda4d3c.html" target="n" data-glyph="46,1" class="i field">_childActionCache</a>;
+        <b>private static object</b> <a id="5ea31c3b49478ce5" href="R/5ea31c3b49478ce5.html" target="n" data-glyph="46,1" class="i field">_childActionFilterFinishCallbackKey</a> = <b>new</b> <b>object</b>();
+        <b>private readonly</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<b>string</b>[]&gt; <a id="ace05f7d76dd992b" href="R/ace05f7d76dd992b.html" target="n" data-glyph="46,1" class="i field">_splitVaryByParamThunk</a>;
+        <b>private</b> <a href="@0@System.Web/A.html#364ff6131ff03c74" class="t t">OutputCacheParameters</a> <a id="a0a849315bf1aa4a" href="R/a0a849315bf1aa4a.html" target="n" data-glyph="46,1" class="i field">_cacheSettings</a> = <b>new</b> <a href="@0@System.Web/A.html#a7d3a14e1f35fc4d" class="t constructor">OutputCacheParameters</a> { <a href="@0@System.Web/A.html#6f49eda49d21d68c" class="i property">VaryByParam</a> = <span class="s">&quot;*&quot;</span> };
+        <b>private</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@System.Runtime.Caching/A.html#56974ec9e73a0420" class="t t">ObjectCache</a>&gt; <a id="948d1737a247e65b" href="R/948d1737a247e65b.html" target="n" data-glyph="46,1" class="i field">_childActionCacheThunk</a> = () =&gt; <a href="#ed7d270b2fdf65bc" class="i property">ChildActionCache</a>;
+        <b>private bool</b> <a id="95abbc738e04f0dc" href="R/95abbc738e04f0dc.html" target="n" data-glyph="46,1" class="i field">_locationWasSet</a>;
+        <b>private bool</b> <a id="8bb2b5875d840f31" href="R/8bb2b5875d840f31.html" target="n" data-glyph="46,1" class="i field">_noStoreWasSet</a>;
+        <b>private string</b>[] <a id="6412bfbf1b6b8c63" href="R/6412bfbf1b6b8c63.html" target="n" data-glyph="46,1" class="i field">_tokenizedVaryByParams</a>;
+ 
+        <b>public</b> <a id="69c434289790b443" href="R/69c434289790b443.html" target="n" data-glyph="72,1" class="i constructor">OutputCacheAttribute</a>()
+        {
+            <a href="#ace05f7d76dd992b" class="i field">_splitVaryByParamThunk</a> = () =&gt; <a href="#ea89b6065cee2c45" class="i method">GetTokenizedVaryByParam</a>(<a href="#7915d18bd17050bc" class="i property">VaryByParam</a>);
+        }
+ 
+        <b>internal</b> <a id="d10b86bdb8cf4750" href="R/../../0000000000.html" target="n" data-glyph="74,1" class="i constructor">OutputCacheAttribute</a>(<a href="@0@System.Runtime.Caching/A.html#56974ec9e73a0420" class="t t">ObjectCache</a> <span id="r0 rd" class="r0 r">childActionCache</span>)
+            : <a href="#69c434289790b443" class="k">this</a>()
+        {
+            <a href="#948d1737a247e65b" class="i field">_childActionCacheThunk</a> = () =&gt; <span class="r0 r">childActionCache</span>;
+        }
+ 
+        <b>public string</b> <a id="74f091df1a396820" href="R/74f091df1a396820.html" target="n" data-glyph="102,1" class="i property">CacheProfile</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#3e4e6f9a61d79775" class="i property">CacheProfile</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b> { <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#3e4e6f9a61d79775" class="i property">CacheProfile</a> = <b>value</b>; }
+        }
+ 
+        <b>internal</b> <a href="@0@System.Web/A.html#364ff6131ff03c74" class="t t">OutputCacheParameters</a> <a id="1e9713482a751caa" href="R/../../0000000000.html" target="n" data-glyph="104,1" class="i property">CacheSettings</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>; }
+        }
+ 
+        <b>public static</b> <a href="@0@System.Runtime.Caching/A.html#56974ec9e73a0420" class="t t">ObjectCache</a> <a id="ed7d270b2fdf65bc" href="R/ed7d270b2fdf65bc.html" target="n" data-glyph="102,1" class="i property">ChildActionCache</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#6855dc891bda4d3c" class="i field">_childActionCache</a> ?? <a href="@0@System.Runtime.Caching/A.html#85751dcd91d94103" class="t t">MemoryCache</a>.<a href="@0@System.Runtime.Caching/A.html#1ddf0cf4a40795bc" class="i property">Default</a>; }
+            <b>set</b> { <a href="#6855dc891bda4d3c" class="i field">_childActionCache</a> = <b>value</b>; }
+        }
+ 
+        <b>private</b> <a href="@0@System.Runtime.Caching/A.html#56974ec9e73a0420" class="t t">ObjectCache</a> <a id="ebe12d760727e1f0" href="R/ebe12d760727e1f0.html" target="n" data-glyph="106,1" class="i property">ChildActionCacheInternal</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#948d1737a247e65b" class="i field">_childActionCacheThunk</a>(); }
+        }
+ 
+        <b>public int</b> <a id="8f6a41caa93fd843" href="R/8f6a41caa93fd843.html" target="n" data-glyph="102,1" class="i property">Duration</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#d27b874dd339c322" class="i property">Duration</a>; }
+            <b>set</b> { <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#d27b874dd339c322" class="i property">Duration</a> = <b>value</b>; }
+        }
+ 
+        <b>public</b> <a href="@0@System.Web/A.html#89b383fa4cfccc73" class="t t">OutputCacheLocation</a> <a id="94361ee0a82590d6" href="R/94361ee0a82590d6.html" target="n" data-glyph="102,1" class="i property">Location</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#116c544c6a45a619" class="i property">Location</a>; }
+            <b>set</b>
+            {
+                <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#116c544c6a45a619" class="i property">Location</a> = <b>value</b>;
+                <a href="#95abbc738e04f0dc" class="i field">_locationWasSet</a> = <b>true</b>;
+            }
+        }
+ 
+        <b>public bool</b> <a id="0de591c22744a4a5" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">NoStore</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#796515b938c59eed" class="i property">NoStore</a>; }
+            <b>set</b>
+            {
+                <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#796515b938c59eed" class="i property">NoStore</a> = <b>value</b>;
+                <a href="#8bb2b5875d840f31" class="i field">_noStoreWasSet</a> = <b>true</b>;
+            }
+        }
+ 
+        <b>public string</b> <a id="7e23e90f5ae305fe" href="R/7e23e90f5ae305fe.html" target="n" data-glyph="102,1" class="i property">SqlDependency</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#5efa16df10aa5ebd" class="i property">SqlDependency</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b> { <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#5efa16df10aa5ebd" class="i property">SqlDependency</a> = <b>value</b>; }
+        }
+ 
+        <b>public string</b> <a id="7722956540c1bfff" href="R/7722956540c1bfff.html" target="n" data-glyph="102,1" class="i property">VaryByContentEncoding</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#3449b9cdc3977e14" class="i property">VaryByContentEncoding</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b> { <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#3449b9cdc3977e14" class="i property">VaryByContentEncoding</a> = <b>value</b>; }
+        }
+ 
+        <b>public string</b> <a id="6c0395b60b623cb5" href="R/6c0395b60b623cb5.html" target="n" data-glyph="102,1" class="i property">VaryByCustom</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#c8beb82993a16e6c" class="i property">VaryByCustom</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b> { <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#c8beb82993a16e6c" class="i property">VaryByCustom</a> = <b>value</b>; }
+        }
+ 
+        <b>public string</b> <a id="4c5bcf90083d886c" href="R/4c5bcf90083d886c.html" target="n" data-glyph="102,1" class="i property">VaryByHeader</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#0273c70b0e50b7b0" class="i property">VaryByHeader</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b> { <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#0273c70b0e50b7b0" class="i property">VaryByHeader</a> = <b>value</b>; }
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Naming&quot;</span>, <span class="s">&quot;CA1704:IdentifiersShouldBeSpelledCorrectly&quot;</span>, <a href="@0@mscorlib/A.html#f5d3bc389dd4c890" class="i property">MessageId</a> = <span class="s">&quot;Param&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;Matches the @ OutputCache page directive. Suppressed in source because this is a special case suppression.&quot;</span>)]
+        <b>public string</b> <a id="7915d18bd17050bc" href="R/7915d18bd17050bc.html" target="n" data-glyph="102,1" class="i property">VaryByParam</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#6f49eda49d21d68c" class="i property">VaryByParam</a> ?? <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>; }
+            <b>set</b>
+            {
+                <span class="c">// Reset the tokenized values if the property gets modified.</span>
+                <a href="#6412bfbf1b6b8c63" class="i field">_tokenizedVaryByParams</a> = <b>null</b>;
+                <a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>.<a href="@0@System.Web/A.html#6f49eda49d21d68c" class="i property">VaryByParam</a> = <b>value</b>;
+            }
+        }
+ 
+        <b>private static void</b> <a id="90a1ba1c12341398" href="R/90a1ba1c12341398.html" target="n" data-glyph="76,1" class="i method">ClearChildActionFilterFinishCallback</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r1 rd" class="r1 r">controllerContext</span>)
+        {
+            <span class="r1 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a>.<a href="@0@mscorlib/A.html#4d9e8324826e9b9f" class="i method">Remove</a>(<a href="#5ea31c3b49478ce5" class="i field">_childActionFilterFinishCallbackKey</a>);
+        }
+ 
+        <b>private static void</b> <a id="2846ef56fc4a7309" href="R/2846ef56fc4a7309.html" target="n" data-glyph="76,1" class="i method">CompleteChildAction</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r2 rd" class="r2 r">filterContext</span>, <b>bool</b> <span id="r3 rd" class="r3 r">wasException</span>)
+        {
+            <a href="@0@mscorlib/A.html#486d58da4553e12d" class="t t">Action</a>&lt;<b>bool</b>&gt; <span id="r4 rd" class="r4 r">callback</span> = <a href="#55e5d5725cdb2b3f" class="i method">GetChildActionFilterFinishCallback</a>(<span class="r2 r">filterContext</span>);
+ 
+            <b>if</b> (<span class="r4 r">callback</span> != <b>null</b>)
+            {
+                <a href="#90a1ba1c12341398" class="i method">ClearChildActionFilterFinishCallback</a>(<span class="r2 r">filterContext</span>);
+                <span class="r4 r">callback</span>(<span class="r3 r">wasException</span>);
+            }
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#486d58da4553e12d" class="t t">Action</a>&lt;<b>bool</b>&gt; <a id="55e5d5725cdb2b3f" href="R/55e5d5725cdb2b3f.html" target="n" data-glyph="76,1" class="i method">GetChildActionFilterFinishCallback</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r5 rd" class="r5 r">controllerContext</span>)
+        {
+            <b>return</b> <span class="r5 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#5ea31c3b49478ce5" class="i field">_childActionFilterFinishCallbackKey</a>] <b>as</b> <a href="@0@mscorlib/A.html#486d58da4553e12d" class="t t">Action</a>&lt;<b>bool</b>&gt;;
+        }
+ 
+        <b>internal string</b> <a id="d7dfd3c62264d004" href="R/d7dfd3c62264d004.html" target="n" data-glyph="74,1" class="i method">GetChildActionUniqueId</a>(<a href="ActionExecutingContext.cs.html#39784fbc246122e1" class="t t">ActionExecutingContext</a> <span id="r6 rd" class="r6 r">filterContext</span>)
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r7 rd" class="r7 r">uniqueIdBuilder</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+ 
+            <span class="c">// Start with a prefix, presuming that we share the cache with other users</span>
+            <span class="r7 r">uniqueIdBuilder</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#d4319ddec0222871" class="i field">CacheKeyPrefix</a>);
+ 
+            <span class="c">// Unique ID of the action description</span>
+            <span class="r7 r">uniqueIdBuilder</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r6 r">filterContext</span>.<a href="ActionExecutingContext.cs.html#336cfe2229573afd" class="i property">ActionDescriptor</a>.<a href="ActionDescriptor.cs.html#542a6d30a8ddf139" class="i property">UniqueId</a>);
+ 
+            <span class="c">// Unique ID from the VaryByCustom settings, if any</span>
+            <a href="DescriptorUtil.cs.html#cd4e512d108fc916" class="t t">DescriptorUtil</a>.<a href="DescriptorUtil.cs.html#316ea390deb8e5fb" class="i method">AppendUniqueId</a>(<span class="r7 r">uniqueIdBuilder</span>, <a href="#6c0395b60b623cb5" class="i property">VaryByCustom</a>);
+            <b>if</b> (!<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<a href="#6c0395b60b623cb5" class="i property">VaryByCustom</a>))
+            {
+                <b>string</b> <span id="r8 rd" class="r8 r">varyByCustomResult</span> = <span class="r6 r">filterContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#440f71e28c1e213c" class="i property">ApplicationInstance</a>.<a href="@0@System.Web/A.html#1092f5ebcd7881aa" class="i method">GetVaryByCustomString</a>(<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>, <a href="#6c0395b60b623cb5" class="i property">VaryByCustom</a>);
+                <span class="r7 r">uniqueIdBuilder</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r8 r">varyByCustomResult</span>);
+            }
+ 
+            <span class="c">// Unique ID from the VaryByParam settings, if any</span>
+            <a href="#688533678def5a96" class="i method">BuildUniqueIdFromActionParameters</a>(<span class="r7 r">uniqueIdBuilder</span>, <span class="r6 r">filterContext</span>);
+ 
+            <span class="c">// The key is typically too long to be useful, so we use a cryptographic hash</span>
+            <span class="c">// as the actual key (better randomization and key distribution, so small vary</span>
+            <span class="c">// values will generate dramtically different keys).</span>
+            <b>using</b> (<a href="@0@System.Core/A.html#6fd44f98799fd9b2" class="t t">SHA256Cng</a> <span id="r9 rd" class="r9 r">sha</span> = <b>new</b> <a href="@0@System.Core/A.html#ea9137bd86a553bf" class="t constructor">SHA256Cng</a>())
+            {
+                <b>return</b> <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#f9e5bd7b69c5f334" class="i method">ToBase64String</a>(<span class="r9 r">sha</span>.<a href="@0@mscorlib/A.html#a71a3cba2c656040" class="i method">ComputeHash</a>(<a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a>.<a href="@0@mscorlib/A.html#a10eb90a3d884500" class="i property">UTF8</a>.<a href="@0@mscorlib/A.html#83f2d2c6f22db1a9" class="i method">GetBytes</a>(<span class="r7 r">uniqueIdBuilder</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>())));
+            }
+        }
+ 
+        <b>internal void</b> <a id="688533678def5a96" href="R/688533678def5a96.html" target="n" data-glyph="74,1" class="i method">BuildUniqueIdFromActionParameters</a>(
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r10 rd" class="r10 r">builder</span>,
+            <a href="ActionExecutingContext.cs.html#39784fbc246122e1" class="t t">ActionExecutingContext</a> <span id="r11 rd" class="r11 r">filterContext</span>)
+        {
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#d47c1f57ad1e1e6e" class="i method">Equals</a>(<a href="#7915d18bd17050bc" class="i property">VaryByParam</a>, <span class="s">&quot;none&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#6c3139b940557bf9" class="i field">OrdinalIgnoreCase</a>))
+            {
+                <span class="c">// nothing to do</span>
+                <b>return</b>;
+            }
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#d47c1f57ad1e1e6e" class="i method">Equals</a>(<a href="#7915d18bd17050bc" class="i property">VaryByParam</a>, <span class="s">&quot;*&quot;</span>, <a href="@0@mscorlib/A.html#702797def97ecb7c" class="t t">StringComparison</a>.<a href="@0@mscorlib/A.html#87891a6d28c64c9b" class="i field">Ordinal</a>))
+            {
+                <span class="c">// use all available key/value pairs. Keys need to be sorted so we end up with a stable identifier.</span>
+                <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <b>object</b>&gt;&gt; <span id="r12 rd" class="r12 r">orderedParameters</span> = <span class="r11 r">filterContext</span>
+                                                                .<a href="ActionExecutingContext.cs.html#53df5c26f4bdf4e5" class="i property">ActionParameters</a>
+                                                                .<a href="@0@System.Core/A.html#23eaf0fcd546108c" class="i method">OrderBy</a>(<span id="r13 rd" class="r13 r">k</span> =&gt; <span class="r13 r">k</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a>, <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+ 
+                <b>foreach</b> (<a href="@0@mscorlib/A.html#8585965bb176a426" class="t t">KeyValuePair</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r14 rd" class="r14 r">item</span> <b>in</b> <span class="r12 r">orderedParameters</span>)
+                {
+                    <a href="DescriptorUtil.cs.html#cd4e512d108fc916" class="t t">DescriptorUtil</a>.<a href="DescriptorUtil.cs.html#316ea390deb8e5fb" class="i method">AppendUniqueId</a>(<span class="r10 r">builder</span>, <span class="r14 r">item</span>.<a href="@0@mscorlib/A.html#f9d1c04feb1af032" class="i property">Key</a>.<a href="@0@mscorlib/A.html#b1bb64f94f2814f6" class="i method">ToUpperInvariant</a>());
+                    <a href="DescriptorUtil.cs.html#cd4e512d108fc916" class="t t">DescriptorUtil</a>.<a href="DescriptorUtil.cs.html#316ea390deb8e5fb" class="i method">AppendUniqueId</a>(<span class="r10 r">builder</span>, <span class="r14 r">item</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a>);
+                }
+ 
+                <b>return</b>;
+            }
+ 
+            <a href="@0@mscorlib/A.html#61c27c4c0db5397c" class="t t">LazyInitializer</a>.<a href="@0@mscorlib/A.html#f9e027fdc2833072" class="i method">EnsureInitialized</a>(<b>ref</b> <a href="#6412bfbf1b6b8c63" class="i field">_tokenizedVaryByParams</a>,
+                                              <a href="#ace05f7d76dd992b" class="i field">_splitVaryByParamThunk</a>);
+ 
+            <span class="c">// By default, filterContext.ActionParameter is a case insensitive (StringComparer.OrdinalIgnoreCase)</span>
+            <span class="c">// dictionary. If the user has replaced it with a dictionary that uses a different comparer, we&#39;ll</span>
+            <span class="c">// wrap it in a Dictionary&lt;string, object&gt;(StringComparer.OrdinalIgnoreCase)</span>
+            <span class="c">// This allows us to lookup values for action parameters when the VaryByParam token key differs in case.</span>
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r15 rd" class="r15 r">keyValues</span> = <a href="#85010ecd7db06321" class="i method">GetCaseInsensitiveActionParametersDictionary</a>(
+                                                        <span class="r11 r">filterContext</span>.<a href="ActionExecutingContext.cs.html#53df5c26f4bdf4e5" class="i property">ActionParameters</a>);
+            <b>for</b> (<b>int</b> <span id="r16 rd" class="r16 r">i</span> = 0; <span class="r16 r">i</span> &lt; <a href="#6412bfbf1b6b8c63" class="i field">_tokenizedVaryByParams</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r16 r">i</span>++)
+            {
+                <b>string</b> <span id="r17 rd" class="r17 r">key</span> = <a href="#6412bfbf1b6b8c63" class="i field">_tokenizedVaryByParams</a>[<span class="r16 r">i</span>];
+                <a href="DescriptorUtil.cs.html#cd4e512d108fc916" class="t t">DescriptorUtil</a>.<a href="DescriptorUtil.cs.html#316ea390deb8e5fb" class="i method">AppendUniqueId</a>(<span class="r10 r">builder</span>, <span class="r17 r">key</span>);
+ 
+                <b>object</b> <span id="r18 rd" class="r18 r">value</span>;
+                <span class="r15 r">keyValues</span>.<a href="@0@mscorlib/A.html#2e5bc6d8c0f21e67" class="i method">TryGetValue</a>(<span class="r17 r">key</span>, <b>out</b> <span class="r18 r">value</span>);
+                <a href="DescriptorUtil.cs.html#cd4e512d108fc916" class="t t">DescriptorUtil</a>.<a href="DescriptorUtil.cs.html#316ea390deb8e5fb" class="i method">AppendUniqueId</a>(<span class="r10 r">builder</span>, <span class="r18 r">value</span>);
+            }
+        }
+ 
+        <b>public static bool</b> <a id="a26724294a60da1f" href="R/a26724294a60da1f.html" target="n" data-glyph="72,1" class="i method">IsChildActionCacheActive</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r19 rd" class="r19 r">controllerContext</span>)
+        {
+            <b>return</b> <a href="#55e5d5725cdb2b3f" class="i method">GetChildActionFilterFinishCallback</a>(<span class="r19 r">controllerContext</span>) != <b>null</b>;
+        }
+ 
+        <b>public override void</b> <a id="1b7a8ce98437570c" href="R/1b7a8ce98437570c.html" target="n" data-glyph="72,1" class="i method">OnActionExecuted</a>(<a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a> <span id="r20 rd" class="r20 r">filterContext</span>)
+        {
+            <b>if</b> (<span class="r20 r">filterContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;filterContext&quot;</span>);
+            }
+ 
+            <span class="c">// Complete the request if the child action threw an exception</span>
+            <b>if</b> (<span class="r20 r">filterContext</span>.<a href="ControllerContext.cs.html#a6bb7a97561e2497" class="i property">IsChildAction</a> &amp;&amp; <span class="r20 r">filterContext</span>.<a href="ActionExecutedContext.cs.html#9a5b4ae7b5ee8600" class="i property">Exception</a> != <b>null</b>)
+            {
+                <a href="#2846ef56fc4a7309" class="i method">CompleteChildAction</a>(<span class="r20 r">filterContext</span>, <span class="r3 r">wasException</span>: <b>true</b>);
+            }
+        }
+ 
+        <b>public override void</b> <a id="d0567ce41ecb0f74" href="R/d0567ce41ecb0f74.html" target="n" data-glyph="72,1" class="i method">OnActionExecuting</a>(<a href="ActionExecutingContext.cs.html#39784fbc246122e1" class="t t">ActionExecutingContext</a> <span id="r21 rd" class="r21 r">filterContext</span>)
+        {
+            <b>if</b> (<span class="r21 r">filterContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;filterContext&quot;</span>);
+            }
+ 
+            <b>if</b> (<span class="r21 r">filterContext</span>.<a href="ControllerContext.cs.html#a6bb7a97561e2497" class="i property">IsChildAction</a>)
+            {
+                <span class="c">// Skip validation and caching if there&#39;s no caching on the server for this action. It&#39;s ok to </span>
+                <span class="c">// explicitly disable caching for a child action, but it will be ignored if the parent action</span>
+                <span class="c">// is using caching.</span>
+                <b>if</b> (<a href="#aea50b1827ad3149" class="i method">IsServerSideCacheDisabled</a>())
+                {
+                    <b>return</b>;
+                }
+ 
+                <a href="#7fec7906f8ad2b84" class="i method">ValidateChildActionConfiguration</a>();
+ 
+                <span class="c">// Already actively being captured? (i.e., cached child action inside of cached child action)</span>
+                <span class="c">// Realistically, this needs write substitution to do properly (including things like authentication)</span>
+                <b>if</b> (<a href="#55e5d5725cdb2b3f" class="i method">GetChildActionFilterFinishCallback</a>(<span class="r21 r">filterContext</span>) != <b>null</b>)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#3f3c06bf64887365" class="i property">OutputCacheAttribute_CannotNestChildCache</a>);
+                }
+ 
+                <span class="c">// Already cached?</span>
+                <b>string</b> <span id="r22 rd" class="r22 r">uniqueId</span> = <a href="#d7dfd3c62264d004" class="i method">GetChildActionUniqueId</a>(<span class="r21 r">filterContext</span>);
+                <b>string</b> <span id="r23 rd" class="r23 r">cachedValue</span> = <a href="#ebe12d760727e1f0" class="i property">ChildActionCacheInternal</a>.<a href="@0@System.Runtime.Caching/A.html#c013375a922f6aa1" class="i method">Get</a>(<span class="r22 r">uniqueId</span>) <b>as string</b>;
+                <b>if</b> (<span class="r23 r">cachedValue</span> != <b>null</b>)
+                {
+                    <span class="r21 r">filterContext</span>.<a href="ActionExecutingContext.cs.html#0f2a66fe5c3a5fee" class="i property">Result</a> = <b>new</b> <a href="ContentResult.cs.html#eac8002bb639d898" class="t constructor">ContentResult</a>() { <a href="ContentResult.cs.html#3b598b9c72a7893a" class="i property">Content</a> = <span class="r23 r">cachedValue</span> };
+                    <b>return</b>;
+                }
+ 
+                <span class="c">// Swap in a new TextWriter so we can capture the output</span>
+                <a href="/System.Web.WebPages/A.html#10bd690fccc1b3ed" class="k">var</a> <span id="r24 rd" class="r24 r">cachingWriter</span> = <b>new</b> <a href="/System.Web.WebPages/A.html#6babad01feca20cf" class="t constructor">StringBlockWriter</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>);
+                <a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r25 rd" class="r25 r">originalWriter</span> = <span class="r21 r">filterContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#b5a3728929e8cb42" class="i property">Response</a>.<a href="@0@System.Web/A.html#de1230eb37b299d4" class="i property">Output</a>;
+                <span class="r21 r">filterContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#b5a3728929e8cb42" class="i property">Response</a>.<a href="@0@System.Web/A.html#de1230eb37b299d4" class="i property">Output</a> = <span class="r24 r">cachingWriter</span>;
+ 
+                <span class="c">// Set a finish callback to clean up</span>
+                <a href="#01103acb293c82c7" class="i method">SetChildActionFilterFinishCallback</a>(<span class="r21 r">filterContext</span>, <span id="r26 rd" class="r26 r">wasException</span> =&gt;
+                {
+                    <span class="c">// Restore original writer</span>
+                    <span class="r21 r">filterContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#b5a3728929e8cb42" class="i property">Response</a>.<a href="@0@System.Web/A.html#de1230eb37b299d4" class="i property">Output</a> = <span class="r25 r">originalWriter</span>;
+ 
+                    <span class="c">// Grab output and write it</span>
+                    <b>string</b> <span id="r27 rd" class="r27 r">capturedText</span> = <span class="r24 r">cachingWriter</span>.<a href="/System.Web.WebPages/A.html#da635a929aba26d7" class="i method">ToString</a>();
+                    <span class="r21 r">filterContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#b5a3728929e8cb42" class="i property">Response</a>.<a href="@0@System.Web/A.html#358fc05866d74ff1" class="i method">Write</a>(<span class="r27 r">capturedText</span>);
+ 
+                    <span class="c">// Only cache output if this wasn&#39;t an error</span>
+                    <b>if</b> (!<span class="r26 r">wasException</span>)
+                    {
+                        <a href="#ebe12d760727e1f0" class="i property">ChildActionCacheInternal</a>.<a href="@0@System.Runtime.Caching/A.html#e8261eb920e9e8c5" class="i method">Add</a>(<span class="r22 r">uniqueId</span>, <span class="r27 r">capturedText</span>, <a href="@0@mscorlib/A.html#68b4bb83ce8d1c31" class="t t">DateTimeOffset</a>.<a href="@0@mscorlib/A.html#04abe0cac293ebd0" class="i property">UtcNow</a>.<a href="@0@mscorlib/A.html#b1f3371f1ec3f990" class="i method">AddSeconds</a>(<a href="#8f6a41caa93fd843" class="i property">Duration</a>));
+                    }
+                });
+            }
+        }
+ 
+        <b>public void</b> <a id="cc133ad79bcd1e8a" href="R/cc133ad79bcd1e8a.html" target="n" data-glyph="72,1" class="i method">OnException</a>(<a href="ExceptionContext.cs.html#64e554bfeb46df68" class="t t">ExceptionContext</a> <span id="r28 rd" class="r28 r">filterContext</span>)
+        {
+            <b>if</b> (<span class="r28 r">filterContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;filterContext&quot;</span>);
+            }
+ 
+            <b>if</b> (<span class="r28 r">filterContext</span>.<a href="ControllerContext.cs.html#a6bb7a97561e2497" class="i property">IsChildAction</a>)
+            {
+                <a href="#2846ef56fc4a7309" class="i method">CompleteChildAction</a>(<span class="r28 r">filterContext</span>, <span class="r3 r">wasException</span>: <b>true</b>);
+            }
+        }
+ 
+        <b>public override void</b> <a id="1bb6e31bcd77b903" href="R/1bb6e31bcd77b903.html" target="n" data-glyph="72,1" class="i method">OnResultExecuting</a>(<a href="ResultExecutingContext.cs.html#70779de1a7fe6836" class="t t">ResultExecutingContext</a> <span id="r29 rd" class="r29 r">filterContext</span>)
+        {
+            <b>if</b> (<span class="r29 r">filterContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;filterContext&quot;</span>);
+            }
+ 
+            <b>if</b> (!<span class="r29 r">filterContext</span>.<a href="ControllerContext.cs.html#a6bb7a97561e2497" class="i property">IsChildAction</a>)
+            {
+                <span class="c">// we need to call ProcessRequest() since there&#39;s no other way to set the Page.Response intrinsic</span>
+                <b>using</b> (<a href="#883079eb9f51c91b" class="t t">OutputCachedPage</a> <span id="r30 rd" class="r30 r">page</span> = <b>new</b> <a href="#ece11a089b123b83" class="t constructor">OutputCachedPage</a>(<a href="#a0a849315bf1aa4a" class="i field">_cacheSettings</a>))
+                {
+                    <span class="r30 r">page</span>.<a href="@0@System.Web/A.html#f45b355e7bbe681d" class="i method">ProcessRequest</a>(<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>);
+                }
+            }
+        }
+ 
+        <b>public override void</b> <a id="ea5635bac1e67ae5" href="R/ea5635bac1e67ae5.html" target="n" data-glyph="72,1" class="i method">OnResultExecuted</a>(<a href="ResultExecutedContext.cs.html#ead256ea27cbc548" class="t t">ResultExecutedContext</a> <span id="r31 rd" class="r31 r">filterContext</span>)
+        {
+            <b>if</b> (<span class="r31 r">filterContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;filterContext&quot;</span>);
+            }
+ 
+            <b>if</b> (<span class="r31 r">filterContext</span>.<a href="ControllerContext.cs.html#a6bb7a97561e2497" class="i property">IsChildAction</a>)
+            {
+                <a href="#2846ef56fc4a7309" class="i method">CompleteChildAction</a>(<span class="r31 r">filterContext</span>, <span class="r3 r">wasException</span>: <span class="r31 r">filterContext</span>.<a href="ResultExecutedContext.cs.html#e62f8f11332d3caa" class="i property">Exception</a> != <b>null</b>);
+            }
+        }
+ 
+        <b>private static void</b> <a id="01103acb293c82c7" href="R/01103acb293c82c7.html" target="n" data-glyph="76,1" class="i method">SetChildActionFilterFinishCallback</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r32 rd" class="r32 r">controllerContext</span>, <a href="@0@mscorlib/A.html#486d58da4553e12d" class="t t">Action</a>&lt;<b>bool</b>&gt; <span id="r33 rd" class="r33 r">callback</span>)
+        {
+            <span class="r32 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#5ea31c3b49478ce5" class="i field">_childActionFilterFinishCallbackKey</a>] = <span class="r33 r">callback</span>;
+        }
+ 
+        <b>private void</b> <a id="7fec7906f8ad2b84" href="R/7fec7906f8ad2b84.html" target="n" data-glyph="76,1" class="i method">ValidateChildActionConfiguration</a>()
+        {
+            <b>if</b> (!<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<a href="#74f091df1a396820" class="i property">CacheProfile</a>) ||
+                !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<a href="#7e23e90f5ae305fe" class="i property">SqlDependency</a>) ||
+                !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<a href="#7722956540c1bfff" class="i property">VaryByContentEncoding</a>) ||
+                !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<a href="#4c5bcf90083d886c" class="i property">VaryByHeader</a>) ||
+                <a href="#95abbc738e04f0dc" class="i field">_locationWasSet</a> || <a href="#8bb2b5875d840f31" class="i field">_noStoreWasSet</a>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#d327757c46461508" class="i property">OutputCacheAttribute_ChildAction_UnsupportedSetting</a>);
+            }
+ 
+            <b>if</b> (<a href="#8f6a41caa93fd843" class="i property">Duration</a> &lt;= 0)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#eb3fd862355de707" class="i property">OutputCacheAttribute_InvalidDuration</a>);
+            }
+ 
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#55e241b6143365ef" class="i method">IsNullOrWhiteSpace</a>(<a href="#7915d18bd17050bc" class="i property">VaryByParam</a>))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#a263c35bbffee8d5" class="i property">OutputCacheAttribute_InvalidVaryByParam</a>);
+            }
+        }
+ 
+        <b>private bool</b> <a id="aea50b1827ad3149" href="R/aea50b1827ad3149.html" target="n" data-glyph="76,1" class="i method">IsServerSideCacheDisabled</a>()
+        {
+            <b>switch</b> (<a href="#94361ee0a82590d6" class="i property">Location</a>)
+            {
+                <b>case</b> <a href="@0@System.Web/A.html#89b383fa4cfccc73" class="t t">OutputCacheLocation</a>.<a href="@0@System.Web/A.html#093f5d3db039f514" class="i field">None</a>:
+                <b>case</b> <a href="@0@System.Web/A.html#89b383fa4cfccc73" class="t t">OutputCacheLocation</a>.<a href="@0@System.Web/A.html#2b6756b508e9564f" class="i field">Client</a>:
+                <b>case</b> <a href="@0@System.Web/A.html#89b383fa4cfccc73" class="t t">OutputCacheLocation</a>.<a href="@0@System.Web/A.html#1b1a7c3a1fd5e034" class="i field">Downstream</a>:
+                    <b>return true</b>;
+ 
+                <b>default</b>:
+                    <b>return false</b>;
+            }
+        }
+ 
+        <b>private static string</b>[] <a id="ea89b6065cee2c45" href="R/ea89b6065cee2c45.html" target="n" data-glyph="76,1" class="i method">GetTokenizedVaryByParam</a>(<b>string</b> <span id="r34 rd" class="r34 r">varyByParam</span>)
+        {
+            <span class="c">// Vary by specific parameters</span>
+            <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>string</b>&gt; <span id="r35 rd" class="r35 r">splitTokens</span> = <b>from</b> <span class="i">part</span> <b>in</b> <span class="r34 r">varyByParam</span>.<a href="@0@mscorlib/A.html#1c4a9dc78ba38999" class="i method">Split</a>(<a href="#fb637c779ea17c08" class="i field">_splitParameter</a>)
+                                              <b>let</b> <span class="i">trimmed</span> = <span class="i">part</span>.<a href="@0@mscorlib/A.html#06a5f7c688e69307" class="i method">Trim</a>()
+                                              <b>where</b> !<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="i">trimmed</span>)
+                                              <b>select</b> <span class="i">trimmed</span>.<a href="@0@mscorlib/A.html#b1bb64f94f2814f6" class="i method">ToUpperInvariant</a>();
+            <b>return</b> <span class="r35 r">splitTokens</span>.<a href="@0@System.Core/A.html#783a052330e7d48d" class="i method">ToArray</a>();
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <a id="85010ecd7db06321" href="R/85010ecd7db06321.html" target="n" data-glyph="76,1" class="i method">GetCaseInsensitiveActionParametersDictionary</a>(
+            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r36 rd" class="r36 r">actionParameters</span>)
+        {
+            <span class="c">// The ControllerActionInvoker starts off with a Dictionary&lt;string, object&gt; with</span>
+            <span class="c">// StringComparer.OrdinalIgnoreCase. Check if we are working with this type to start with.</span>
+            <span class="c">// If not produce a new dictionary from the existing one.</span>
+ 
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="k">var</a> <span id="r37 rd" class="r37 r">dictionary</span> = <span class="r36 r">actionParameters</span> <b>as</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <b>object</b>&gt;;
+            <b>if</b> (<span class="r37 r">dictionary</span> != <b>null</b> &amp;&amp; <span class="r37 r">dictionary</span>.<a href="@0@mscorlib/A.html#7c36cf00f3c1e427" class="i property">Comparer</a> == <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>)
+            {
+                <b>return</b> <span class="r37 r">dictionary</span>;
+            }
+ 
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#c59275a169cb495a" class="t constructor">Dictionary</a>&lt;<b>string</b>, <b>object</b>&gt;(<span class="r36 r">actionParameters</span>, <a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;ASP.NET.Security&quot;</span>, <span class="s">&quot;CA5328:ValidateRequestShouldBeEnabled&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;Instances of this type are not created in response to direct user input.&quot;</span>)]
+        <b>private sealed class</b> <a id="883079eb9f51c91b" href="R/883079eb9f51c91b.html" target="n" data-glyph="4,1" class="t t">OutputCachedPage</a> : <a href="@0@System.Web/A.html#a7e11608d83dac42" class="t t">Page</a>
+        {
+            <b>private</b> <a href="@0@System.Web/A.html#364ff6131ff03c74" class="t t">OutputCacheParameters</a> <a id="418004917b5dab2e" href="R/418004917b5dab2e.html" target="n" data-glyph="46,2" class="i field">_cacheSettings</a>;
+ 
+            <b>public</b> <a id="ece11a089b123b83" href="R/ece11a089b123b83.html" target="n" data-glyph="72,2" class="i constructor">OutputCachedPage</a>(<a href="@0@System.Web/A.html#364ff6131ff03c74" class="t t">OutputCacheParameters</a> <span id="r38 rd" class="r38 r">cacheSettings</span>)
+            {
+                <span class="c">// Tracing requires Page IDs to be unique.</span>
+                <a href="@0@System.Web/A.html#f61bdcc3aeb7c8f7" class="i property">ID</a> = <a href="@0@mscorlib/A.html#b622ef5f6b76c10a" class="t t">Guid</a>.<a href="@0@mscorlib/A.html#b7fae6994c22c22e" class="i method">NewGuid</a>().<a href="@0@mscorlib/A.html#a6547a472def7796" class="i method">ToString</a>();
+                <a href="#418004917b5dab2e" class="i field">_cacheSettings</a> = <span class="r38 r">cacheSettings</span>;
+            }
+ 
+            <b>protected override void</b> <a id="11853ea5adb3fa6c" href="R/11853ea5adb3fa6c.html" target="n" data-glyph="75,2" class="i method">FrameworkInitialize</a>()
+            {
+                <span class="c">// when you put the &lt;%@ OutputCache %&gt; directive on a page, the generated code calls InitOutputCache() from here</span>
+                <a href="@0@System.Web/A.html#a7e11608d83dac42" class="k">base</a>.<a href="@0@System.Web/A.html#26ff61a08277507f" class="i method">FrameworkInitialize</a>();
+                <a href="@0@System.Web/A.html#23924d1cf31c103c" class="i method">InitOutputCache</a>(<a href="#418004917b5dab2e" class="i field">_cacheSettings</a>);
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

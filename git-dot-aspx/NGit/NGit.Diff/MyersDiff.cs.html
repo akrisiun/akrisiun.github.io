@@ -1,0 +1,649 @@
+﻿<!DOCTYPE html>
+<html><head><title>MyersDiff.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(640);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/MyersDiff.cs" target="_top">NGit.Diff\MyersDiff.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Diff algorithm, based on &quot;An O(ND) Difference Algorithm and its</span>
+	<span class="c">///</span><span class="c"> Variations&quot;, by Eugene Myers.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Diff algorithm, based on &quot;An O(ND) Difference Algorithm and its</span>
+	<span class="c">///</span><span class="c"> Variations&quot;, by Eugene Myers.</span>
+	<span class="c">///</span><span class="c"> The basic idea is to put the line numbers of text A as columns (&quot;x&quot;) and the</span>
+	<span class="c">///</span><span class="c"> lines of text B as rows (&quot;y&quot;).  Now you try to find the shortest &quot;edit path&quot;</span>
+	<span class="c">///</span><span class="c"> from the upper left corner to the lower right corner, where you can</span>
+	<span class="c">///</span><span class="c"> always go horizontally or vertically, but diagonally from (x,y) to</span>
+	<span class="c">///</span><span class="c"> (x+1,y+1) only if line x in text A is identical to line y in text B.</span>
+	<span class="c">///</span><span class="c"> Myers&#39; fundamental concept is the &quot;furthest reaching D-path on diagonal k&quot;:</span>
+	<span class="c">///</span><span class="c"> a D-path is an edit path starting at the upper left corner and containing</span>
+	<span class="c">///</span><span class="c"> exactly D non-diagonal elements (&quot;differences&quot;).  The furthest reaching</span>
+	<span class="c">///</span><span class="c"> D-path on diagonal k is the one that contains the most (diagonal) elements</span>
+	<span class="c">///</span><span class="c"> which ends on diagonal k (where k = y - x).</span>
+	<span class="c">///</span><span class="c"> Example:</span>
+	<span class="c">///</span><span class="c"> H E L L O   W O R L D</span>
+	<span class="c">///</span><span class="c"> ____</span>
+	<span class="c">///</span><span class="c"> L     \___</span>
+	<span class="c">///</span><span class="c"> O         \___</span>
+	<span class="c">///</span><span class="c"> W             \________</span>
+	<span class="c">///</span><span class="c"> Since every D-path has exactly D horizontal or vertical elements, it can</span>
+	<span class="c">///</span><span class="c"> only end on the diagonals -D, -D+2, ..., D-2, D.</span>
+	<span class="c">///</span><span class="c"> Since every furthest reaching D-path contains at least one furthest</span>
+	<span class="c">///</span><span class="c"> reaching (D-1)-path (except for D=0), we can construct them recursively.</span>
+	<span class="c">///</span><span class="c"> Since we are really interested in the shortest edit path, we can start</span>
+	<span class="c">///</span><span class="c"> looking for a 0-path, then a 1-path, and so on, until we find a path that</span>
+	<span class="c">///</span><span class="c"> ends in the lower right corner.</span>
+	<span class="c">///</span><span class="c"> To save space, we do not need to store all paths (which has quadratic space</span>
+	<span class="c">///</span><span class="c"> requirements), but generate the D-paths simultaneously from both sides.</span>
+	<span class="c">///</span><span class="c"> When the ends meet, we will have found &quot;the middle&quot; of the path.  From the</span>
+	<span class="c">///</span><span class="c"> end points of that diagonal part, we can generate the rest recursively.</span>
+	<span class="c">///</span><span class="c"> This only requires linear space.</span>
+	<span class="c">///</span><span class="c"> The overall (runtime) complexity is</span>
+	<span class="c">///</span><span class="c"> O(N * D^2 + 2 * N/2 * (D/2)^2 + 4 * N/4 * (D/4)^2 + ...)</span>
+	<span class="c">///</span><span class="c"> = O(N * D^2 * 5 / 4) = O(N * D^2),</span>
+	<span class="c">///</span><span class="c"> (With each step, we have to find the middle parts of twice as many regions</span>
+	<span class="c">///</span><span class="c"> as before, but the regions (as well as the D) are halved.)</span>
+	<span class="c">///</span><span class="c"> So the overall runtime complexity stays the same with linear space,</span>
+	<span class="c">///</span><span class="c"> albeit with a larger constant factor.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="xml doc comment - processing instruction">&lt;?</span><span class="xml doc comment - processing instruction">&gt;&lt;/</span><span class="xml doc comment - processing instruction">?&gt;</span>
+	<b>public class</b> <a id="e1d6681a94d61f1f" href="../R/e1d6681a94d61f1f.html" target="n" data-glyph="0,0" class="t t">MyersDiff</a>&lt;<span id="r0 rd t" class="r0 r t">S</span>&gt; <b>where</b> <span class="r0 r t">S</span>:<a href="Sequence.cs.html#00c47a4b39d65421" class="t t">Sequence</a>
+	{
+		<b>private sealed class</b> <a id="753b7ba0c745cec2" href="../R/753b7ba0c745cec2.html" target="n" data-glyph="4,1" class="t t">_LowLevelDiffAlgorithm_110</a> : <a href="LowLevelDiffAlgorithm.cs.html#2707d0d5e52c80c1" class="t t">LowLevelDiffAlgorithm</a>
+		{
+			<b>public</b> <a id="355da6a8f79ec7e1" href="../R/355da6a8f79ec7e1.html" target="n" data-glyph="72,2" class="i constructor">_LowLevelDiffAlgorithm_110</a>()
+			{
+			}
+
+			<b>public override void</b> <a id="e8dfc8defd6212c8" href="../R/e8dfc8defd6212c8.html" target="n" data-glyph="72,2" class="i method">DiffNonCommon</a>&lt;<span id="r1 rd t" class="r1 r t">S</span>&gt;(<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r2 rd" class="r2 r">edits</span>, <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r1 r t">S</span>&gt;
+				 <span id="r3 rd" class="r3 r">cmp</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r1 r t">S</span>&gt; <span id="r4 rd" class="r4 r">a</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r1 r t">S</span>&gt; <span id="r5 rd" class="r5 r">b</span>, <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r6 rd" class="r6 r">region</span>)
+			{
+				<b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#411baa3192cc6889" class="t constructor">MyersDiff</a>&lt;<span class="r1 r t">S</span>&gt;(<span class="r2 r">edits</span>, <span class="r3 r">cmp</span>, <span class="r4 r">a</span>, <span class="r5 r">b</span>, <span class="r6 r">region</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Singleton instance of MyersDiff.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Singleton instance of MyersDiff.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public static readonly</b> <a href="DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <a id="e61124c0f478163c" href="../R/e61124c0f478163c.html" target="n" data-glyph="42,1" class="i field">INSTANCE</a> = <b>new</b> <a href="#355da6a8f79ec7e1" class="t constructor">_LowLevelDiffAlgorithm_110</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The list of edits found during the last call to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>{<span class="r7 r t">S</span>}.<a href="#05358699ac7a012a" class="i method">CalculateEdits</a>(<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">MyersDiff</span><span class="c">&amp;lt;</span><span class="c">S</span><span class="c">&amp;gt;</span><span class="c">.CalculateEdits(Edit)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <a id="1d45117684de35fe" href="../R/1d45117684de35fe.html" target="n" data-glyph="45,1" class="i field">edits</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Comparison function for sequences.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Comparison function for sequences.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r0 r t">S</span>&gt; <a id="21eb5c4b26139ae8" href="../R/21eb5c4b26139ae8.html" target="n" data-glyph="45,1" class="i field">cmp</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The first text to be compared.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">The first text to be compared. Referred to as &quot;Text A&quot; in the comments</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <a id="8af043d4dde65fcb" href="../R/8af043d4dde65fcb.html" target="n" data-glyph="45,1" class="i field">a</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The second text to be compared.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">The second text to be compared. Referred to as &quot;Text B&quot; in the comments</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <a id="bd05f59bb298fd93" href="../R/bd05f59bb298fd93.html" target="n" data-glyph="45,1" class="i field">b</a>;
+
+		<b>private</b> <a id="411baa3192cc6889" href="../R/411baa3192cc6889.html" target="n" data-glyph="76,1" class="i constructor">MyersDiff</a>(<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r8 rd" class="r8 r">edits</span>, <a href="HashedSequenceComparator.cs.html#af70a01bf9572166" class="t t">HashedSequenceComparator</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r9 rd" class="r9 r">cmp</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>
+			&lt;<span class="r0 r t">S</span>&gt; <span id="r10 rd" class="r10 r">a</span>, <a href="HashedSequence.cs.html#419b33d85b577655" class="t t">HashedSequence</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r11 rd" class="r11 r">b</span>, <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r12 rd" class="r12 r">region</span>)
+		{
+			<a href="#93a633692008886b" class="i field">middle</a> = <b>new</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#e5d83b0dcdbdbbf3" class="t constructor">MiddleEdit</a>(<a href="#e1d6681a94d61f1f" class="k">this</a>);
+			<a href="#e1d6681a94d61f1f" class="k">this</a>.<a href="#1d45117684de35fe" class="i field">edits</a> = <span class="r8 r">edits</span>;
+			<a href="#e1d6681a94d61f1f" class="k">this</a>.<a href="#21eb5c4b26139ae8" class="i field">cmp</a> = <span class="r9 r">cmp</span>;
+			<a href="#e1d6681a94d61f1f" class="k">this</a>.<a href="#8af043d4dde65fcb" class="i field">a</a> = <span class="r10 r">a</span>;
+			<a href="#e1d6681a94d61f1f" class="k">this</a>.<a href="#bd05f59bb298fd93" class="i field">b</a> = <span class="r11 r">b</span>;
+			<a href="#05358699ac7a012a" class="i method">CalculateEdits</a>(<span class="r12 r">region</span>);
+		}
+
+		<b>internal</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <a id="93a633692008886b" href="../R/93a633692008886b.html" target="n" data-glyph="44,1" class="i field">middle</a>;
+
+		<span class="c">// TODO: use ThreadLocal for future multi-threaded operations</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Entrypoint into the algorithm this class is all about.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Entrypoint into the algorithm this class is all about. This method triggers that the</span>
+		<span class="c">///</span><span class="c"> differences between A and B are calculated in form of a list of edits.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">r</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">portion of the sequences to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="05358699ac7a012a" href="../R/05358699ac7a012a.html" target="n" data-glyph="76,1" class="i method">CalculateEdits</a>(<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r13 rd" class="r13 r">r</span>)
+		{
+			<a href="#93a633692008886b" class="i field">middle</a>.<a href="#d243cba6c03773e0" class="i method">Initialize</a>(<span class="r13 r">r</span>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a>, <span class="r13 r">r</span>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a>, <span class="r13 r">r</span>.<a href="Edit.cs.html#24d18ab00be068c9" class="i field">beginB</a>, <span class="r13 r">r</span>.<a href="Edit.cs.html#4e5d0b16b0f6a162" class="i field">endB</a>);
+			<b>if</b> (<a href="#93a633692008886b" class="i field">middle</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a> &gt;= <a href="#93a633692008886b" class="i field">middle</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a> &amp;&amp; <a href="#93a633692008886b" class="i field">middle</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a> &gt;= <a href="#93a633692008886b" class="i field">middle</a>.<a href="#31300727292329c1" class="i field">endB</a>)
+			{
+				<b>return</b>;
+			}
+			<a href="#b5a16e110eea9435" class="i method">CalculateEdits</a>(<a href="#93a633692008886b" class="i field">middle</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a>, <a href="#93a633692008886b" class="i field">middle</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a>, <a href="#93a633692008886b" class="i field">middle</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a>, <a href="#93a633692008886b" class="i field">middle</a>.<a href="#31300727292329c1" class="i field">endB</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Calculates the differences between a given part of A against another given part of B</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">beginA</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">start of the part of A which should be compared (0</span><span class="c">&amp;lt;</span><span class="c">=beginA</span><span class="c">&amp;lt;</span><span class="c">sizeof(A))</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">endA</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">end of the part of A which should be compared (beginA</span><span class="c">&amp;lt;</span><span class="c">=endA</span><span class="c">&amp;lt;</span><span class="c">sizeof(A))</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">beginB</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">start of the part of B which should be compared (0</span><span class="c">&amp;lt;</span><span class="c">=beginB</span><span class="c">&amp;lt;</span><span class="c">sizeof(B))</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">endB</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">end of the part of B which should be compared (beginB</span><span class="c">&amp;lt;</span><span class="c">=endB</span><span class="c">&amp;lt;</span><span class="c">sizeof(B))</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal virtual void</b> <a id="b5a16e110eea9435" href="../R/b5a16e110eea9435.html" target="n" data-glyph="75,1" class="i method">CalculateEdits</a>(<b>int</b> <span id="r14 rd" class="r14 r">beginA</span>, <b>int</b> <span id="r15 rd" class="r15 r">endA</span>, <b>int</b> <span id="r16 rd" class="r16 r">beginB</span>, 
+			<b>int</b> <span id="r17 rd" class="r17 r">endB</span>)
+		{
+			<a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <span id="r18 rd" class="r18 r">edit</span> = <a href="#93a633692008886b" class="i field">middle</a>.<a href="#ab5ff4e0040ccce8" class="i method">Calculate</a>(<span class="r14 r">beginA</span>, <span class="r15 r">endA</span>, <span class="r16 r">beginB</span>, <span class="r17 r">endB</span>);
+			<b>if</b> (<span class="r14 r">beginA</span> &lt; <span class="r18 r">edit</span>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a> || <span class="r16 r">beginB</span> &lt; <span class="r18 r">edit</span>.<a href="Edit.cs.html#24d18ab00be068c9" class="i field">beginB</a>)
+			{
+				<b>int</b> <span id="r19 rd" class="r19 r">k</span> = <span class="r18 r">edit</span>.<a href="Edit.cs.html#24d18ab00be068c9" class="i field">beginB</a> - <span class="r18 r">edit</span>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a>;
+				<b>int</b> <span id="r20 rd" class="r20 r">x</span> = <a href="#93a633692008886b" class="i field">middle</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#f747332893fc9a30" class="i method">Snake</a>(<span class="r19 r">k</span>, <span class="r18 r">edit</span>.<a href="Edit.cs.html#59989205ab5eb6d9" class="i field">beginA</a>);
+				<a href="#b5a16e110eea9435" class="i method">CalculateEdits</a>(<span class="r14 r">beginA</span>, <span class="r20 r">x</span>, <span class="r16 r">beginB</span>, <span class="r19 r">k</span> + <span class="r20 r">x</span>);
+			}
+			<b>if</b> (<span class="r18 r">edit</span>.<a href="Edit.cs.html#e38250a27429f35a" class="i method">GetType</a>() != <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a>.<a href="Edit.cs.html#bb2fc850ae4e34dd" class="t t">Type</a>.<a href="Edit.cs.html#022ee090e081b483" class="i field">EMPTY</a>)
+			{
+				<a href="#1d45117684de35fe" class="i field">edits</a>.<a href="/Sharpen/A.html#1ae7ba487b86a391" class="i method">Add</a>(<a href="#1d45117684de35fe" class="i field">edits</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>, <span class="r18 r">edit</span>);
+			}
+			<span class="c">// after middle</span>
+			<b>if</b> (<span class="r15 r">endA</span> &gt; <span class="r18 r">edit</span>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a> || <span class="r17 r">endB</span> &gt; <span class="r18 r">edit</span>.<a href="Edit.cs.html#4e5d0b16b0f6a162" class="i field">endB</a>)
+			{
+				<b>int</b> <span id="r21 rd" class="r21 r">k</span> = <span class="r18 r">edit</span>.<a href="Edit.cs.html#4e5d0b16b0f6a162" class="i field">endB</a> - <span class="r18 r">edit</span>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a>;
+				<b>int</b> <span id="r22 rd" class="r22 r">x</span> = <a href="#93a633692008886b" class="i field">middle</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#f747332893fc9a30" class="i method">Snake</a>(<span class="r21 r">k</span>, <span class="r18 r">edit</span>.<a href="Edit.cs.html#ffa37a1d4b6696b8" class="i field">endA</a>);
+				<a href="#b5a16e110eea9435" class="i method">CalculateEdits</a>(<span class="r22 r">x</span>, <span class="r15 r">endA</span>, <span class="r21 r">k</span> + <span class="r22 r">x</span>, <span class="r17 r">endB</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A class to help bisecting the sequences a and b to find minimal</span>
+		<span class="c">///</span><span class="c"> edit paths.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A class to help bisecting the sequences a and b to find minimal</span>
+		<span class="c">///</span><span class="c"> edit paths.</span>
+		<span class="c">///</span><span class="c"> As the arrays are reused for space efficiency, you will need one</span>
+		<span class="c">///</span><span class="c"> instance per thread.</span>
+		<span class="c">///</span><span class="c"> The entry function is the calculate() method.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>internal class</b> <a id="9c93c7435b984321" href="../R/9c93c7435b984321.html" target="n" data-glyph="2,1" class="t t">MiddleEdit</a>
+		{
+			<b>internal virtual void</b> <a id="d243cba6c03773e0" href="../R/d243cba6c03773e0.html" target="n" data-glyph="74,2" class="i method">Initialize</a>(<b>int</b> <span id="r23 rd" class="r23 r">beginA</span>, <b>int</b> <span id="r24 rd" class="r24 r">endA</span>, <b>int</b> <span id="r25 rd" class="r25 r">beginB</span>, <b>int</b> <span id="r26 rd" class="r26 r">endB</span>)
+			{
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a> = <span class="r23 r">beginA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a> = <span class="r24 r">endA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a> = <span class="r25 r">beginB</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#31300727292329c1" class="i field">endB</a> = <span class="r26 r">endB</span>;
+				<span class="c">// strip common parts on either end</span>
+				<b>int</b> <span id="r27 rd" class="r27 r">k</span> = <span class="r25 r">beginB</span> - <span class="r23 r">beginA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a> = <a href="#9c93c7435b984321" class="k">this</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#f747332893fc9a30" class="i method">Snake</a>(<span class="r27 r">k</span>, <span class="r23 r">beginA</span>);
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a> = <span class="r27 r">k</span> + <a href="#9c93c7435b984321" class="k">this</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a>;
+				<span class="r27 r">k</span> = <span class="r26 r">endB</span> - <span class="r24 r">endA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a> = <a href="#9c93c7435b984321" class="k">this</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#f747332893fc9a30" class="i method">Snake</a>(<span class="r27 r">k</span>, <span class="r24 r">endA</span>);
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#31300727292329c1" class="i field">endB</a> = <span class="r27 r">k</span> + <a href="#9c93c7435b984321" class="k">this</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a>;
+			}
+
+			<span class="c">// TODO: measure speed impact when this is synchronized</span>
+			<b>internal virtual</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <a id="ab5ff4e0040ccce8" href="../R/ab5ff4e0040ccce8.html" target="n" data-glyph="74,2" class="i method">Calculate</a>(<b>int</b> <span id="r28 rd" class="r28 r">beginA</span>, <b>int</b> <span id="r29 rd" class="r29 r">endA</span>, <b>int</b> <span id="r30 rd" class="r30 r">beginB</span>, <b>int</b> <span id="r31 rd" class="r31 r">endB</span>)
+			{
+				<b>if</b> (<span class="r28 r">beginA</span> == <span class="r29 r">endA</span> || <span class="r30 r">beginB</span> == <span class="r31 r">endB</span>)
+				{
+					<b>return</b> <b>new</b> <a href="Edit.cs.html#37a88e8b10c2876b" class="t constructor">Edit</a>(<span class="r28 r">beginA</span>, <span class="r29 r">endA</span>, <span class="r30 r">beginB</span>, <span class="r31 r">endB</span>);
+				}
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a> = <span class="r28 r">beginA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a> = <span class="r29 r">endA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a> = <span class="r30 r">beginB</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#31300727292329c1" class="i field">endB</a> = <span class="r31 r">endB</span>;
+				<b>int</b> <span id="r32 rd" class="r32 r">minK</span> = <span class="r30 r">beginB</span> - <span class="r29 r">endA</span>;
+				<b>int</b> <span id="r33 rd" class="r33 r">maxK</span> = <span class="r31 r">endB</span> - <span class="r28 r">beginA</span>;
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#b3cee3de81e67e00" class="i method">Initialize</a>(<span class="r30 r">beginB</span> - <span class="r28 r">beginA</span>, <span class="r28 r">beginA</span>, <span class="r32 r">minK</span>, <span class="r33 r">maxK</span>);
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#b3cee3de81e67e00" class="i method">Initialize</a>(<span class="r31 r">endB</span> - <span class="r29 r">endA</span>, <span class="r29 r">endA</span>, <span class="r32 r">minK</span>, <span class="r33 r">maxK</span>);
+				<b>for</b> (<b>int</b> <span id="r34 rd" class="r34 r">d</span> = 1; ; <span class="r34 r">d</span>++)
+				{
+					<b>if</b> (<a href="#9c93c7435b984321" class="k">this</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#86905225cc863ba9" class="i method">Calculate</a>(<span class="r34 r">d</span>) || <a href="#9c93c7435b984321" class="k">this</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#86905225cc863ba9" class="i method">Calculate</a>(<span class="r34 r">d</span>))
+					{
+						<b>return</b> <a href="#9c93c7435b984321" class="k">this</a>.<a href="#9f29e58ad22ccb3a" class="i field">edit</a>;
+					}
+				}
+			}
+
+			<b>internal</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a>.<a href="#1747142067bd71bd" class="t t">EditPaths</a> <a id="088669e8b04544a2" href="../R/088669e8b04544a2.html" target="n" data-glyph="44,2" class="i field">forward</a>;
+
+			<b>internal</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a>.<a href="#1747142067bd71bd" class="t t">EditPaths</a> <a id="5da5d2a39840980b" href="../R/5da5d2a39840980b.html" target="n" data-glyph="44,2" class="i field">backward</a>;
+
+			<b>protected internal int</b> <a id="987e8c1d672493e9" href="../R/987e8c1d672493e9.html" target="n" data-glyph="45,2" class="i field">beginA</a>;
+
+			<b>protected internal int</b> <a id="f26e1fb53633ee23" href="../R/f26e1fb53633ee23.html" target="n" data-glyph="45,2" class="i field">endA</a>;
+
+			<b>protected internal int</b> <a id="cce8161ba8a96b6e" href="../R/cce8161ba8a96b6e.html" target="n" data-glyph="45,2" class="i field">beginB</a>;
+
+			<b>protected internal int</b> <a id="31300727292329c1" href="../R/31300727292329c1.html" target="n" data-glyph="45,2" class="i field">endB</a>;
+
+			<b>protected internal</b> <a href="Edit.cs.html#a91f8931ec3668f4" class="t t">Edit</a> <a id="9f29e58ad22ccb3a" href="../R/9f29e58ad22ccb3a.html" target="n" data-glyph="45,2" class="i field">edit</a>;
+
+			<b>internal abstract class</b> <a id="1747142067bd71bd" href="../R/1747142067bd71bd.html" target="n" data-glyph="2,2" class="t t">EditPaths</a>
+			{
+				<b>private</b> <a href="../NGit.Util/IntList.cs.html#290b0080ed2bb69b" class="t t">IntList</a> <a id="323ad82e61574aa4" href="../R/323ad82e61574aa4.html" target="n" data-glyph="46,3" class="i field">x</a> = <b>new</b> <a href="../NGit.Util/IntList.cs.html#f4faab6c32c4f68b" class="t constructor">IntList</a>();
+
+				<b>private</b> <a href="../NGit.Util/LongList.cs.html#4e47bc9228b6437c" class="t t">LongList</a> <a id="d096ddcb254ebae4" href="../R/d096ddcb254ebae4.html" target="n" data-glyph="46,3" class="i field">snake</a> = <b>new</b> <a href="../NGit.Util/LongList.cs.html#0ee0b58895a1c091" class="t constructor">LongList</a>();
+
+				<b>internal int</b> <a id="dd33b4acf0315b14" href="../R/dd33b4acf0315b14.html" target="n" data-glyph="44,3" class="i field">beginK</a>;
+
+				<b>internal int</b> <a id="0c006af727912432" href="../R/0c006af727912432.html" target="n" data-glyph="44,3" class="i field">endK</a>;
+
+				<b>internal int</b> <a id="4601833508e07894" href="../R/4601833508e07894.html" target="n" data-glyph="44,3" class="i field">middleK</a>;
+
+				<b>internal int</b> <a id="3e225127d03a7e07" href="../R/3e225127d03a7e07.html" target="n" data-glyph="44,3" class="i field">prevBeginK</a>;
+
+				<b>internal int</b> <a id="1e3ba747941ffc7f" href="../R/1e3ba747941ffc7f.html" target="n" data-glyph="44,3" class="i field">prevEndK</a>;
+
+				<b>internal int</b> <a id="bb1fe47711687525" href="../R/bb1fe47711687525.html" target="n" data-glyph="44,3" class="i field">minK</a>;
+
+				<b>internal int</b> <a id="e6d33340985d0280" href="../R/e6d33340985d0280.html" target="n" data-glyph="44,3" class="i field">maxK</a>;
+
+				<span class="c">// TODO: better explanation</span>
+				<b>internal int</b> <a id="e92c557cd1ff5d7a" href="../R/e92c557cd1ff5d7a.html" target="n" data-glyph="74,3" class="i method">GetIndex</a>(<b>int</b> <span id="r35 rd" class="r35 r">d</span>, <b>int</b> <span id="r36 rd" class="r36 r">k</span>)
+				{
+					<span class="c">// TODO: remove</span>
+					<b>if</b> (((<span class="r35 r">d</span> + <span class="r36 r">k</span> - <a href="#1747142067bd71bd" class="k">this</a>.<a href="#4601833508e07894" class="i field">middleK</a>) % 2) != 0)
+					{
+						<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#90a612a44e1124b0" class="t constructor">RuntimeException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#3a6ff85eb80ca933" class="i field">unexpectedOddResult</a>
+							, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<span class="r35 r">d</span>), <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<span class="r36 r">k</span>), <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>
+							(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#4601833508e07894" class="i field">middleK</a>)));
+					}
+					<b>return</b> (<span class="r35 r">d</span> + <span class="r36 r">k</span> - <a href="#1747142067bd71bd" class="k">this</a>.<a href="#4601833508e07894" class="i field">middleK</a>) / 2;
+				}
+
+				<b>internal int</b> <a id="ae497955c0c7d279" href="../R/ae497955c0c7d279.html" target="n" data-glyph="74,3" class="i method">GetX</a>(<b>int</b> <span id="r37 rd" class="r37 r">d</span>, <b>int</b> <span id="r38 rd" class="r38 r">k</span>)
+				{
+					<span class="c">// TODO: remove</span>
+					<b>if</b> (<span class="r38 r">k</span> &lt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a> || <span class="r38 r">k</span> &gt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#90a612a44e1124b0" class="t constructor">RuntimeException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#d25fd6b771f123ce" class="i field">kNotInRange</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>
+							(<span class="r38 r">k</span>), <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a>), <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a>
+							)));
+					}
+					<b>return</b> <a href="#1747142067bd71bd" class="k">this</a>.<a href="#323ad82e61574aa4" class="i field">x</a>.<a href="../NGit.Util/IntList.cs.html#e468ae0d52264541" class="i method">Get</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#e92c557cd1ff5d7a" class="i method">GetIndex</a>(<span class="r37 r">d</span>, <span class="r38 r">k</span>));
+				}
+
+				<b>internal long</b> <a id="f7cfe56681bbbc04" href="../R/f7cfe56681bbbc04.html" target="n" data-glyph="74,3" class="i method">GetSnake</a>(<b>int</b> <span id="r39 rd" class="r39 r">d</span>, <b>int</b> <span id="r40 rd" class="r40 r">k</span>)
+				{
+					<span class="c">// TODO: remove</span>
+					<b>if</b> (<span class="r40 r">k</span> &lt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a> || <span class="r40 r">k</span> &gt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#90a612a44e1124b0" class="t constructor">RuntimeException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#d25fd6b771f123ce" class="i field">kNotInRange</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>
+							(<span class="r40 r">k</span>), <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a>), <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a>
+							)));
+					}
+					<b>return</b> <a href="#1747142067bd71bd" class="k">this</a>.<a href="#d096ddcb254ebae4" class="i field">snake</a>.<a href="../NGit.Util/LongList.cs.html#29c68846cca53e42" class="i method">Get</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#e92c557cd1ff5d7a" class="i method">GetIndex</a>(<span class="r39 r">d</span>, <span class="r40 r">k</span>));
+				}
+
+				<b>private int</b> <a id="8765400f69f40d87" href="../R/8765400f69f40d87.html" target="n" data-glyph="76,3" class="i method">ForceKIntoRange</a>(<b>int</b> <span id="r41 rd" class="r41 r">k</span>)
+				{
+					<b>if</b> (<span class="r41 r">k</span> &lt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#bb1fe47711687525" class="i field">minK</a>)
+					{
+						<b>return</b> <a href="#1747142067bd71bd" class="k">this</a>.<a href="#bb1fe47711687525" class="i field">minK</a> + ((<span class="r41 r">k</span> ^ <a href="#1747142067bd71bd" class="k">this</a>.<a href="#bb1fe47711687525" class="i field">minK</a>) &amp; 1);
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r41 r">k</span> &gt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#e6d33340985d0280" class="i field">maxK</a>)
+						{
+							<b>return</b> <a href="#1747142067bd71bd" class="k">this</a>.<a href="#e6d33340985d0280" class="i field">maxK</a> - ((<span class="r41 r">k</span> ^ <a href="#1747142067bd71bd" class="k">this</a>.<a href="#e6d33340985d0280" class="i field">maxK</a>) &amp; 1);
+						}
+					}
+					<b>return</b> <span class="r41 r">k</span>;
+				}
+
+				<b>internal virtual void</b> <a id="b3cee3de81e67e00" href="../R/b3cee3de81e67e00.html" target="n" data-glyph="74,3" class="i method">Initialize</a>(<b>int</b> <span id="r42 rd" class="r42 r">k</span>, <b>int</b> <span id="r43 rd" class="r43 r">x</span>, <b>int</b> <span id="r44 rd" class="r44 r">minK</span>, <b>int</b> <span id="r45 rd" class="r45 r">maxK</span>)
+				{
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#bb1fe47711687525" class="i field">minK</a> = <span class="r44 r">minK</span>;
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#e6d33340985d0280" class="i field">maxK</a> = <span class="r45 r">maxK</span>;
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#4601833508e07894" class="i field">middleK</a> = <span class="r42 r">k</span>;
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#323ad82e61574aa4" class="i field">x</a>.<a href="../NGit.Util/IntList.cs.html#2f88445c1ceee26c" class="i method">Clear</a>();
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#323ad82e61574aa4" class="i field">x</a>.<a href="../NGit.Util/IntList.cs.html#755f1c634b741bea" class="i method">Add</a>(<span class="r43 r">x</span>);
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#d096ddcb254ebae4" class="i field">snake</a>.<a href="../NGit.Util/LongList.cs.html#5e2f5662cc9ec1a6" class="i method">Clear</a>();
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#d096ddcb254ebae4" class="i field">snake</a>.<a href="../NGit.Util/LongList.cs.html#3e7bf7ef14110afc" class="i method">Add</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#69503604aeb6a0c6" class="i method">NewSnake</a>(<span class="r42 r">k</span>, <span class="r43 r">x</span>));
+				}
+
+				<b>internal abstract int</b> <a id="f747332893fc9a30" href="../R/f747332893fc9a30.html" target="n" data-glyph="74,3" class="i method">Snake</a>(<b>int</b> <span id="r46 rd" class="r46 r">k</span>, <b>int</b> <span id="r47 rd" class="r47 r">x</span>);
+
+				<b>internal abstract int</b> <a id="dd513f0fc8d0435c" href="../R/dd513f0fc8d0435c.html" target="n" data-glyph="74,3" class="i method">GetLeft</a>(<b>int</b> <span id="r48 rd" class="r48 r">x</span>);
+
+				<b>internal abstract int</b> <a id="1a23f8dbdbd27d7f" href="../R/1a23f8dbdbd27d7f.html" target="n" data-glyph="74,3" class="i method">GetRight</a>(<b>int</b> <span id="r49 rd" class="r49 r">x</span>);
+
+				<b>internal abstract bool</b> <a id="8eef72a767cf35e4" href="../R/8eef72a767cf35e4.html" target="n" data-glyph="74,3" class="i method">IsBetter</a>(<b>int</b> <span id="r50 rd" class="r50 r">left</span>, <b>int</b> <span id="r51 rd" class="r51 r">right</span>);
+
+				<b>internal abstract void</b> <a id="b8760231647f7397" href="../R/b8760231647f7397.html" target="n" data-glyph="74,3" class="i method">AdjustMinMaxK</a>(<b>int</b> <span id="r52 rd" class="r52 r">k</span>, <b>int</b> <span id="r53 rd" class="r53 r">x</span>);
+
+				<b>internal abstract bool</b> <a id="30abd4d541cb96cb" href="../R/30abd4d541cb96cb.html" target="n" data-glyph="74,3" class="i method">Meets</a>(<b>int</b> <span id="r54 rd" class="r54 r">d</span>, <b>int</b> <span id="r55 rd" class="r55 r">k</span>, <b>int</b> <span id="r56 rd" class="r56 r">x</span>, <b>long</b> <span id="r57 rd" class="r57 r">snake</span>);
+
+				<b>internal long</b> <a id="69503604aeb6a0c6" href="../R/69503604aeb6a0c6.html" target="n" data-glyph="74,3" class="i method">NewSnake</a>(<b>int</b> <span id="r58 rd" class="r58 r">k</span>, <b>int</b> <span id="r59 rd" class="r59 r">x</span>)
+				{
+					<b>long</b> <span id="r60 rd" class="r60 r">y</span> = <span class="r58 r">k</span> + <span class="r59 r">x</span>;
+					<b>long</b> <span id="r61 rd" class="r61 r">ret</span> = ((<b>long</b>)<span class="r59 r">x</span>) &lt;&lt; 32;
+					<b>return</b> <span class="r61 r">ret</span> | <span class="r60 r">y</span>;
+				}
+
+				<b>internal int</b> <a id="b9739e75fc9b1614" href="../R/b9739e75fc9b1614.html" target="n" data-glyph="74,3" class="i method">Snake2x</a>(<b>long</b> <span id="r62 rd" class="r62 r">snake</span>)
+				{
+					<b>return</b> (<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r62 r">snake</span>) &gt;&gt; 32));
+				}
+
+				<b>internal int</b> <a id="1ca062db96b47ebb" href="../R/1ca062db96b47ebb.html" target="n" data-glyph="74,3" class="i method">Snake2y</a>(<b>long</b> <span id="r63 rd" class="r63 r">snake</span>)
+				{
+					<b>return</b> (<b>int</b>)<span class="r63 r">snake</span>;
+				}
+
+				<b>internal bool</b> <a id="1166e08a1f3a34e0" href="../R/1166e08a1f3a34e0.html" target="n" data-glyph="74,3" class="i method">MakeEdit</a>(<b>long</b> <span id="r64 rd" class="r64 r">snake1</span>, <b>long</b> <span id="r65 rd" class="r65 r">snake2</span>)
+				{
+					<b>int</b> <span id="r66 rd" class="r66 r">x1</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#b9739e75fc9b1614" class="i method">Snake2x</a>(<span class="r64 r">snake1</span>);
+					<b>int</b> <span id="r67 rd" class="r67 r">x2</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#b9739e75fc9b1614" class="i method">Snake2x</a>(<span class="r65 r">snake2</span>);
+					<b>int</b> <span id="r68 rd" class="r68 r">y1</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#1ca062db96b47ebb" class="i method">Snake2y</a>(<span class="r64 r">snake1</span>);
+					<b>int</b> <span id="r69 rd" class="r69 r">y2</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#1ca062db96b47ebb" class="i method">Snake2y</a>(<span class="r65 r">snake2</span>);
+					<b>if</b> (<span class="r66 r">x1</span> &gt; <span class="r67 r">x2</span> || <span class="r68 r">y1</span> &gt; <span class="r69 r">y2</span>)
+					{
+						<span class="r66 r">x1</span> = <span class="r67 r">x2</span>;
+						<span class="r68 r">y1</span> = <span class="r69 r">y2</span>;
+					}
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#da9d59bc7116232e" class="i field">_enclosing</a>.<a href="#9f29e58ad22ccb3a" class="i field">edit</a> = <b>new</b> <a href="Edit.cs.html#37a88e8b10c2876b" class="t constructor">Edit</a>(<span class="r66 r">x1</span>, <span class="r67 r">x2</span>, <span class="r68 r">y1</span>, <span class="r69 r">y2</span>);
+					<b>return true</b>;
+				}
+
+				<b>internal virtual bool</b> <a id="86905225cc863ba9" href="../R/86905225cc863ba9.html" target="n" data-glyph="74,3" class="i method">Calculate</a>(<b>int</b> <span id="r70 rd" class="r70 r">d</span>)
+				{
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#3e225127d03a7e07" class="i field">prevBeginK</a> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a>;
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#1e3ba747941ffc7f" class="i field">prevEndK</a> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a>;
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#8765400f69f40d87" class="i method">ForceKIntoRange</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#4601833508e07894" class="i field">middleK</a> - <span class="r70 r">d</span>);
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#8765400f69f40d87" class="i method">ForceKIntoRange</a>(<a href="#1747142067bd71bd" class="k">this</a>.<a href="#4601833508e07894" class="i field">middleK</a> + <span class="r70 r">d</span>);
+					<span class="c">// TODO: handle i more efficiently</span>
+					<span class="c">// TODO: walk snake(k, getX(d, k)) only once per (d, k)</span>
+					<span class="c">// TODO: move end points out of the loop to avoid conditionals inside the loop</span>
+					<span class="c">// go backwards so that we can avoid temp vars</span>
+					<b>for</b> (<b>int</b> <span id="r71 rd" class="r71 r">k</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#0c006af727912432" class="i field">endK</a>; <span class="r71 r">k</span> &gt;= <a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a>; <span class="r71 r">k</span> -= 2)
+					{
+						<b>int</b> <span id="r72 rd" class="r72 r">left</span> = -1;
+						<b>int</b> <span id="r73 rd" class="r73 r">right</span> = -1;
+						<b>long</b> <span id="r74 rd" class="r74 r">leftSnake</span> = -1L;
+						<b>long</b> <span id="r75 rd" class="r75 r">rightSnake</span> = -1L;
+						<span class="c">// TODO: refactor into its own function</span>
+						<b>if</b> (<span class="r71 r">k</span> &gt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#3e225127d03a7e07" class="i field">prevBeginK</a>)
+						{
+							<b>int</b> <span id="r76 rd" class="r76 r">i</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#e92c557cd1ff5d7a" class="i method">GetIndex</a>(<span class="r70 r">d</span> - 1, <span class="r71 r">k</span> - 1);
+							<span class="r72 r">left</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#323ad82e61574aa4" class="i field">x</a>.<a href="../NGit.Util/IntList.cs.html#e468ae0d52264541" class="i method">Get</a>(<span class="r76 r">i</span>);
+							<b>int</b> <span id="r77 rd" class="r77 r">end</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#f747332893fc9a30" class="i method">Snake</a>(<span class="r71 r">k</span> - 1, <span class="r72 r">left</span>);
+							<span class="r74 r">leftSnake</span> = <span class="r72 r">left</span> != <span class="r77 r">end</span> ? <a href="#1747142067bd71bd" class="k">this</a>.<a href="#69503604aeb6a0c6" class="i method">NewSnake</a>(<span class="r71 r">k</span> - 1, <span class="r77 r">end</span>) : <a href="#1747142067bd71bd" class="k">this</a>.<a href="#d096ddcb254ebae4" class="i field">snake</a>.<a href="../NGit.Util/LongList.cs.html#29c68846cca53e42" class="i method">Get</a>(<span class="r76 r">i</span>);
+							<b>if</b> (<a href="#1747142067bd71bd" class="k">this</a>.<a href="#30abd4d541cb96cb" class="i method">Meets</a>(<span class="r70 r">d</span>, <span class="r71 r">k</span> - 1, <span class="r77 r">end</span>, <span class="r74 r">leftSnake</span>))
+							{
+								<b>return true</b>;
+							}
+							<span class="r72 r">left</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#dd513f0fc8d0435c" class="i method">GetLeft</a>(<span class="r77 r">end</span>);
+						}
+						<b>if</b> (<span class="r71 r">k</span> &lt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#1e3ba747941ffc7f" class="i field">prevEndK</a>)
+						{
+							<b>int</b> <span id="r78 rd" class="r78 r">i</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#e92c557cd1ff5d7a" class="i method">GetIndex</a>(<span class="r70 r">d</span> - 1, <span class="r71 r">k</span> + 1);
+							<span class="r73 r">right</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#323ad82e61574aa4" class="i field">x</a>.<a href="../NGit.Util/IntList.cs.html#e468ae0d52264541" class="i method">Get</a>(<span class="r78 r">i</span>);
+							<b>int</b> <span id="r79 rd" class="r79 r">end</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#f747332893fc9a30" class="i method">Snake</a>(<span class="r71 r">k</span> + 1, <span class="r73 r">right</span>);
+							<span class="r75 r">rightSnake</span> = <span class="r73 r">right</span> != <span class="r79 r">end</span> ? <a href="#1747142067bd71bd" class="k">this</a>.<a href="#69503604aeb6a0c6" class="i method">NewSnake</a>(<span class="r71 r">k</span> + 1, <span class="r79 r">end</span>) : <a href="#1747142067bd71bd" class="k">this</a>.<a href="#d096ddcb254ebae4" class="i field">snake</a>.<a href="../NGit.Util/LongList.cs.html#29c68846cca53e42" class="i method">Get</a>(<span class="r78 r">i</span>);
+							<b>if</b> (<a href="#1747142067bd71bd" class="k">this</a>.<a href="#30abd4d541cb96cb" class="i method">Meets</a>(<span class="r70 r">d</span>, <span class="r71 r">k</span> + 1, <span class="r79 r">end</span>, <span class="r75 r">rightSnake</span>))
+							{
+								<b>return true</b>;
+							}
+							<span class="r73 r">right</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#1a23f8dbdbd27d7f" class="i method">GetRight</a>(<span class="r79 r">end</span>);
+						}
+						<b>int</b> <span id="r80 rd" class="r80 r">newX</span>;
+						<b>long</b> <span id="r81 rd" class="r81 r">newSnake</span>;
+						<b>if</b> (<span class="r71 r">k</span> &gt;= <a href="#1747142067bd71bd" class="k">this</a>.<a href="#1e3ba747941ffc7f" class="i field">prevEndK</a> || (<span class="r71 r">k</span> &gt; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#3e225127d03a7e07" class="i field">prevBeginK</a> &amp;&amp; <a href="#1747142067bd71bd" class="k">this</a>.<a href="#8eef72a767cf35e4" class="i method">IsBetter</a>(<span class="r72 r">left</span>, <span class="r73 r">right</span>)))
+						{
+							<span class="r80 r">newX</span> = <span class="r72 r">left</span>;
+							<span class="r81 r">newSnake</span> = <span class="r74 r">leftSnake</span>;
+						}
+						<b>else</b>
+						{
+							<span class="r80 r">newX</span> = <span class="r73 r">right</span>;
+							<span class="r81 r">newSnake</span> = <span class="r75 r">rightSnake</span>;
+						}
+						<b>if</b> (<a href="#1747142067bd71bd" class="k">this</a>.<a href="#30abd4d541cb96cb" class="i method">Meets</a>(<span class="r70 r">d</span>, <span class="r71 r">k</span>, <span class="r80 r">newX</span>, <span class="r81 r">newSnake</span>))
+						{
+							<b>return true</b>;
+						}
+						<a href="#1747142067bd71bd" class="k">this</a>.<a href="#b8760231647f7397" class="i method">AdjustMinMaxK</a>(<span class="r71 r">k</span>, <span class="r80 r">newX</span>);
+						<b>int</b> <span id="r82 rd" class="r82 r">i_1</span> = <a href="#1747142067bd71bd" class="k">this</a>.<a href="#e92c557cd1ff5d7a" class="i method">GetIndex</a>(<span class="r70 r">d</span>, <span class="r71 r">k</span>);
+						<a href="#1747142067bd71bd" class="k">this</a>.<a href="#323ad82e61574aa4" class="i field">x</a>.<a href="../NGit.Util/IntList.cs.html#3ccb376f7b178c51" class="i method">Set</a>(<span class="r82 r">i_1</span>, <span class="r80 r">newX</span>);
+						<a href="#1747142067bd71bd" class="k">this</a>.<a href="#d096ddcb254ebae4" class="i field">snake</a>.<a href="../NGit.Util/LongList.cs.html#7ea96fcf6a77ccc5" class="i method">Set</a>(<span class="r82 r">i_1</span>, <span class="r81 r">newSnake</span>);
+					}
+					<b>return false</b>;
+				}
+
+				<b>internal</b> <a id="6e3284f8b4c3d21c" href="../R/6e3284f8b4c3d21c.html" target="n" data-glyph="74,3" class="i constructor">EditPaths</a>(<a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <span id="r83 rd" class="r83 r">_enclosing</span>)
+				{
+					<a href="#1747142067bd71bd" class="k">this</a>.<a href="#da9d59bc7116232e" class="i field">_enclosing</a> = <span class="r83 r">_enclosing</span>;
+				}
+
+				<b>private readonly</b> <a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <a id="da9d59bc7116232e" href="../R/da9d59bc7116232e.html" target="n" data-glyph="46,3" class="i field">_enclosing</a>;
+			}
+
+			<b>internal class</b> <a id="42d6c73269554d01" href="../R/42d6c73269554d01.html" target="n" data-glyph="2,2" class="t t">ForwardEditPaths</a> : <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a>.<a href="#1747142067bd71bd" class="t t">EditPaths</a>
+			{
+				<b>internal sealed override int</b> <a id="15afc8d327d04481" href="../R/15afc8d327d04481.html" target="n" data-glyph="74,3" class="i method">Snake</a>(<b>int</b> <span id="r84 rd" class="r84 r">k</span>, <b>int</b> <span id="r85 rd" class="r85 r">x</span>)
+				{
+					<b>for</b> (; <span class="r85 r">x</span> &lt; <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a> &amp;&amp; <span class="r84 r">k</span> + <span class="r85 r">x</span> &lt; <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#31300727292329c1" class="i field">endB</a>; <span class="r85 r">x</span>++)
+					{
+						<b>if</b> (!<a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#6234801466615de2" class="i field">_enclosing</a>.<a href="#21eb5c4b26139ae8" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#6234801466615de2" class="i field">_enclosing</a>.<a href="#8af043d4dde65fcb" class="i field">a</a>, <span class="r85 r">x</span>, <a href="#42d6c73269554d01" class="k">this</a>.
+							<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#6234801466615de2" class="i field">_enclosing</a>.<a href="#bd05f59bb298fd93" class="i field">b</a>, <span class="r84 r">k</span> + <span class="r85 r">x</span>))
+						{
+							<b>break</b>;
+						}
+					}
+					<b>return</b> <span class="r85 r">x</span>;
+				}
+
+				<b>internal sealed override int</b> <a id="ebe8a17f5412463c" href="../R/ebe8a17f5412463c.html" target="n" data-glyph="74,3" class="i method">GetLeft</a>(<b>int</b> <span id="r86 rd" class="r86 r">x</span>)
+				{
+					<b>return</b> <span class="r86 r">x</span>;
+				}
+
+				<b>internal sealed override int</b> <a id="8b66d193decb4c48" href="../R/8b66d193decb4c48.html" target="n" data-glyph="74,3" class="i method">GetRight</a>(<b>int</b> <span id="r87 rd" class="r87 r">x</span>)
+				{
+					<b>return</b> <span class="r87 r">x</span> + 1;
+				}
+
+				<b>internal sealed override bool</b> <a id="9c0eb06a9e82bf72" href="../R/9c0eb06a9e82bf72.html" target="n" data-glyph="74,3" class="i method">IsBetter</a>(<b>int</b> <span id="r88 rd" class="r88 r">left</span>, <b>int</b> <span id="r89 rd" class="r89 r">right</span>)
+				{
+					<b>return</b> <span class="r88 r">left</span> &gt; <span class="r89 r">right</span>;
+				}
+
+				<b>internal sealed override void</b> <a id="0de81bb07705a74f" href="../R/0de81bb07705a74f.html" target="n" data-glyph="74,3" class="i method">AdjustMinMaxK</a>(<b>int</b> <span id="r90 rd" class="r90 r">k</span>, <b>int</b> <span id="r91 rd" class="r91 r">x</span>)
+				{
+					<b>if</b> (<span class="r91 r">x</span> &gt;= <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#f26e1fb53633ee23" class="i field">endA</a> || <span class="r90 r">k</span> + <span class="r91 r">x</span> &gt;= <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#31300727292329c1" class="i field">endB</a>)
+					{
+						<b>if</b> (<span class="r90 r">k</span> &gt; <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#4601833508e07894" class="i field">middleK</a>)
+						{
+							<a href="#42d6c73269554d01" class="k">this</a>.<a href="#e6d33340985d0280" class="i field">maxK</a> = <span class="r90 r">k</span>;
+						}
+						<b>else</b>
+						{
+							<a href="#42d6c73269554d01" class="k">this</a>.<a href="#bb1fe47711687525" class="i field">minK</a> = <span class="r90 r">k</span>;
+						}
+					}
+				}
+
+				<b>internal sealed override bool</b> <a id="45e9d139eb351563" href="../R/45e9d139eb351563.html" target="n" data-glyph="74,3" class="i method">Meets</a>(<b>int</b> <span id="r92 rd" class="r92 r">d</span>, <b>int</b> <span id="r93 rd" class="r93 r">k</span>, <b>int</b> <span id="r94 rd" class="r94 r">x</span>, <b>long</b> <span id="r95 rd" class="r95 r">snake</span>)
+				{
+					<b>if</b> (<span class="r93 r">k</span> &lt; <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a> || <span class="r93 r">k</span> &gt; <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#0c006af727912432" class="i field">endK</a>)
+					{
+						<b>return false</b>;
+					}
+					<span class="c">// TODO: move out of loop</span>
+					<b>if</b> (((<span class="r92 r">d</span> - 1 + <span class="r93 r">k</span> - <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#4601833508e07894" class="i field">middleK</a>) % 2) != 0)
+					{
+						<b>return false</b>;
+					}
+					<b>if</b> (<span class="r94 r">x</span> &lt; <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#ae497955c0c7d279" class="i method">GetX</a>(<span class="r92 r">d</span> - 1, <span class="r93 r">k</span>))
+					{
+						<b>return false</b>;
+					}
+					<a href="#42d6c73269554d01" class="k">this</a>.<a href="#1166e08a1f3a34e0" class="i method">MakeEdit</a>(<span class="r95 r">snake</span>, <a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a>.<a href="#5da5d2a39840980b" class="i field">backward</a>.<a href="#f7cfe56681bbbc04" class="i method">GetSnake</a>(<span class="r92 r">d</span> - 1, <span class="r93 r">k</span>));
+					<b>return true</b>;
+				}
+
+				<b>internal</b> <a id="67edfd3327f6faa8" href="../R/67edfd3327f6faa8.html" target="n" data-glyph="74,3" class="i constructor">ForwardEditPaths</a>(<a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <span id="r96 rd" class="r96 r">_enclosing</span>) : <a href="#6e3284f8b4c3d21c" class="k">base</a>(<span class="r96 r">_enclosing</span>)
+				{
+					<a href="#42d6c73269554d01" class="k">this</a>.<a href="#2bc20e8a4989d1ef" class="i field">_enclosing</a> = <span class="r96 r">_enclosing</span>;
+				}
+
+				<b>private readonly</b> <a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <a id="2bc20e8a4989d1ef" href="../R/2bc20e8a4989d1ef.html" target="n" data-glyph="46,3" class="i field">_enclosing</a>;
+			}
+
+			<b>internal class</b> <a id="af29f0c2bf794d17" href="../R/af29f0c2bf794d17.html" target="n" data-glyph="2,2" class="t t">BackwardEditPaths</a> : <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a>.<a href="#1747142067bd71bd" class="t t">EditPaths</a>
+			{
+				<b>internal sealed override int</b> <a id="0b22dd03c0a1a4af" href="../R/0b22dd03c0a1a4af.html" target="n" data-glyph="74,3" class="i method">Snake</a>(<b>int</b> <span id="r97 rd" class="r97 r">k</span>, <b>int</b> <span id="r98 rd" class="r98 r">x</span>)
+				{
+					<b>for</b> (; <span class="r98 r">x</span> &gt; <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a> &amp;&amp; <span class="r97 r">k</span> + <span class="r98 r">x</span> &gt; <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a>; <span class="r98 r">x</span>--)
+					{
+						<b>if</b> (!<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#6234801466615de2" class="i field">_enclosing</a>.<a href="#21eb5c4b26139ae8" class="i field">cmp</a>.<a href="HashedSequenceComparator.cs.html#a18bd6c46078a32b" class="i method">Equals</a>(<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#6234801466615de2" class="i field">_enclosing</a>.<a href="#8af043d4dde65fcb" class="i field">a</a>, <span class="r98 r">x</span> - 1, <a href="#af29f0c2bf794d17" class="k">this</a>
+							.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#6234801466615de2" class="i field">_enclosing</a>.<a href="#bd05f59bb298fd93" class="i field">b</a>, <span class="r97 r">k</span> + <span class="r98 r">x</span> - 1))
+						{
+							<b>break</b>;
+						}
+					}
+					<b>return</b> <span class="r98 r">x</span>;
+				}
+
+				<b>internal sealed override int</b> <a id="b67ff72e426d1f80" href="../R/b67ff72e426d1f80.html" target="n" data-glyph="74,3" class="i method">GetLeft</a>(<b>int</b> <span id="r99 rd" class="r99 r">x</span>)
+				{
+					<b>return</b> <span class="r99 r">x</span> - 1;
+				}
+
+				<b>internal sealed override int</b> <a id="196131eef9c14f24" href="../R/196131eef9c14f24.html" target="n" data-glyph="74,3" class="i method">GetRight</a>(<b>int</b> <span id="r100 rd" class="r100 r">x</span>)
+				{
+					<b>return</b> <span class="r100 r">x</span>;
+				}
+
+				<b>internal sealed override bool</b> <a id="c6a5ff2887f3d262" href="../R/c6a5ff2887f3d262.html" target="n" data-glyph="74,3" class="i method">IsBetter</a>(<b>int</b> <span id="r101 rd" class="r101 r">left</span>, <b>int</b> <span id="r102 rd" class="r102 r">right</span>)
+				{
+					<b>return</b> <span class="r101 r">left</span> &lt; <span class="r102 r">right</span>;
+				}
+
+				<b>internal sealed override void</b> <a id="8a253763716416a5" href="../R/8a253763716416a5.html" target="n" data-glyph="74,3" class="i method">AdjustMinMaxK</a>(<b>int</b> <span id="r103 rd" class="r103 r">k</span>, <b>int</b> <span id="r104 rd" class="r104 r">x</span>)
+				{
+					<b>if</b> (<span class="r104 r">x</span> &lt;= <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#987e8c1d672493e9" class="i field">beginA</a> || <span class="r103 r">k</span> + <span class="r104 r">x</span> &lt;= <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#cce8161ba8a96b6e" class="i field">beginB</a>)
+					{
+						<b>if</b> (<span class="r103 r">k</span> &gt; <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#4601833508e07894" class="i field">middleK</a>)
+						{
+							<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#e6d33340985d0280" class="i field">maxK</a> = <span class="r103 r">k</span>;
+						}
+						<b>else</b>
+						{
+							<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bb1fe47711687525" class="i field">minK</a> = <span class="r103 r">k</span>;
+						}
+					}
+				}
+
+				<b>internal sealed override bool</b> <a id="bf940e983ce8d1a0" href="../R/bf940e983ce8d1a0.html" target="n" data-glyph="74,3" class="i method">Meets</a>(<b>int</b> <span id="r105 rd" class="r105 r">d</span>, <b>int</b> <span id="r106 rd" class="r106 r">k</span>, <b>int</b> <span id="r107 rd" class="r107 r">x</span>, <b>long</b> <span id="r108 rd" class="r108 r">snake</span>)
+				{
+					<b>if</b> (<span class="r106 r">k</span> &lt; <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#dd33b4acf0315b14" class="i field">beginK</a> || <span class="r106 r">k</span> &gt; <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#0c006af727912432" class="i field">endK</a>)
+					{
+						<b>return false</b>;
+					}
+					<span class="c">// TODO: move out of loop</span>
+					<b>if</b> (((<span class="r105 r">d</span> + <span class="r106 r">k</span> - <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#4601833508e07894" class="i field">middleK</a>) % 2) != 0)
+					{
+						<b>return false</b>;
+					}
+					<b>if</b> (<span class="r107 r">x</span> &gt; <a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#ae497955c0c7d279" class="i method">GetX</a>(<span class="r105 r">d</span>, <span class="r106 r">k</span>))
+					{
+						<b>return false</b>;
+					}
+					<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#1166e08a1f3a34e0" class="i method">MakeEdit</a>(<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a>.<a href="#088669e8b04544a2" class="i field">forward</a>.<a href="#f7cfe56681bbbc04" class="i method">GetSnake</a>(<span class="r105 r">d</span>, <span class="r106 r">k</span>), <span class="r108 r">snake</span>);
+					<b>return true</b>;
+				}
+
+				<b>internal</b> <a id="d663e4d995d7cc64" href="../R/d663e4d995d7cc64.html" target="n" data-glyph="74,3" class="i constructor">BackwardEditPaths</a>(<a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <span id="r109 rd" class="r109 r">_enclosing</span>) : <a href="#6e3284f8b4c3d21c" class="k">base</a>(<span class="r109 r">_enclosing</span>)
+				{
+					<a href="#af29f0c2bf794d17" class="k">this</a>.<a href="#bad3d43dac507d7a" class="i field">_enclosing</a> = <span class="r109 r">_enclosing</span>;
+				}
+
+				<b>private readonly</b> <a href="#9c93c7435b984321" class="t t">MiddleEdit</a> <a id="bad3d43dac507d7a" href="../R/bad3d43dac507d7a.html" target="n" data-glyph="46,3" class="i field">_enclosing</a>;
+			}
+
+			<b>public</b> <a id="e5d83b0dcdbdbbf3" href="../R/e5d83b0dcdbdbbf3.html" target="n" data-glyph="72,2" class="i constructor">MiddleEdit</a>(<a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt; <span id="r110 rd" class="r110 r">_enclosing</span>)
+			{
+				<a href="#9c93c7435b984321" class="k">this</a>.<a href="#6234801466615de2" class="i field">_enclosing</a> = <span class="r110 r">_enclosing</span>;
+				<a href="#088669e8b04544a2" class="i field">forward</a> = <b>new</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a>.<a href="#67edfd3327f6faa8" class="t constructor">ForwardEditPaths</a>(<a href="#9c93c7435b984321" class="k">this</a>);
+				<a href="#5da5d2a39840980b" class="i field">backward</a> = <b>new</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt;.<a href="#9c93c7435b984321" class="t t">MiddleEdit</a>.<a href="#d663e4d995d7cc64" class="t constructor">BackwardEditPaths</a>(<a href="#9c93c7435b984321" class="k">this</a>);
+			}
+
+			<b>private readonly</b> <a href="#e1d6681a94d61f1f" class="t t">MyersDiff</a>&lt;<span class="r0 r t">S</span>&gt; <a id="6234801466615de2" href="../R/6234801466615de2.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r111 r">args</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">two filenames specifying the contents to be diffed</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public static void</b> <a id="705d97e5d13f837f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Main</a>(<b>string</b>[] <span id="r111 rd" class="r111 r">args</span>)
+		{
+			<b>if</b> (<span class="r111 r">args</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> != 2)
+			{
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#bb8fe672d6e661e4" class="i field">need2Arguments</a>);
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#7d2f1469d916fc63" class="t t">Environment</a>.<a href="@0@mscorlib/A.html#29badb00f4fb6ca0" class="i method">Exit</a>(1);
+			}
+			<b>try</b>
+			{
+				<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r112 rd" class="r112 r">a</span> = <b>new</b> <a href="RawText.cs.html#5d95415dae748675" class="t constructor">RawText</a>(<b>new</b> <a href="/Sharpen/A.html#1af448df3a111ba7" class="t constructor">FilePath</a>(<span class="r111 r">args</span>[0]));
+				<a href="RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r113 rd" class="r113 r">b</span> = <b>new</b> <a href="RawText.cs.html#5d95415dae748675" class="t constructor">RawText</a>(<b>new</b> <a href="/Sharpen/A.html#1af448df3a111ba7" class="t constructor">FilePath</a>(<span class="r111 r">args</span>[1]));
+				<a href="EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r114 rd" class="r114 r">r</span> = <a href="#e61124c0f478163c" class="i field">INSTANCE</a>.<a href="DiffAlgorithm.cs.html#bf43d860311f26cc" class="i method">Diff</a>(<a href="RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="RawTextComparator.cs.html#f9121cd06cc9bb9b" class="i field">DEFAULT</a>, <span class="r112 r">a</span>, <span class="r113 r">b</span>);
+				<span class="i n">System</span>.<a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7957ab492848cd86" class="i property">Out</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<span class="r114 r">r</span>.<a href="EditList.cs.html#e0f6f2f78fdfa1ff" class="i method">ToString</a>());
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r115 rd" class="r115 r">e</span>)
+			{
+				<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#2983246e07bd979c" class="i method">PrintStackTrace</a>(<span class="r115 r">e</span>);
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

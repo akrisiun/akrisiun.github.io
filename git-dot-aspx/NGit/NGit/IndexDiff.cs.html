@@ -1,0 +1,478 @@
+﻿<!DOCTYPE html>
+<html><head><title>IndexDiff.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(469);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/IndexDiff.cs" target="_top">NGit\IndexDiff.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Compares the index, a tree, and the working directory Ignored files are not</span>
+	<span class="c">///</span><span class="c"> taken into account.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Compares the index, a tree, and the working directory Ignored files are not</span>
+	<span class="c">///</span><span class="c"> taken into account. The following information is retrieved:</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">added files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">changed files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">removed files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">missing files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">modified files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">conflicting files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">untracked files</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">files with assume-unchanged flag</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="9a70078f5dd3f38d" href="../R/9a70078f5dd3f38d.html" target="n" data-glyph="0,0" class="t t">IndexDiff</a>
+	{
+		<b>private sealed class</b> <a id="69071d36248361f1" href="../R/69071d36248361f1.html" target="n" data-glyph="4,1" class="t t">ProgressReportingFilter</a> : <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>
+		{
+			<b>private readonly</b> <a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <a id="fb18a5cf3525adb8" href="../R/fb18a5cf3525adb8.html" target="n" data-glyph="46,2" class="i field">monitor</a>;
+
+			<b>private int</b> <a id="3d6385919e1d50b3" href="../R/3d6385919e1d50b3.html" target="n" data-glyph="46,2" class="i field">count</a> = 0;
+
+			<b>private int</b> <a id="e301c8d9a7aa81e5" href="../R/e301c8d9a7aa81e5.html" target="n" data-glyph="46,2" class="i field">stepSize</a>;
+
+			<b>private readonly int</b> <a id="cfd7c2a56e86dec9" href="../R/cfd7c2a56e86dec9.html" target="n" data-glyph="46,2" class="i field">total</a>;
+
+			<b>public</b> <a id="9bcb49f2cdc10d8b" href="../R/9bcb49f2cdc10d8b.html" target="n" data-glyph="72,2" class="i constructor">ProgressReportingFilter</a>(<a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r0 rd" class="r0 r">monitor</span>, <b>int</b> <span id="r1 rd" class="r1 r">total</span>)
+			{
+				<a href="#69071d36248361f1" class="k">this</a>.<a href="#fb18a5cf3525adb8" class="i field">monitor</a> = <span class="r0 r">monitor</span>;
+				<a href="#69071d36248361f1" class="k">this</a>.<a href="#cfd7c2a56e86dec9" class="i field">total</a> = <span class="r1 r">total</span>;
+				<a href="#e301c8d9a7aa81e5" class="i field">stepSize</a> = <span class="r1 r">total</span> / 100;
+				<b>if</b> (<a href="#e301c8d9a7aa81e5" class="i field">stepSize</a> == 0)
+				{
+					<a href="#e301c8d9a7aa81e5" class="i field">stepSize</a> = 1000;
+				}
+			}
+
+			<b>public override bool</b> <a id="e215eb66804a4a8e" href="../R/e215eb66804a4a8e.html" target="n" data-glyph="72,2" class="i method">ShouldBeRecursive</a>()
+			{
+				<b>return false</b>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override bool</b> <a id="9af3ebdb2c7bdf72" href="../R/9af3ebdb2c7bdf72.html" target="n" data-glyph="72,2" class="i method">Include</a>(<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r2 rd" class="r2 r">walker</span>)
+			{
+				<a href="#3d6385919e1d50b3" class="i field">count</a>++;
+				<b>if</b> (<a href="#3d6385919e1d50b3" class="i field">count</a> % <a href="#e301c8d9a7aa81e5" class="i field">stepSize</a> == 0)
+				{
+					<b>if</b> (<a href="#3d6385919e1d50b3" class="i field">count</a> &lt;= <a href="#cfd7c2a56e86dec9" class="i field">total</a>)
+					{
+						<a href="#fb18a5cf3525adb8" class="i field">monitor</a>.<a href="ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(<a href="#e301c8d9a7aa81e5" class="i field">stepSize</a>);
+					}
+					<b>if</b> (<a href="#fb18a5cf3525adb8" class="i field">monitor</a>.<a href="ProgressMonitor.cs.html#02d53f65c9e87b6b" class="i method">IsCancelled</a>())
+					{
+						<b>throw</b> <a href="../NGit.Errors/StopWalkException.cs.html#233b230f435160e4" class="t t">StopWalkException</a>.<a href="../NGit.Errors/StopWalkException.cs.html#9a983249d2a0923d" class="i field">INSTANCE</a>;
+					}
+				}
+				<b>return true</b>;
+			}
+
+			<b>public override</b> <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <a id="8f661b8f27ac9578" href="../R/8f661b8f27ac9578.html" target="n" data-glyph="72,2" class="i method">Clone</a>()
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;Do not clone this kind of filter: &quot;</span> + <a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>
+					().<a href="@0@mscorlib/A.html#976443bb39dc37cd" class="i property">FullName</a>);
+			}
+		}
+
+		<b>private const int</b> <a id="48dca58d0c7d63cc" href="../R/48dca58d0c7d63cc.html" target="n" data-glyph="10,1" class="i field">TREE</a> = 0;
+
+		<b>private const int</b> <a id="a110bca6f1fe0a05" href="../R/a110bca6f1fe0a05.html" target="n" data-glyph="10,1" class="i field">INDEX</a> = 1;
+
+		<b>private const int</b> <a id="871187f224aab7fb" href="../R/871187f224aab7fb.html" target="n" data-glyph="10,1" class="i field">WORKDIR</a> = 2;
+
+		<b>private readonly</b> <a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="9da3cced058e10af" href="../R/9da3cced058e10af.html" target="n" data-glyph="46,1" class="i field">repository</a>;
+
+		<b>private readonly</b> <a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <a id="c8b8a804a275b7a1" href="../R/c8b8a804a275b7a1.html" target="n" data-glyph="46,1" class="i field">tree</a>;
+
+		<b>private</b> <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <a id="31c06fe8df47b832" href="../R/31c06fe8df47b832.html" target="n" data-glyph="46,1" class="i field">filter</a> = <b>null</b>;
+
+		<b>private readonly</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <a id="96c222f27726e261" href="../R/96c222f27726e261.html" target="n" data-glyph="46,1" class="i field">initialWorkingTreeIterator</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="b48e4788b9afd3c6" href="../R/b48e4788b9afd3c6.html" target="n" data-glyph="46,1" class="i field">added</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="7d70a6208474966a" href="../R/7d70a6208474966a.html" target="n" data-glyph="46,1" class="i field">changed</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="03f6672cbb5027ad" href="../R/03f6672cbb5027ad.html" target="n" data-glyph="46,1" class="i field">removed</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="1598718b65687ee5" href="../R/1598718b65687ee5.html" target="n" data-glyph="46,1" class="i field">missing</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="49a78a2840197f62" href="../R/49a78a2840197f62.html" target="n" data-glyph="46,1" class="i field">modified</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="c05cfe454dd06411" href="../R/c05cfe454dd06411.html" target="n" data-glyph="46,1" class="i field">untracked</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="a76a4be9aa1cb701" href="../R/a76a4be9aa1cb701.html" target="n" data-glyph="46,1" class="i field">conflicts</a> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="5da8eba27c319c03" href="../R/5da8eba27c319c03.html" target="n" data-glyph="46,1" class="i field">ignored</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="1b0a86b12622ad24" href="../R/1b0a86b12622ad24.html" target="n" data-glyph="46,1" class="i field">assumeUnchanged</a>;
+
+		<b>private</b> <a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <a id="09b5c1c22e7f783a" href="../R/09b5c1c22e7f783a.html" target="n" data-glyph="46,1" class="i field">dirCache</a>;
+
+		<b>private</b> <a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#ec9a4f3992a380f7" class="t t">IndexDiffFilter</a> <a id="ab06cd8069057363" href="../R/ab06cd8069057363.html" target="n" data-glyph="46,1" class="i field">indexDiffFilter</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct an IndexDiff</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">revstr</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> symbolic name e.g. HEAD</span>
+		<span class="c">///</span><span class="c"> An EmptyTreeIterator is used if </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">revstr</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> cannot be resolved.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">workingTreeIterator</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">iterator for working directory</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="3b8b7eeec1ce73bb" href="../R/3b8b7eeec1ce73bb.html" target="n" data-glyph="72,1" class="i constructor">IndexDiff</a>(<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r3 rd" class="r3 r">repository</span>, <b>string</b> <span id="r4 rd" class="r4 r">revstr</span>, <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <span id="r5 rd" class="r5 r">workingTreeIterator</span>
+			)
+		{
+			<a href="#9a70078f5dd3f38d" class="k">this</a>.<a href="#9da3cced058e10af" class="i field">repository</a> = <span class="r3 r">repository</span>;
+			<a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r6 rd" class="r6 r">objectId</span> = <span class="r3 r">repository</span>.<a href="Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<span class="r4 r">revstr</span>);
+			<b>if</b> (<span class="r6 r">objectId</span> != <b>null</b>)
+			{
+				<a href="#c8b8a804a275b7a1" class="i field">tree</a> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<span class="r3 r">repository</span>).<a href="../NGit.Revwalk/RevWalk.cs.html#8e6c53ca5bb2bfc4" class="i method">ParseTree</a>(<span class="r6 r">objectId</span>);
+			}
+			<b>else</b>
+			{
+				<a href="#c8b8a804a275b7a1" class="i field">tree</a> = <b>null</b>;
+			}
+			<a href="#9a70078f5dd3f38d" class="k">this</a>.<a href="#96c222f27726e261" class="i field">initialWorkingTreeIterator</a> = <span class="r5 r">workingTreeIterator</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct an Indexdiff</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">tree id. If null, an EmptyTreeIterator is used.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">workingTreeIterator</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">iterator for working directory</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="ac36f72f8522077e" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">IndexDiff</a>(<a href="Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r7 rd" class="r7 r">repository</span>, <a href="ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r8 rd" class="r8 r">objectId</span>, <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <span id="r9 rd" class="r9 r">workingTreeIterator</span>
+			)
+		{
+			<a href="#9a70078f5dd3f38d" class="k">this</a>.<a href="#9da3cced058e10af" class="i field">repository</a> = <span class="r7 r">repository</span>;
+			<b>if</b> (<span class="r8 r">objectId</span> != <b>null</b>)
+			{
+				<a href="#c8b8a804a275b7a1" class="i field">tree</a> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<span class="r7 r">repository</span>).<a href="../NGit.Revwalk/RevWalk.cs.html#8e6c53ca5bb2bfc4" class="i method">ParseTree</a>(<span class="r8 r">objectId</span>);
+			}
+			<b>else</b>
+			{
+				<a href="#c8b8a804a275b7a1" class="i field">tree</a> = <b>null</b>;
+			}
+			<a href="#9a70078f5dd3f38d" class="k">this</a>.<a href="#96c222f27726e261" class="i field">initialWorkingTreeIterator</a> = <span class="r9 r">workingTreeIterator</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Sets a filter.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sets a filter. Can be used e.g. for restricting the tree walk to a set of</span>
+		<span class="c">///</span><span class="c"> files.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">filter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="17bac53193b676b0" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetFilter</a>(<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <span id="r10 rd" class="r10 r">filter</span>)
+		{
+			<a href="#9a70078f5dd3f38d" class="k">this</a>.<a href="#31c06fe8df47b832" class="i field">filter</a> = <span class="r10 r">filter</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Run the diff operation.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Run the diff operation. Until this is called, all lists will be empty.</span>
+		<span class="c">///</span><span class="c"> Use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a405b3c5a0d13e0e" class="i method">Diff</a>(<a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>, <b>int</b>, <b>int</b>, <b>string</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Diff(ProgressMonitor, int, int, string)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if a progress</span>
+		<span class="c">///</span><span class="c"> monitor is required.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">if anything is different between index, tree, and workdir</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="a78fe3f57dab5bd1" href="../R/a78fe3f57dab5bd1.html" target="n" data-glyph="72,1" class="i method">Diff</a>()
+		{
+			<b>return</b> <a href="#a405b3c5a0d13e0e" class="i method">Diff</a>(<b>null</b>, 0, 0, <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Run the diff operation.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Run the diff operation. Until this is called, all lists will be empty.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The operation may be aborted by the progress monitor. In that event it</span>
+		<span class="c">///</span><span class="c"> will report what was found before the cancel operation was detected.</span>
+		<span class="c">///</span><span class="c"> Callers should ignore the result if monitor.isCancelled() is true. If a</span>
+		<span class="c">///</span><span class="c"> progress monitor is not needed, callers should use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a78fe3f57dab5bd1" class="i method">Diff</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Diff()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> instead. Progress reporting is crude and approximate and only intended</span>
+		<span class="c">///</span><span class="c"> for informing the user.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">monitor</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">for reporting progress, may be null</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">estWorkTreeSize</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number or estimated files in the working tree</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">estIndexSize</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number of estimated entries in the cache</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">title</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">if anything is different between index, tree, and workdir</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="a405b3c5a0d13e0e" href="../R/a405b3c5a0d13e0e.html" target="n" data-glyph="72,1" class="i method">Diff</a>(<a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r11 rd" class="r11 r">monitor</span>, <b>int</b> <span id="r12 rd" class="r12 r">estWorkTreeSize</span>, <b>int</b> <span id="r13 rd" class="r13 r">estIndexSize</span>
+			, <b>string</b> <span id="r14 rd" class="r14 r">title</span>)
+		{
+			<a href="#09b5c1c22e7f783a" class="i field">dirCache</a> = <a href="#9da3cced058e10af" class="i field">repository</a>.<a href="Repository.cs.html#f2ac93d271828141" class="i method">ReadDirCache</a>();
+			<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r15 rd" class="r15 r">treeWalk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#a3ef4fc16aa4c2b5" class="t constructor">TreeWalk</a>(<a href="#9da3cced058e10af" class="i field">repository</a>);
+			<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+			<span class="c">// add the trees (tree, dirchache, workdir)</span>
+			<b>if</b> (<a href="#c8b8a804a275b7a1" class="i field">tree</a> != <b>null</b>)
+			{
+				<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#60bae0462baed659" class="i method">AddTree</a>(<a href="#c8b8a804a275b7a1" class="i field">tree</a>);
+			}
+			<b>else</b>
+			{
+				<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Treewalk/EmptyTreeIterator.cs.html#37783bf741fc5f5a" class="t constructor">EmptyTreeIterator</a>());
+			}
+			<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#8bfe310b8b94624c" class="t constructor">DirCacheIterator</a>(<a href="#09b5c1c22e7f783a" class="i field">dirCache</a>));
+			<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<a href="#96c222f27726e261" class="i field">initialWorkingTreeIterator</a>);
+			<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>&gt; <span id="r16 rd" class="r16 r">filters</span> = <b>new</b> <a href="/Sharpen/A.html#50b9c0ebb7a18de8" class="t constructor">AList</a>&lt;<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>&gt;(4);
+			<b>if</b> (<span class="r11 r">monitor</span> != <b>null</b>)
+			{
+				<span class="c">// Get the maximum size of the work tree and index</span>
+				<span class="c">// and add some (quite arbitrary)</span>
+				<b>if</b> (<span class="r13 r">estIndexSize</span> == 0)
+				{
+					<span class="r13 r">estIndexSize</span> = <a href="#09b5c1c22e7f783a" class="i field">dirCache</a>.<a href="../NGit.Dircache/DirCache.cs.html#82a8a59104a13e03" class="i method">GetEntryCount</a>();
+				}
+				<b>int</b> <span id="r17 rd" class="r17 r">total</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a>(<span class="r13 r">estIndexSize</span> * 10 / 9, <span class="r12 r">estWorkTreeSize</span> * 10 / 9);
+				<span class="r11 r">monitor</span>.<a href="ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<span class="r14 r">title</span>, <span class="r17 r">total</span>);
+				<span class="r16 r">filters</span>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<b>new</b> <a href="#9a70078f5dd3f38d" class="t t">IndexDiff</a>.<a href="#9bcb49f2cdc10d8b" class="t constructor">ProgressReportingFilter</a>(<span class="r11 r">monitor</span>, <span class="r17 r">total</span>));
+			}
+			<b>if</b> (<a href="#31c06fe8df47b832" class="i field">filter</a> != <b>null</b>)
+			{
+				<span class="r16 r">filters</span>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<a href="#31c06fe8df47b832" class="i field">filter</a>);
+			}
+			<span class="r16 r">filters</span>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<b>new</b> <a href="../NGit.Treewalk.Filter/SkipWorkTreeFilter.cs.html#7057e6e104e013c1" class="t constructor">SkipWorkTreeFilter</a>(<a href="#a110bca6f1fe0a05" class="i field">INDEX</a>));
+			<a href="#ab06cd8069057363" class="i field">indexDiffFilter</a> = <b>new</b> <a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#60ef40fc4e2b4bdb" class="t constructor">IndexDiffFilter</a>(<a href="#a110bca6f1fe0a05" class="i field">INDEX</a>, <a href="#871187f224aab7fb" class="i field">WORKDIR</a>);
+			<span class="r16 r">filters</span>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<a href="#ab06cd8069057363" class="i field">indexDiffFilter</a>);
+			<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#b2bdc1e3a26b2806" class="t t">AndTreeFilter</a>.<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#17cf019205a87870" class="i method">Create</a>(<span class="r16 r">filters</span>);
+			<b>while</b> (<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r18 rd" class="r18 r">treeIterator</span> = <span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(<a href="#48dca58d0c7d63cc" class="i field">TREE</a>);
+				<a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a> <span id="r19 rd" class="r19 r">dirCacheIterator</span> = <span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a>&gt;(<a href="#a110bca6f1fe0a05" class="i field">INDEX</a>);
+				<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <span id="r20 rd" class="r20 r">workingTreeIterator</span> = <span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>&gt;(<a href="#871187f224aab7fb" class="i field">WORKDIR</a>
+					);
+				<b>if</b> (<span class="r19 r">dirCacheIterator</span> != <b>null</b>)
+				{
+					<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r21 rd" class="r21 r">dirCacheEntry</span> = <span class="r19 r">dirCacheIterator</span>.<a href="../NGit.Dircache/DirCacheIterator.cs.html#cc64ba186328bb65" class="i method">GetDirCacheEntry</a>();
+					<b>if</b> (<span class="r21 r">dirCacheEntry</span> != <b>null</b> &amp;&amp; <span class="r21 r">dirCacheEntry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#c66160cc2e47c784" class="i property">Stage</a> &gt; 0)
+					{
+						<a href="#a76a4be9aa1cb701" class="i field">conflicts</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+						<b>continue</b>;
+					}
+				}
+				<b>if</b> (<span class="r18 r">treeIterator</span> != <b>null</b>)
+				{
+					<b>if</b> (<span class="r19 r">dirCacheIterator</span> != <b>null</b>)
+					{
+						<b>if</b> (!<span class="r18 r">treeIterator</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#29981bbb9e6bf35f" class="i method">IdEqual</a>(<span class="r19 r">dirCacheIterator</span>) || <span class="r18 r">treeIterator</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#d0acd791c7674d13" class="i property">EntryRawMode</a> != <span class="r19 r">dirCacheIterator</span>
+							.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#d0acd791c7674d13" class="i property">EntryRawMode</a>)
+						{
+							<span class="c">// in repo, in index, content diff =&gt; changed</span>
+							<a href="#7d70a6208474966a" class="i field">changed</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+						}
+					}
+					<b>else</b>
+					{
+						<span class="c">// in repo, not in index =&gt; removed</span>
+						<a href="#03f6672cbb5027ad" class="i field">removed</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+						<b>if</b> (<span class="r20 r">workingTreeIterator</span> != <b>null</b>)
+						{
+							<a href="#c05cfe454dd06411" class="i field">untracked</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+						}
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r19 r">dirCacheIterator</span> != <b>null</b>)
+					{
+						<span class="c">// not in repo, in index =&gt; added</span>
+						<a href="#b48e4788b9afd3c6" class="i field">added</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+					}
+					<b>else</b>
+					{
+						<span class="c">// not in repo, not in index =&gt; untracked</span>
+						<b>if</b> (<span class="r20 r">workingTreeIterator</span> != <b>null</b> &amp;&amp; !<span class="r20 r">workingTreeIterator</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8fdca47636439e7" class="i method">IsEntryIgnored</a>())
+						{
+							<a href="#c05cfe454dd06411" class="i field">untracked</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+						}
+					}
+				}
+				<b>if</b> (<span class="r19 r">dirCacheIterator</span> != <b>null</b>)
+				{
+					<b>if</b> (<span class="r20 r">workingTreeIterator</span> == <b>null</b>)
+					{
+						<span class="c">// in index, not in workdir =&gt; missing</span>
+						<a href="#1598718b65687ee5" class="i field">missing</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r20 r">workingTreeIterator</span>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#6396e8c9455f0652" class="i method">IsModified</a>(<span class="r19 r">dirCacheIterator</span>.<a href="../NGit.Dircache/DirCacheIterator.cs.html#cc64ba186328bb65" class="i method">GetDirCacheEntry</a>(), <b>true</b>))
+						{
+							<span class="c">// in index, in workdir, content differs =&gt; modified</span>
+							<a href="#49a78a2840197f62" class="i field">modified</a>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<span class="r15 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>);
+						}
+					}
+				}
+			}
+			<span class="c">// consume the remaining work</span>
+			<b>if</b> (<span class="r11 r">monitor</span> != <b>null</b>)
+			{
+				<span class="r11 r">monitor</span>.<a href="ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+			}
+			<a href="#5da8eba27c319c03" class="i field">ignored</a> = <a href="#ab06cd8069057363" class="i field">indexDiffFilter</a>.<a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#ad6bd9f87e864801" class="i method">GetIgnoredPaths</a>();
+			<b>if</b> (<a href="#b48e4788b9afd3c6" class="i field">added</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>() &amp;&amp; <a href="#7d70a6208474966a" class="i field">changed</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>() &amp;&amp; <a href="#03f6672cbb5027ad" class="i field">removed</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>() &amp;&amp; <a href="#1598718b65687ee5" class="i field">missing</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>(
+				) &amp;&amp; <a href="#49a78a2840197f62" class="i field">modified</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>() &amp;&amp; <a href="#c05cfe454dd06411" class="i field">untracked</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+			{
+				<b>return false</b>;
+			}
+			<b>else</b>
+			{
+				<b>return true</b>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files added to the index, not in the tree</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="9b0a9f6e8768a1d6" href="../R/9b0a9f6e8768a1d6.html" target="n" data-glyph="72,1" class="i method">GetAdded</a>()
+		{
+			<b>return</b> <a href="#b48e4788b9afd3c6" class="i field">added</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files changed from tree to index</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="7da88f800f41b232" href="../R/7da88f800f41b232.html" target="n" data-glyph="72,1" class="i method">GetChanged</a>()
+		{
+			<b>return</b> <a href="#7d70a6208474966a" class="i field">changed</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files removed from index, but in tree</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="a1f28dbb68d77224" href="../R/a1f28dbb68d77224.html" target="n" data-glyph="72,1" class="i method">GetRemoved</a>()
+		{
+			<b>return</b> <a href="#03f6672cbb5027ad" class="i field">removed</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files in index, but not filesystem</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="3c7cd73c0ff9e44b" href="../R/3c7cd73c0ff9e44b.html" target="n" data-glyph="72,1" class="i method">GetMissing</a>()
+		{
+			<b>return</b> <a href="#1598718b65687ee5" class="i field">missing</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files modified on disk relative to the index</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="37637efe78ac9757" href="../R/37637efe78ac9757.html" target="n" data-glyph="72,1" class="i method">GetModified</a>()
+		{
+			<b>return</b> <a href="#49a78a2840197f62" class="i field">modified</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files that are not ignored, and not in the index.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="af816bdceb9e84c9" href="../R/af816bdceb9e84c9.html" target="n" data-glyph="72,1" class="i method">GetUntracked</a>()
+		{
+			<b>return</b> <a href="#c05cfe454dd06411" class="i field">untracked</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files that are in conflict</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="e3c44b097da24344" href="../R/e3c44b097da24344.html" target="n" data-glyph="72,1" class="i method">GetConflicting</a>()
+		{
+			<b>return</b> <a href="#a76a4be9aa1cb701" class="i field">conflicts</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">The method returns the list of ignored files and folders.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The method returns the list of ignored files and folders. Only the root</span>
+		<span class="c">///</span><span class="c"> folder of an ignored folder hierarchy is reported. If a/b/c is listed in</span>
+		<span class="c">///</span><span class="c"> the .gitignore then you should not expect a/b/c/d/e/f to be reported</span>
+		<span class="c">///</span><span class="c"> here. Only a/b/c will be reported. Furthermore only ignored files /</span>
+		<span class="c">///</span><span class="c"> folders are returned that are NOT in the index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files / folders that are ignored</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="02445a9fad032ee6" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetIgnoredNotInIndex</a>()
+		{
+			<b>return</b> <a href="#5da8eba27c319c03" class="i field">ignored</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of files with the flag assume-unchanged</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="4252363499ce814f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetAssumeUnchanged</a>()
+		{
+			<b>if</b> (<a href="#1b0a86b12622ad24" class="i field">assumeUnchanged</a> == <b>null</b>)
+			{
+				<a href="@0@System.Core/A.html#2d265edc718b158b" class="t t">HashSet</a>&lt;<b>string</b>&gt; <span id="r22 rd" class="r22 r">unchanged</span> = <b>new</b> <a href="@0@System.Core/A.html#eca9ea30fa3b2c28" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;();
+				<b>for</b> (<b>int</b> <span id="r23 rd" class="r23 r">i</span> = 0; <span class="r23 r">i</span> &lt; <a href="#09b5c1c22e7f783a" class="i field">dirCache</a>.<a href="../NGit.Dircache/DirCache.cs.html#82a8a59104a13e03" class="i method">GetEntryCount</a>(); <span class="r23 r">i</span>++)
+				{
+					<b>if</b> (<a href="#09b5c1c22e7f783a" class="i field">dirCache</a>.<a href="../NGit.Dircache/DirCache.cs.html#754e6798c8c19623" class="i method">GetEntry</a>(<span class="r23 r">i</span>).<a href="../NGit.Dircache/DirCacheEntry.cs.html#457d0e1ad11980e9" class="i property">IsAssumeValid</a>)
+					{
+						<span class="r22 r">unchanged</span>.<a href="/Sharpen/A.html#ba3669f35f216440" class="i method">AddItem</a>(<a href="#09b5c1c22e7f783a" class="i field">dirCache</a>.<a href="../NGit.Dircache/DirCache.cs.html#754e6798c8c19623" class="i method">GetEntry</a>(<span class="r23 r">i</span>).<a href="../NGit.Dircache/DirCacheEntry.cs.html#ec7f3e264b5a0cea" class="i property">PathString</a>);
+					}
+				}
+				<a href="#1b0a86b12622ad24" class="i field">assumeUnchanged</a> = <span class="r22 r">unchanged</span>;
+			}
+			<b>return</b> <a href="#1b0a86b12622ad24" class="i field">assumeUnchanged</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">list of folders containing only untracked files/folders</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <a id="f0b67e24b9414156" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetUntrackedFolders</a>()
+		{
+			<b>return</b> ((<a href="#ab06cd8069057363" class="i field">indexDiffFilter</a> == <b>null</b> || <a href="#ab06cd8069057363" class="i field">indexDiffFilter</a>.<a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#18ce714fce23e50b" class="i method">GetUntrackedFolders</a> ().<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> == 0) ? <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#3522ac1ac3e78996" class="i method">EmptySet</a>&lt;<b>string</b>&gt;() : <b>new</b> 
+				<a href="@0@System.Core/A.html#e068afbcd77375f8" class="t constructor">HashSet</a>&lt;<b>string</b>&gt;(<a href="#ab06cd8069057363" class="i field">indexDiffFilter</a>.<a href="../NGit.Treewalk.Filter/IndexDiffFilter.cs.html#18ce714fce23e50b" class="i method">GetUntrackedFolders</a>()));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the file mode of the given path in the index</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">file mode</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="45f7ee68e99ca1da" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetIndexMode</a>(<b>string</b> <span id="r24 rd" class="r24 r">path</span>)
+		{
+			<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r25 rd" class="r25 r">entry</span> = <a href="#09b5c1c22e7f783a" class="i field">dirCache</a>.<a href="../NGit.Dircache/DirCache.cs.html#90914b2f4f78df62" class="i method">GetEntry</a>(<span class="r24 r">path</span>);
+			<b>return</b> <span class="r25 r">entry</span> != <b>null</b> ? <span class="r25 r">entry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#d64ac705edad125d" class="i property">FileMode</a> : <a href="FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

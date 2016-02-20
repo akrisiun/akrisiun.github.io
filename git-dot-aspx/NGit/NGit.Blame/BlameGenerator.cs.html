@@ -1,0 +1,1173 @@
+﻿<!DOCTYPE html>
+<html><head><title>BlameGenerator.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(1164);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Blame/BlameGenerator.cs" target="_top">NGit.Blame\BlameGenerator.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Generate author information for lines based on introduction to the file.</span>
+	<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Generate author information for lines based on introduction to the file.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Applications that want a simple one-shot computation of blame for a file</span>
+	<span class="c">///</span><span class="c"> should use</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#5bfb6ed770e548af" class="i method">ComputeBlameResult</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ComputeBlameResult()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> to prepare the entire result in one</span>
+	<span class="c">///</span><span class="c"> method call. This may block for significant time as the history of the</span>
+	<span class="c">///</span><span class="c"> repository must be traversed until information is gathered for every line.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Applications that want more incremental update behavior may use either the</span>
+	<span class="c">///</span><span class="c"> raw</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#02739fda1ad06504" class="i method">Next</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Next()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> streaming approach supported by this class, or construct</span>
+	<span class="c">///</span><span class="c"> a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">BlameResult</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> using</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a>.<a href="BlameResult.cs.html#9db2e352da8885b3" class="i method">Create</a>(<a href="#a101cda0e1819516" class="t t">BlameGenerator</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">BlameResult.Create(BlameGenerator)</span>
+	<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> and</span>
+	<span class="c">///</span><span class="c"> incrementally construct the result with</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a>.<a href="BlameResult.cs.html#2ac6b5a78d9c213b" class="i method">ComputeNext</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">BlameResult.ComputeNext()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> .</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This class is not thread-safe.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> An instance of BlameGenerator can only be used once. To blame multiple files</span>
+	<span class="c">///</span><span class="c"> the application must create a new BlameGenerator.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> During blame processing there are two files involved:</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">result - The file whose lines are being examined. This is the revision</span>
+	<span class="c">///</span><span class="c"> the user is trying to view blame/annotation information alongside of.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">source - The file that was blamed with supplying one or more lines of</span>
+	<span class="c">///</span><span class="c"> data into result. The source may be a different file path (due to copy or</span>
+	<span class="c">///</span><span class="c"> rename). Source line numbers may differ from result line numbers due to lines</span>
+	<span class="c">///</span><span class="c"> being added/removed in intermediate revisions.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> The blame algorithm is implemented by initially assigning responsibility for</span>
+	<span class="c">///</span><span class="c"> all lines of the result to the starting commit. A difference against the</span>
+	<span class="c">///</span><span class="c"> commit&#39;s ancestor is computed, and responsibility is passed to the ancestor</span>
+	<span class="c">///</span><span class="c"> commit for any lines that are common. The starting commit is blamed only for</span>
+	<span class="c">///</span><span class="c"> the lines that do not appear in the ancestor, if any. The loop repeats using</span>
+	<span class="c">///</span><span class="c"> the ancestor, until there are no more lines to acquire information on, or the</span>
+	<span class="c">///</span><span class="c"> file&#39;s creation point is discovered in history.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="a101cda0e1819516" href="../R/a101cda0e1819516.html" target="n" data-glyph="0,0" class="t t">BlameGenerator</a>
+	{
+		<b>private readonly</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="0fa240e494dcfc15" href="../R/0fa240e494dcfc15.html" target="n" data-glyph="46,1" class="i field">repository</a>;
+
+		<b>private readonly</b> <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a> <a id="25396098f8b54cd2" href="../R/25396098f8b54cd2.html" target="n" data-glyph="46,1" class="i field">resultPath</a>;
+
+		<b>private readonly</b> <a href="../NGit/MutableObjectId.cs.html#9f3282f0781f567b" class="t t">MutableObjectId</a> <a id="281485f53461e212" href="../R/281485f53461e212.html" target="n" data-glyph="46,1" class="i field">idBuf</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Revision pool used to acquire commits from.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Revision pool used to acquire commits from.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <a id="437eb5e9ea8a0b94" href="../R/437eb5e9ea8a0b94.html" target="n" data-glyph="46,1" class="i field">revPool</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Indicates the commit has already been processed.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Indicates the commit has already been processed.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Revwalk/RevFlag.cs.html#8770ad537dbf6427" class="t t">RevFlag</a> <a id="83749db1c5f1c13d" href="../R/83749db1c5f1c13d.html" target="n" data-glyph="46,1" class="i field">SEEN</a>;
+
+		<b>private</b> <a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="1a60e74ec1c61006" href="../R/1a60e74ec1c61006.html" target="n" data-glyph="46,1" class="i field">reader</a>;
+
+		<b>private</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <a id="9c8b6227a956844b" href="../R/9c8b6227a956844b.html" target="n" data-glyph="46,1" class="i field">treeWalk</a>;
+
+		<b>private</b> <a href="../NGit.Diff/DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <a id="6ba6d00b3a18d9f3" href="../R/6ba6d00b3a18d9f3.html" target="n" data-glyph="46,1" class="i field">diffAlgorithm</a> = <b>new</b> <a href="../NGit.Diff/HistogramDiff.cs.html#91f4e52bc851cc90" class="t constructor">HistogramDiff</a>();
+
+		<b>private</b> <a href="../NGit.Diff/RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a> <a id="dbac0ba494c10536" href="../R/dbac0ba494c10536.html" target="n" data-glyph="46,1" class="i field">textComparator</a> = <a href="../NGit.Diff/RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a>.<a href="../NGit.Diff/RawTextComparator.cs.html#f9121cd06cc9bb9b" class="i field">DEFAULT</a>;
+
+		<b>private</b> <a href="../NGit.Diff/RenameDetector.cs.html#0820a1e6b993bdc8" class="t t">RenameDetector</a> <a id="49beece02d890702" href="../R/49beece02d890702.html" target="n" data-glyph="46,1" class="i field">renameDetector</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Potential candidates, sorted by commit time descending.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Potential candidates, sorted by commit time descending.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <a id="71cfda4c43418a9f" href="../R/71cfda4c43418a9f.html" target="n" data-glyph="46,1" class="i field">queue</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Number of lines that still need to be discovered.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Number of lines that still need to be discovered.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="9c04e219e52819d7" href="../R/9c04e219e52819d7.html" target="n" data-glyph="46,1" class="i field">remaining</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Blame is currently assigned to this source.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Blame is currently assigned to this source.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <a id="d088536056a1e27c" href="../R/d088536056a1e27c.html" target="n" data-glyph="46,1" class="i field">currentSource</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create a blame generator for the repository and path</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">repository to access revision data from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">initial path of the file to start scanning.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="396bb34ecd1f8750" href="../R/396bb34ecd1f8750.html" target="n" data-glyph="72,1" class="i constructor">BlameGenerator</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repository</span>, <b>string</b> <span id="r1 rd" class="r1 r">path</span>)
+		{
+			<a href="#a101cda0e1819516" class="k">this</a>.<a href="#0fa240e494dcfc15" class="i field">repository</a> = <span class="r0 r">repository</span>;
+			<a href="#a101cda0e1819516" class="k">this</a>.<a href="#25396098f8b54cd2" class="i field">resultPath</a> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r1 r">path</span>);
+			<a href="#281485f53461e212" class="i field">idBuf</a> = <b>new</b> <a href="../NGit/MutableObjectId.cs.html#14defa0e460f95e9" class="t constructor">MutableObjectId</a>();
+			<a href="#596818d5be8f7296" class="i method">SetFollowFileRenames</a>(<b>true</b>);
+			<a href="#580aa61ecdf7083d" class="i method">InitRevPool</a>(<b>false</b>);
+			<a href="#9c04e219e52819d7" class="i field">remaining</a> = -1;
+		}
+
+		<b>private void</b> <a id="580aa61ecdf7083d" href="../R/580aa61ecdf7083d.html" target="n" data-glyph="76,1" class="i method">InitRevPool</a>(<b>bool</b> <span id="r2 rd" class="r2 r">reverse</span>)
+		{
+			<b>if</b> (<a href="#71cfda4c43418a9f" class="i field">queue</a> != <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8d6a52a5496ce078" class="t constructor">InvalidOperationException</a>();
+			}
+			<b>if</b> (<a href="#437eb5e9ea8a0b94" class="i field">revPool</a> != <b>null</b>)
+			{
+				<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+			<b>if</b> (<span class="r2 r">reverse</span>)
+			{
+				<a href="#437eb5e9ea8a0b94" class="i field">revPool</a> = <b>new</b> <a href="ReverseWalk.cs.html#7d799c366fbfd2c0" class="t constructor">ReverseWalk</a>(<a href="#7772cddc27b5a16a" class="i method">GetRepository</a>());
+			}
+			<b>else</b>
+			{
+				<a href="#437eb5e9ea8a0b94" class="i field">revPool</a> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="#7772cddc27b5a16a" class="i method">GetRepository</a>());
+			}
+			<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#e0e6841612afb011" class="i method">SetRetainBody</a>(<b>true</b>);
+			<a href="#83749db1c5f1c13d" class="i field">SEEN</a> = <a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#21f7fea09dab174c" class="i method">NewFlag</a>(<span class="s">&quot;SEEN&quot;</span>);
+			<a href="#1a60e74ec1c61006" class="i field">reader</a> = <a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#67c5e603844b304a" class="i method">GetObjectReader</a>();
+			<a href="#9c8b6227a956844b" class="i field">treeWalk</a> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#e1052f13476153ef" class="t constructor">TreeWalk</a>(<a href="#1a60e74ec1c61006" class="i field">reader</a>);
+			<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">repository being scanned for revision history.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="7772cddc27b5a16a" href="../R/7772cddc27b5a16a.html" target="n" data-glyph="72,1" class="i method">GetRepository</a>()
+		{
+			<b>return</b> <a href="#0fa240e494dcfc15" class="i field">repository</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">path file path being processed.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="5c9ebef2680fd819" href="../R/5c9ebef2680fd819.html" target="n" data-glyph="72,1" class="i method">GetResultPath</a>()
+		{
+			<b>return</b> <a href="#25396098f8b54cd2" class="i field">resultPath</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#a20bf4f1244cbe54" class="i method">GetPath</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Difference algorithm to use when comparing revisions.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Difference algorithm to use when comparing revisions.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">algorithm</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="c105e9d7fedc2b60" href="../R/c105e9d7fedc2b60.html" target="n" data-glyph="72,1" class="i method">SetDiffAlgorithm</a>(<a href="../NGit.Diff/DiffAlgorithm.cs.html#c8561bb2780cd852" class="t t">DiffAlgorithm</a> <span id="r3 rd" class="r3 r">algorithm</span>
+			)
+		{
+			<a href="#6ba6d00b3a18d9f3" class="i field">diffAlgorithm</a> = <span class="r3 r">algorithm</span>;
+			<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Text comparator to use when comparing revisions.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Text comparator to use when comparing revisions.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">comparator</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="ad3dd0a0e6957c2e" href="../R/ad3dd0a0e6957c2e.html" target="n" data-glyph="72,1" class="i method">SetTextComparator</a>(<a href="../NGit.Diff/RawTextComparator.cs.html#299320d381d26a9a" class="t t">RawTextComparator</a> <span id="r4 rd" class="r4 r">comparator</span>
+			)
+		{
+			<a href="#dbac0ba494c10536" class="i field">textComparator</a> = <span class="r4 r">comparator</span>;
+			<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Enable (or disable) following file renames, on by default.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Enable (or disable) following file renames, on by default.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If true renames are followed using the standard FollowFilter behavior</span>
+		<span class="c">///</span><span class="c"> used by RevWalk (which matches</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">git log --follow</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> in the C</span>
+		<span class="c">///</span><span class="c"> implementation). This is not the same as copy/move detection as</span>
+		<span class="c">///</span><span class="c"> implemented by the C implementation&#39;s of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">git blame -M -C</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">follow</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">enable following.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="596818d5be8f7296" href="../R/596818d5be8f7296.html" target="n" data-glyph="72,1" class="i method">SetFollowFileRenames</a>(<b>bool</b> <span id="r5 rd" class="r5 r">follow</span>)
+		{
+			<b>if</b> (<span class="r5 r">follow</span>)
+			{
+				<a href="#49beece02d890702" class="i field">renameDetector</a> = <b>new</b> <a href="../NGit.Diff/RenameDetector.cs.html#d9a5b6a5074c66de" class="t constructor">RenameDetector</a>(<a href="#7772cddc27b5a16a" class="i method">GetRepository</a>());
+			}
+			<b>else</b>
+			{
+				<a href="#49beece02d890702" class="i field">renameDetector</a> = <b>null</b>;
+			}
+			<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain the RenameDetector if</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">setFollowFileRenames(true)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the rename detector, allowing the application to configure its</span>
+		<span class="c">///</span><span class="c"> settings for rename score and breaking behavior.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Diff/RenameDetector.cs.html#0820a1e6b993bdc8" class="t t">RenameDetector</a> <a id="0301075a96fcce07" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetRenameDetector</a>()
+		{
+			<b>return</b> <a href="#49beece02d890702" class="i field">renameDetector</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Push a candidate blob onto the generator&#39;s traversal stack.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Push a candidate blob onto the generator&#39;s traversal stack.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Candidates should be pushed in history order from oldest-to-newest.</span>
+		<span class="c">///</span><span class="c"> Applications should push the starting commit first, then the index</span>
+		<span class="c">///</span><span class="c"> revision (if the index is interesting), and finally the working tree</span>
+		<span class="c">///</span><span class="c"> copy (if the working tree is interesting).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">description</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">description of the blob revision, such as &quot;Working Tree&quot;.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">contents</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">contents of the file.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="309fabf1be2b9c78" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Push</a>(<b>string</b> <span id="r6 rd" class="r6 r">description</span>, <b>byte</b>[] <span id="r7 rd" class="r7 r">contents</span>
+			)
+		{
+			<b>return</b> <a href="#062b285b6ffbd1b2" class="i method">Push</a>(<span class="r6 r">description</span>, <b>new</b> <a href="../NGit.Diff/RawText.cs.html#5e490027f5de8fe5" class="t constructor">RawText</a>(<span class="r7 r">contents</span>));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Push a candidate blob onto the generator&#39;s traversal stack.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Push a candidate blob onto the generator&#39;s traversal stack.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Candidates should be pushed in history order from oldest-to-newest.</span>
+		<span class="c">///</span><span class="c"> Applications should push the starting commit first, then the index</span>
+		<span class="c">///</span><span class="c"> revision (if the index is interesting), and finally the working tree copy</span>
+		<span class="c">///</span><span class="c"> (if the working tree is interesting).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">description</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">description of the blob revision, such as &quot;Working Tree&quot;.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">contents</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">contents of the file.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="062b285b6ffbd1b2" href="../R/062b285b6ffbd1b2.html" target="n" data-glyph="72,1" class="i method">Push</a>(<b>string</b> <span id="r8 rd" class="r8 r">description</span>, <a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <span id="r9 rd" class="r9 r">contents</span>
+			)
+		{
+			<b>if</b> (<span class="r8 r">description</span> == <b>null</b>)
+			{
+				<span class="r8 r">description</span> = <a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#385599c5092e2fa0" class="i field">blameNotCommittedYet</a>;
+			}
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#d27bdaa719018fd9" class="t t">BlobCandidate</a> <span id="r10 rd" class="r10 r">c</span> = <b>new</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#13f7016656b49800" class="t constructor">BlobCandidate</a>(<span class="r8 r">description</span>, <a href="#25396098f8b54cd2" class="i field">resultPath</a>);
+			<span class="r10 r">c</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a> = <span class="r9 r">contents</span>;
+			<span class="r10 r">c</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <b>new</b> <a href="Region.cs.html#9b0423d8e8174532" class="t constructor">Region</a>(0, 0, <span class="r9 r">contents</span>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>());
+			<a href="#9c04e219e52819d7" class="i field">remaining</a> = <span class="r9 r">contents</span>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>();
+			<a href="#c2399a4fdc2cbece" class="i method">Push</a>(<span class="r10 r">c</span>);
+			<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Push a candidate object onto the generator&#39;s traversal stack.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Push a candidate object onto the generator&#39;s traversal stack.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Candidates should be pushed in history order from oldest-to-newest.</span>
+		<span class="c">///</span><span class="c"> Applications should push the starting commit first, then the index</span>
+		<span class="c">///</span><span class="c"> revision (if the index is interesting), and finally the working tree copy</span>
+		<span class="c">///</span><span class="c"> (if the working tree is interesting).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">description</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">description of the blob revision, such as &quot;Working Tree&quot;.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">may be a commit or a blob.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="7e3da65283b2b8e9" href="../R/7e3da65283b2b8e9.html" target="n" data-glyph="72,1" class="i method">Push</a>(<b>string</b> <span id="r11 rd" class="r11 r">description</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r12 rd" class="r12 r">id</span>)
+		{
+			<a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <span id="r13 rd" class="r13 r">ldr</span> = <a href="#1a60e74ec1c61006" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#074c2682fc658201" class="i method">Open</a>(<span class="r12 r">id</span>);
+			<b>if</b> (<span class="r13 r">ldr</span>.<a href="../NGit/ObjectLoader.cs.html#8569eb4545b58a1a" class="i method">GetType</a>() == <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>)
+			{
+				<b>if</b> (<span class="r11 r">description</span> == <b>null</b>)
+				{
+					<span class="r11 r">description</span> = <a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#385599c5092e2fa0" class="i field">blameNotCommittedYet</a>;
+				}
+				<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#d27bdaa719018fd9" class="t t">BlobCandidate</a> <span id="r14 rd" class="r14 r">c</span> = <b>new</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#13f7016656b49800" class="t constructor">BlobCandidate</a>(<span class="r11 r">description</span>, <a href="#25396098f8b54cd2" class="i field">resultPath</a>);
+				<span class="r14 r">c</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <span class="r12 r">id</span>.<a href="../NGit/AnyObjectId.cs.html#6490f5ce5f06db15" class="i method">ToObjectId</a>();
+				<span class="r14 r">c</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a> = <b>new</b> <a href="../NGit.Diff/RawText.cs.html#5e490027f5de8fe5" class="t constructor">RawText</a>(<span class="r13 r">ldr</span>.<a href="../NGit/ObjectLoader.cs.html#f0fdbd74670d28ad" class="i method">GetCachedBytes</a>(<b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>));
+				<span class="r14 r">c</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <b>new</b> <a href="Region.cs.html#9b0423d8e8174532" class="t constructor">Region</a>(0, 0, <span class="r14 r">c</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>());
+				<a href="#9c04e219e52819d7" class="i field">remaining</a> = <span class="r14 r">c</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>();
+				<a href="#c2399a4fdc2cbece" class="i method">Push</a>(<span class="r14 r">c</span>);
+				<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+			}
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r15 rd" class="r15 r">commit</span> = <a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r12 r">id</span>);
+			<b>if</b> (!<a href="#3575066a6eb1921d" class="i method">Find</a>(<span class="r15 r">commit</span>, <a href="#25396098f8b54cd2" class="i field">resultPath</a>))
+			{
+				<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+			}
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r16 rd" class="r16 r">c_1</span> = <b>new</b> <a href="Candidate.cs.html#cb89448f41f0f401" class="t constructor">Candidate</a>(<span class="r15 r">commit</span>, <a href="#25396098f8b54cd2" class="i field">resultPath</a>);
+			<span class="r16 r">c_1</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <a href="#281485f53461e212" class="i field">idBuf</a>.<a href="../NGit/MutableObjectId.cs.html#6efa8431efa44ba1" class="i method">ToObjectId</a>();
+			<span class="r16 r">c_1</span>.<a href="Candidate.cs.html#6d17f46ab6e5ebfb" class="i method">LoadText</a>(<a href="#1a60e74ec1c61006" class="i field">reader</a>);
+			<span class="r16 r">c_1</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <b>new</b> <a href="Region.cs.html#9b0423d8e8174532" class="t constructor">Region</a>(0, 0, <span class="r16 r">c_1</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>());
+			<a href="#9c04e219e52819d7" class="i field">remaining</a> = <span class="r16 r">c_1</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>();
+			<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r16 r">c_1</span>);
+			<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Configure the generator to compute reverse blame (history of deletes).</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Configure the generator to compute reverse blame (history of deletes).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method is expensive as it immediately runs a RevWalk over the</span>
+		<span class="c">///</span><span class="c"> history spanning the expression</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">start..end</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> (end being more recent</span>
+		<span class="c">///</span><span class="c"> than start) and then performs the equivalent operation as</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7e3da65283b2b8e9" class="i method">Push</a>(<b>string</b>, <span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Push(string, NGit.AnyObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to begin blame traversal from the</span>
+		<span class="c">///</span><span class="c"> commit named by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">start</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> walking forwards through history until</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">end</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> blaming line deletions.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A reverse blame may produce multiple sources for the same result line,</span>
+		<span class="c">///</span><span class="c"> each of these is a descendant commit that removed the line, typically</span>
+		<span class="c">///</span><span class="c"> this occurs when the same deletion appears in multiple side branches such</span>
+		<span class="c">///</span><span class="c"> as due to a cherry-pick. Applications relying on reverse should use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">BlameResult</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> as it filters these duplicate sources and only</span>
+		<span class="c">///</span><span class="c"> remembers the first (oldest) deletion.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> oldest commit to traverse from. The result file will be loaded</span>
+		<span class="c">///</span><span class="c"> from this commit&#39;s tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">end</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> most recent commit to stop traversal at. Usually an active</span>
+		<span class="c">///</span><span class="c"> branch tip, tag, or HEAD.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="fe233d8bb4df0a3b" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Reverse</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r17 rd" class="r17 r">start</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r18 rd" class="r18 r">end</span>
+			)
+		{
+			<b>return</b> <a href="#4960f041c9ac6377" class="i method">Reverse</a>(<span class="r17 r">start</span>, <a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#2e53778226e87389" class="i method">Singleton</a>(<span class="r18 r">end</span>.<a href="../NGit/AnyObjectId.cs.html#6490f5ce5f06db15" class="i method">ToObjectId</a>()));
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Configure the generator to compute reverse blame (history of deletes).</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Configure the generator to compute reverse blame (history of deletes).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method is expensive as it immediately runs a RevWalk over the</span>
+		<span class="c">///</span><span class="c"> history spanning the expression</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">start..end</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> (end being more recent</span>
+		<span class="c">///</span><span class="c"> than start) and then performs the equivalent operation as</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7e3da65283b2b8e9" class="i method">Push</a>(<b>string</b>, <span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Push(string, NGit.AnyObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to begin blame traversal from the</span>
+		<span class="c">///</span><span class="c"> commit named by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">start</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> walking forwards through history until</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">end</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> blaming line deletions.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A reverse blame may produce multiple sources for the same result line,</span>
+		<span class="c">///</span><span class="c"> each of these is a descendant commit that removed the line, typically</span>
+		<span class="c">///</span><span class="c"> this occurs when the same deletion appears in multiple side branches such</span>
+		<span class="c">///</span><span class="c"> as due to a cherry-pick. Applications relying on reverse should use</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">BlameResult</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> as it filters these duplicate sources and only</span>
+		<span class="c">///</span><span class="c"> remembers the first (oldest) deletion.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> oldest commit to traverse from. The result file will be loaded</span>
+		<span class="c">///</span><span class="c"> from this commit&#39;s tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">end</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> most recent commits to stop traversal at. Usually an active</span>
+		<span class="c">///</span><span class="c"> branch tip, tag, or HEAD.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Blame</span>.<a href="#a101cda0e1819516" class="t t">BlameGenerator</a> <a id="4960f041c9ac6377" href="../R/4960f041c9ac6377.html" target="n" data-glyph="72,1" class="i method">Reverse</a>&lt;<span id="r21 rd t" class="r21 r t">_T0</span>&gt;(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r19 rd" class="r19 r">start</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>
+			&lt;<span class="r21 r t">_T0</span>&gt; <span id="r20 rd" class="r20 r">end</span>) <b>where</b> <span class="r21 r t">_T0</span>:<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>
+		{
+			<a href="#580aa61ecdf7083d" class="i method">InitRevPool</a>(<b>true</b>);
+			<a href="ReverseWalk.cs.html#374872d8812c1d3a" class="t t">ReverseWalk</a>.<a href="ReverseWalk.cs.html#28bfeadb782068bc" class="t t">ReverseCommit</a> <span id="r22 rd" class="r22 r">result</span> = (<a href="ReverseWalk.cs.html#374872d8812c1d3a" class="t t">ReverseWalk</a>.<a href="ReverseWalk.cs.html#28bfeadb782068bc" class="t t">ReverseCommit</a>)<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>
+				(<span class="r19 r">start</span>);
+			<b>if</b> (!<a href="#3575066a6eb1921d" class="i method">Find</a>(<span class="r22 r">result</span>, <a href="#25396098f8b54cd2" class="i field">resultPath</a>))
+			{
+				<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+			}
+			<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#4f292d38b9d4330d" class="i method">MarkUninteresting</a>(<span class="r22 r">result</span>);
+			<b>foreach</b> (<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r23 rd" class="r23 r">id</span> <b>in</b> <span class="r20 r">end</span>)
+			{
+				<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#31569254b319535a" class="i method">MarkStart</a>(<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r23 r">id</span>));
+			}
+			<b>while</b> (<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#b27381e9c8e35153" class="i method">Next</a>() != <b>null</b>)
+			{
+			}
+			<span class="c">// just pump the queue</span>
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a> <span id="r24 rd" class="r24 r">c</span> = <b>new</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#9fc334b97b7d84e2" class="t constructor">ReverseCandidate</a>(<span class="r22 r">result</span>, <a href="#25396098f8b54cd2" class="i field">resultPath</a>);
+			<span class="r24 r">c</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <a href="#281485f53461e212" class="i field">idBuf</a>.<a href="../NGit/MutableObjectId.cs.html#6efa8431efa44ba1" class="i method">ToObjectId</a>();
+			<span class="r24 r">c</span>.<a href="Candidate.cs.html#6d17f46ab6e5ebfb" class="i method">LoadText</a>(<a href="#1a60e74ec1c61006" class="i field">reader</a>);
+			<span class="r24 r">c</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <b>new</b> <a href="Region.cs.html#9b0423d8e8174532" class="t constructor">Region</a>(0, 0, <span class="r24 r">c</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>());
+			<a href="#9c04e219e52819d7" class="i field">remaining</a> = <span class="r24 r">c</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>.<a href="../NGit.Diff/RawText.cs.html#2a97005ebe12610e" class="i method">Size</a>();
+			<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r24 r">c</span>);
+			<b>return</b> <a href="#a101cda0e1819516" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Execute the generator in a blocking fashion until all data is ready.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Execute the generator in a blocking fashion until all data is ready.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the complete result. Null if no file exists for the given path.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a> <a id="5bfb6ed770e548af" href="../R/5bfb6ed770e548af.html" target="n" data-glyph="72,1" class="i method">ComputeBlameResult</a>()
+		{
+			<b>try</b>
+			{
+				<a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a> <span id="r25 rd" class="r25 r">r</span> = <a href="BlameResult.cs.html#266c919cea5bcb31" class="t t">BlameResult</a>.<a href="BlameResult.cs.html#9db2e352da8885b3" class="i method">Create</a>(<a href="#a101cda0e1819516" class="k">this</a>);
+				<b>if</b> (<span class="r25 r">r</span> != <b>null</b>)
+				{
+					<span class="r25 r">r</span>.<a href="BlameResult.cs.html#de9f1e0d40a21d22" class="i method">ComputeAll</a>();
+				}
+				<b>return</b> <span class="r25 r">r</span>;
+			}
+			<b>finally</b>
+			{
+				<a href="#572f4b05d53900ad" class="i method">Release</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Step the blame algorithm one iteration.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Step the blame algorithm one iteration.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> true if the generator has found a region&#39;s source. The getSource</span>
+		<span class="c">///</span><span class="c"> and</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6bbf77afc509ed55" class="i method">GetResultStart</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetResultStart()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ,</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#91303a71d7a35acc" class="i method">GetResultEnd</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetResultEnd()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> methods</span>
+		<span class="c">///</span><span class="c"> can be used to inspect the region found. False if there are no</span>
+		<span class="c">///</span><span class="c"> more regions to describe.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="02739fda1ad06504" href="../R/02739fda1ad06504.html" target="n" data-glyph="72,1" class="i method">Next</a>()
+		{
+			<span class="c">// If there is a source still pending, produce the next region.</span>
+			<b>if</b> (<a href="#d088536056a1e27c" class="i field">currentSource</a> != <b>null</b>)
+			{
+				<a href="Region.cs.html#097a8f7f86433340" class="t t">Region</a> <span id="r26 rd" class="r26 r">r</span> = <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+				<a href="Region.cs.html#097a8f7f86433340" class="t t">Region</a> <span id="r27 rd" class="r27 r">n</span> = <span class="r26 r">r</span>.<a href="Region.cs.html#5d194b272fd9c6c8" class="i field">next</a>;
+				<a href="#9c04e219e52819d7" class="i field">remaining</a> -= <span class="r26 r">r</span>.<a href="Region.cs.html#70a29b66e21d2680" class="i field">length</a>;
+				<b>if</b> (<span class="r27 r">n</span> != <b>null</b>)
+				{
+					<a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r27 r">n</span>;
+					<b>return true</b>;
+				}
+				<b>if</b> (<a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a> != <b>null</b>)
+				{
+					<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a>);
+				}
+				<a href="#d088536056a1e27c" class="i field">currentSource</a> = <b>null</b>;
+			}
+			<span class="c">// If there are no lines remaining, the entire result is done,</span>
+			<span class="c">// even if there are revisions still available for the path.</span>
+			<b>if</b> (<a href="#9c04e219e52819d7" class="i field">remaining</a> == 0)
+			{
+				<b>return</b> <a href="#4ed1a9ced1ca8d01" class="i method">Done</a>();
+			}
+			<b>for</b> (; ; )
+			{
+				<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r28 rd" class="r28 r">n</span> = <a href="#3c9e79409b9b3032" class="i method">Pop</a>();
+				<b>if</b> (<span class="r28 r">n</span> == <b>null</b>)
+				{
+					<b>return</b> <a href="#4ed1a9ced1ca8d01" class="i method">Done</a>();
+				}
+				<b>int</b> <span id="r29 rd" class="r29 r">pCnt</span> = <span class="r28 r">n</span>.<a href="Candidate.cs.html#0a2649445125166c" class="i method">GetParentCount</a>();
+				<b>if</b> (<span class="r29 r">pCnt</span> == 1)
+				{
+					<b>if</b> (<a href="#4b55d117044861e0" class="i method">ProcessOne</a>(<span class="r28 r">n</span>))
+					{
+						<b>return true</b>;
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (1 &lt; <span class="r29 r">pCnt</span>)
+					{
+						<b>if</b> (<a href="#5f2ef57563d64be5" class="i method">ProcessMerge</a>(<span class="r28 r">n</span>))
+						{
+							<b>return true</b>;
+						}
+					}
+					<b>else</b>
+					{
+						<b>if</b> (<span class="r28 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>)
+						{
+						}
+						<b>else</b>
+						{
+							<span class="c">// Do not generate a tip of a reverse. The region</span>
+							<span class="c">// survives and should not appear to be deleted.</span>
+							<span class="c">// Root commit, with at least one surviving region.</span>
+							<span class="c">// Assign the remaining blame here.</span>
+							<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r28 r">n</span>);
+						}
+					}
+				}
+			}
+		}
+
+		<b>private bool</b> <a id="4ed1a9ced1ca8d01" href="../R/4ed1a9ced1ca8d01.html" target="n" data-glyph="76,1" class="i method">Done</a>()
+		{
+			<a href="#572f4b05d53900ad" class="i method">Release</a>();
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="af697ded67c80dc3" href="../R/af697ded67c80dc3.html" target="n" data-glyph="76,1" class="i method">Result</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r30 rd" class="r30 r">n</span>)
+		{
+			<b>if</b> (<span class="r30 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a> != <b>null</b>)
+			{
+				<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#5a766e3faebb3a90" class="i method">ParseBody</a>(<span class="r30 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a>);
+			}
+			<a href="#d088536056a1e27c" class="i field">currentSource</a> = <span class="r30 r">n</span>;
+			<b>return true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="514be64565f2ddcf" href="../R/514be64565f2ddcf.html" target="n" data-glyph="76,1" class="i method">ReverseResult</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r31 rd" class="r31 r">parent</span>, <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r32 rd" class="r32 r">source</span>)
+		{
+			<span class="c">// On a reverse blame present the application the parent</span>
+			<span class="c">// (as this is what did the removals), however the region</span>
+			<span class="c">// list to enumerate is the source&#39;s surviving list.</span>
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r33 rd" class="r33 r">res</span> = <span class="r31 r">parent</span>.<a href="Candidate.cs.html#27d5b5e852bedd56" class="i method">Copy</a>(<span class="r31 r">parent</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a>);
+			<span class="r33 r">res</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r32 r">source</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+			<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r33 r">res</span>);
+		}
+
+		<b>private</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <a id="3c9e79409b9b3032" href="../R/3c9e79409b9b3032.html" target="n" data-glyph="76,1" class="i method">Pop</a>()
+		{
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r34 rd" class="r34 r">n</span> = <a href="#71cfda4c43418a9f" class="i field">queue</a>;
+			<b>if</b> (<span class="r34 r">n</span> != <b>null</b>)
+			{
+				<a href="#71cfda4c43418a9f" class="i field">queue</a> = <span class="r34 r">n</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a>;
+				<span class="r34 r">n</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a> = <b>null</b>;
+			}
+			<b>return</b> <span class="r34 r">n</span>;
+		}
+
+		<b>private void</b> <a id="c2399a4fdc2cbece" href="../R/c2399a4fdc2cbece.html" target="n" data-glyph="76,1" class="i method">Push</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#d27bdaa719018fd9" class="t t">BlobCandidate</a> <span id="r35 rd" class="r35 r">toInsert</span>)
+		{
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r36 rd" class="r36 r">c</span> = <a href="#71cfda4c43418a9f" class="i field">queue</a>;
+			<b>if</b> (<span class="r36 r">c</span> != <b>null</b>)
+			{
+				<span class="r36 r">c</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <b>null</b>;
+				<span class="r35 r">toInsert</span>.<a href="Candidate.cs.html#812aafe4fd3ea0a7" class="i field">parent</a> = <span class="r36 r">c</span>;
+			}
+			<a href="#71cfda4c43418a9f" class="i field">queue</a> = <span class="r35 r">toInsert</span>;
+		}
+
+		<b>private void</b> <a id="1ed214d7335415bc" href="../R/1ed214d7335415bc.html" target="n" data-glyph="76,1" class="i method">Push</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r37 rd" class="r37 r">toInsert</span>)
+		{
+			<span class="c">// Mark sources to ensure they get discarded (above) if</span>
+			<span class="c">// another path to the same commit.</span>
+			<span class="r37 r">toInsert</span>.<a href="Candidate.cs.html#340f8446396ccd3b" class="i method">Add</a>(<a href="#83749db1c5f1c13d" class="i field">SEEN</a>);
+			<span class="c">// Insert into the queue using descending commit time, so</span>
+			<span class="c">// the most recent commit will pop next.</span>
+			<b>int</b> <span id="r38 rd" class="r38 r">time</span> = <span class="r37 r">toInsert</span>.<a href="Candidate.cs.html#fa48d299246f57d4" class="i method">GetTime</a>();
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r39 rd" class="r39 r">n</span> = <a href="#71cfda4c43418a9f" class="i field">queue</a>;
+			<b>if</b> (<span class="r39 r">n</span> == <b>null</b> || <span class="r38 r">time</span> &gt;= <span class="r39 r">n</span>.<a href="Candidate.cs.html#fa48d299246f57d4" class="i method">GetTime</a>())
+			{
+				<span class="r37 r">toInsert</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a> = <span class="r39 r">n</span>;
+				<a href="#71cfda4c43418a9f" class="i field">queue</a> = <span class="r37 r">toInsert</span>;
+				<b>return</b>;
+			}
+			<b>for</b> (<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r40 rd" class="r40 r">p</span> = <span class="r39 r">n</span>; ; <span class="r40 r">p</span> = <span class="r39 r">n</span>)
+			{
+				<span class="r39 r">n</span> = <span class="r40 r">p</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a>;
+				<b>if</b> (<span class="r39 r">n</span> == <b>null</b> || <span class="r38 r">time</span> &gt;= <span class="r39 r">n</span>.<a href="Candidate.cs.html#fa48d299246f57d4" class="i method">GetTime</a>())
+				{
+					<span class="r37 r">toInsert</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a> = <span class="r39 r">n</span>;
+					<span class="r40 r">p</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a> = <span class="r37 r">toInsert</span>;
+					<b>return</b>;
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="4b55d117044861e0" href="../R/4b55d117044861e0.html" target="n" data-glyph="76,1" class="i method">ProcessOne</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r41 rd" class="r41 r">n</span>)
+		{
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r42 rd" class="r42 r">parent</span> = <span class="r41 r">n</span>.<a href="Candidate.cs.html#daeaa0ce1d6d2f3f" class="i method">GetParent</a>(0);
+			<b>if</b> (<span class="r42 r">parent</span> == <b>null</b>)
+			{
+				<b>return</b> <a href="#2efd59711b1218db" class="i method">Split</a>(<span class="r41 r">n</span>.<a href="Candidate.cs.html#6576c6bc34a492cd" class="i method">GetNextCandidate</a>(0), <span class="r41 r">n</span>);
+			}
+			<b>if</b> (<span class="r42 r">parent</span>.<a href="../NGit.Revwalk/RevObject.cs.html#99c5b9a22425aeb5" class="i method">Has</a>(<a href="#83749db1c5f1c13d" class="i field">SEEN</a>))
+			{
+				<b>return false</b>;
+			}
+			<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#4ab02db9afbfe5a4" class="i method">ParseHeaders</a>(<span class="r42 r">parent</span>);
+			<b>if</b> (<a href="#3575066a6eb1921d" class="i method">Find</a>(<span class="r42 r">parent</span>, <span class="r41 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>))
+			{
+				<b>if</b> (<a href="#281485f53461e212" class="i field">idBuf</a>.<a href="../NGit/AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<span class="r41 r">n</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a>))
+				{
+					<span class="c">// The common case of the file not being modified in</span>
+					<span class="c">// a simple string-of-pearls history. Blame parent.</span>
+					<span class="r41 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a> = <span class="r42 r">parent</span>;
+					<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r41 r">n</span>);
+					<b>return false</b>;
+				}
+				<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r43 rd" class="r43 r">next</span> = <span class="r41 r">n</span>.<a href="Candidate.cs.html#d8b77896b8d62ebe" class="i method">Create</a>(<span class="r42 r">parent</span>, <span class="r41 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>);
+				<span class="r43 r">next</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <a href="#281485f53461e212" class="i field">idBuf</a>.<a href="../NGit/MutableObjectId.cs.html#6efa8431efa44ba1" class="i method">ToObjectId</a>();
+				<span class="r43 r">next</span>.<a href="Candidate.cs.html#6d17f46ab6e5ebfb" class="i method">LoadText</a>(<a href="#1a60e74ec1c61006" class="i field">reader</a>);
+				<b>return</b> <a href="#2efd59711b1218db" class="i method">Split</a>(<span class="r43 r">next</span>, <span class="r41 r">n</span>);
+			}
+			<b>if</b> (<span class="r41 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a> == <b>null</b>)
+			{
+				<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r41 r">n</span>);
+			}
+			<a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r44 rd" class="r44 r">r</span> = <a href="#21021c739c8e1417" class="i method">FindRename</a>(<span class="r42 r">parent</span>, <span class="r41 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a>, <span class="r41 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>);
+			<b>if</b> (<span class="r44 r">r</span> == <b>null</b>)
+			{
+				<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r41 r">n</span>);
+			}
+			<b>if</b> (0 == <span class="r44 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#3147075453c53a48" class="i method">PrefixCompare</a>(<span class="r41 r">n</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a>))
+			{
+				<span class="c">// A 100% rename without any content change can also</span>
+				<span class="c">// skip directly to the parent.</span>
+				<span class="r41 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a> = <span class="r42 r">parent</span>;
+				<span class="r41 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r44 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>());
+				<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r41 r">n</span>);
+				<b>return false</b>;
+			}
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r45 rd" class="r45 r">next_1</span> = <span class="r41 r">n</span>.<a href="Candidate.cs.html#d8b77896b8d62ebe" class="i method">Create</a>(<span class="r42 r">parent</span>, <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r44 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>()));
+			<span class="r45 r">next_1</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <span class="r44 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>();
+			<span class="r45 r">next_1</span>.<a href="Candidate.cs.html#d5fdf7e22f783a3d" class="i field">renameScore</a> = <span class="r44 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#2bd3a1af985042ed" class="i method">GetScore</a>();
+			<span class="r45 r">next_1</span>.<a href="Candidate.cs.html#6d17f46ab6e5ebfb" class="i method">LoadText</a>(<a href="#1a60e74ec1c61006" class="i field">reader</a>);
+			<b>return</b> <a href="#2efd59711b1218db" class="i method">Split</a>(<span class="r45 r">next_1</span>, <span class="r41 r">n</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="2efd59711b1218db" href="../R/2efd59711b1218db.html" target="n" data-glyph="76,1" class="i method">Split</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r46 rd" class="r46 r">parent</span>, <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r47 rd" class="r47 r">source</span>)
+		{
+			<a href="../NGit.Diff/EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r48 rd" class="r48 r">editList</span> = <a href="#6ba6d00b3a18d9f3" class="i field">diffAlgorithm</a>.<a href="../NGit.Diff/DiffAlgorithm.cs.html#bf43d860311f26cc" class="i method">Diff</a>(<a href="#dbac0ba494c10536" class="i field">textComparator</a>, <span class="r46 r">parent</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>, <span class="r47 r">source</span>.
+				<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>);
+			<b>if</b> (<span class="r48 r">editList</span>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+			{
+				<span class="c">// Ignoring whitespace (or some other special comparator) can</span>
+				<span class="c">// cause non-identical blobs to have an empty edit list. In</span>
+				<span class="c">// a case like this push the parent alone.</span>
+				<span class="r46 r">parent</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r47 r">source</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+				<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r46 r">parent</span>);
+				<b>return false</b>;
+			}
+			<span class="r46 r">parent</span>.<a href="Candidate.cs.html#ede3a0ff646e9d6e" class="i method">TakeBlame</a>(<span class="r48 r">editList</span>, <span class="r47 r">source</span>);
+			<b>if</b> (<span class="r46 r">parent</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> != <b>null</b>)
+			{
+				<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r46 r">parent</span>);
+			}
+			<b>if</b> (<span class="r47 r">source</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> != <b>null</b>)
+			{
+				<b>if</b> (<span class="r47 r">source</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>)
+				{
+					<b>return</b> <a href="#514be64565f2ddcf" class="i method">ReverseResult</a>(<span class="r46 r">parent</span>, <span class="r47 r">source</span>);
+				}
+				<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r47 r">source</span>);
+			}
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="5f2ef57563d64be5" href="../R/5f2ef57563d64be5.html" target="n" data-glyph="76,1" class="i method">ProcessMerge</a>(<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r49 rd" class="r49 r">n</span>)
+		{
+			<b>int</b> <span id="r50 rd" class="r50 r">pCnt</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#0a2649445125166c" class="i method">GetParentCount</a>();
+			<b>for</b> (<b>int</b> <span id="r51 rd" class="r51 r">pIdx</span> = 0; <span class="r51 r">pIdx</span> &lt; <span class="r50 r">pCnt</span>; <span class="r51 r">pIdx</span>++)
+			{
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r52 rd" class="r52 r">parent</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#daeaa0ce1d6d2f3f" class="i method">GetParent</a>(<span class="r51 r">pIdx</span>);
+				<b>if</b> (<span class="r52 r">parent</span>.<a href="../NGit.Revwalk/RevObject.cs.html#99c5b9a22425aeb5" class="i method">Has</a>(<a href="#83749db1c5f1c13d" class="i field">SEEN</a>))
+				{
+					<b>continue</b>;
+				}
+				<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#4ab02db9afbfe5a4" class="i method">ParseHeaders</a>(<span class="r52 r">parent</span>);
+			}
+			<span class="c">// If any single parent exactly matches the merge, follow only</span>
+			<span class="c">// that one parent through history.</span>
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>[] <span id="r53 rd" class="r53 r">ids</span> = <b>null</b>;
+			<b>for</b> (<b>int</b> <span id="r54 rd" class="r54 r">pIdx_1</span> = 0; <span class="r54 r">pIdx_1</span> &lt; <span class="r50 r">pCnt</span>; <span class="r54 r">pIdx_1</span>++)
+			{
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r55 rd" class="r55 r">parent</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#daeaa0ce1d6d2f3f" class="i method">GetParent</a>(<span class="r54 r">pIdx_1</span>);
+				<b>if</b> (<span class="r55 r">parent</span>.<a href="../NGit.Revwalk/RevObject.cs.html#99c5b9a22425aeb5" class="i method">Has</a>(<a href="#83749db1c5f1c13d" class="i field">SEEN</a>))
+				{
+					<b>continue</b>;
+				}
+				<b>if</b> (!<a href="#3575066a6eb1921d" class="i method">Find</a>(<span class="r55 r">parent</span>, <span class="r49 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>))
+				{
+					<b>continue</b>;
+				}
+				<b>if</b> (!(<span class="r49 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>) &amp;&amp; <a href="#281485f53461e212" class="i field">idBuf</a>.<a href="../NGit/AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<span class="r49 r">n</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a>))
+				{
+					<span class="r49 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a> = <span class="r55 r">parent</span>;
+					<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r49 r">n</span>);
+					<b>return false</b>;
+				}
+				<b>if</b> (<span class="r53 r">ids</span> == <b>null</b>)
+				{
+					<span class="r53 r">ids</span> = <b>new</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>[<span class="r50 r">pCnt</span>];
+				}
+				<span class="r53 r">ids</span>[<span class="r54 r">pIdx_1</span>] = <a href="#281485f53461e212" class="i field">idBuf</a>.<a href="../NGit/MutableObjectId.cs.html#6efa8431efa44ba1" class="i method">ToObjectId</a>();
+			}
+			<span class="c">// If rename detection is enabled, search for any relevant names.</span>
+			<a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>[] <span id="r56 rd" class="r56 r">renames</span> = <b>null</b>;
+			<b>if</b> (<a href="#49beece02d890702" class="i field">renameDetector</a> != <b>null</b>)
+			{
+				<span class="r56 r">renames</span> = <b>new</b> <a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>[<span class="r50 r">pCnt</span>];
+				<b>for</b> (<b>int</b> <span id="r57 rd" class="r57 r">pIdx_2</span> = 0; <span class="r57 r">pIdx_2</span> &lt; <span class="r50 r">pCnt</span>; <span class="r57 r">pIdx_2</span>++)
+				{
+					<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r58 rd" class="r58 r">parent</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#daeaa0ce1d6d2f3f" class="i method">GetParent</a>(<span class="r57 r">pIdx_2</span>);
+					<b>if</b> (<span class="r58 r">parent</span>.<a href="../NGit.Revwalk/RevObject.cs.html#99c5b9a22425aeb5" class="i method">Has</a>(<a href="#83749db1c5f1c13d" class="i field">SEEN</a>))
+					{
+						<b>continue</b>;
+					}
+					<b>if</b> (<span class="r53 r">ids</span> != <b>null</b> &amp;&amp; <span class="r53 r">ids</span>[<span class="r57 r">pIdx_2</span>] != <b>null</b>)
+					{
+						<b>continue</b>;
+					}
+					<a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r59 rd" class="r59 r">r</span> = <a href="#21021c739c8e1417" class="i method">FindRename</a>(<span class="r58 r">parent</span>, <span class="r49 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a>, <span class="r49 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>);
+					<b>if</b> (<span class="r59 r">r</span> == <b>null</b>)
+					{
+						<b>continue</b>;
+					}
+					<b>if</b> (<span class="r49 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>)
+					{
+						<b>if</b> (<span class="r53 r">ids</span> == <b>null</b>)
+						{
+							<span class="r53 r">ids</span> = <b>new</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>[<span class="r50 r">pCnt</span>];
+						}
+						<span class="r53 r">ids</span>[<span class="r50 r">pCnt</span>] = <span class="r59 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>();
+					}
+					<b>else</b>
+					{
+						<b>if</b> (0 == <span class="r59 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#3147075453c53a48" class="i method">PrefixCompare</a>(<span class="r49 r">n</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a>))
+						{
+							<span class="c">// A 100% rename without any content change can also</span>
+							<span class="c">// skip directly to the parent. Note this bypasses an</span>
+							<span class="c">// earlier parent that had the path (above) but did not</span>
+							<span class="c">// have an exact content match. For performance reasons</span>
+							<span class="c">// we choose to follow the one parent over trying to do</span>
+							<span class="c">// possibly both parents.</span>
+							<span class="r49 r">n</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a> = <span class="r58 r">parent</span>;
+							<span class="r49 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r59 r">r</span>.<a href="../NGit.Diff/DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>());
+							<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r49 r">n</span>);
+							<b>return false</b>;
+						}
+					}
+					<span class="r56 r">renames</span>[<span class="r57 r">pIdx_2</span>] = <span class="r59 r">r</span>;
+				}
+			}
+			<span class="c">// Construct the candidate for each parent.</span>
+			<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>[] <span id="r60 rd" class="r60 r">parents</span> = <b>new</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>[<span class="r50 r">pCnt</span>];
+			<b>for</b> (<b>int</b> <span id="r61 rd" class="r61 r">pIdx_3</span> = 0; <span class="r61 r">pIdx_3</span> &lt; <span class="r50 r">pCnt</span>; <span class="r61 r">pIdx_3</span>++)
+			{
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r62 rd" class="r62 r">parent</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#daeaa0ce1d6d2f3f" class="i method">GetParent</a>(<span class="r61 r">pIdx_3</span>);
+				<b>if</b> (<span class="r62 r">parent</span>.<a href="../NGit.Revwalk/RevObject.cs.html#99c5b9a22425aeb5" class="i method">Has</a>(<a href="#83749db1c5f1c13d" class="i field">SEEN</a>))
+				{
+					<b>continue</b>;
+				}
+				<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r63 rd" class="r63 r">p</span>;
+				<b>if</b> (<span class="r56 r">renames</span> != <b>null</b> &amp;&amp; <span class="r56 r">renames</span>[<span class="r61 r">pIdx_3</span>] != <b>null</b>)
+				{
+					<span class="r63 r">p</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#d8b77896b8d62ebe" class="i method">Create</a>(<span class="r62 r">parent</span>, <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r56 r">renames</span>[<span class="r61 r">pIdx_3</span>].<a href="../NGit.Diff/DiffEntry.cs.html#e1182df862c423a7" class="i method">GetOldPath</a>()));
+					<span class="r63 r">p</span>.<a href="Candidate.cs.html#d5fdf7e22f783a3d" class="i field">renameScore</a> = <span class="r56 r">renames</span>[<span class="r61 r">pIdx_3</span>].<a href="../NGit.Diff/DiffEntry.cs.html#2bd3a1af985042ed" class="i method">GetScore</a>();
+					<span class="r63 r">p</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <span class="r56 r">renames</span>[<span class="r61 r">pIdx_3</span>].<a href="../NGit.Diff/DiffEntry.cs.html#39f057d95f2f7c79" class="i method">GetOldId</a>().<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>();
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r53 r">ids</span> != <b>null</b> &amp;&amp; <span class="r53 r">ids</span>[<span class="r61 r">pIdx_3</span>] != <b>null</b>)
+					{
+						<span class="r63 r">p</span> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#d8b77896b8d62ebe" class="i method">Create</a>(<span class="r62 r">parent</span>, <span class="r49 r">n</span>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>);
+						<span class="r63 r">p</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a> = <span class="r53 r">ids</span>[<span class="r61 r">pIdx_3</span>];
+					}
+					<b>else</b>
+					{
+						<b>continue</b>;
+					}
+				}
+				<a href="../NGit.Diff/EditList.cs.html#641495d80489df14" class="t t">EditList</a> <span id="r64 rd" class="r64 r">editList</span>;
+				<b>if</b> (<span class="r49 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a> &amp;&amp; <span class="r63 r">p</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a>.<a href="../NGit/AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<span class="r49 r">n</span>.<a href="Candidate.cs.html#ee83f1597e3dae69" class="i field">sourceBlob</a>))
+				{
+					<span class="c">// This special case happens on ReverseCandidate forks.</span>
+					<span class="r63 r">p</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>;
+					<span class="r64 r">editList</span> = <b>new</b> <a href="../NGit.Diff/EditList.cs.html#533c412093c13be2" class="t constructor">EditList</a>(0);
+				}
+				<b>else</b>
+				{
+					<span class="r63 r">p</span>.<a href="Candidate.cs.html#6d17f46ab6e5ebfb" class="i method">LoadText</a>(<a href="#1a60e74ec1c61006" class="i field">reader</a>);
+					<span class="r64 r">editList</span> = <a href="#6ba6d00b3a18d9f3" class="i field">diffAlgorithm</a>.<a href="../NGit.Diff/DiffAlgorithm.cs.html#bf43d860311f26cc" class="i method">Diff</a>(<a href="#dbac0ba494c10536" class="i field">textComparator</a>, <span class="r63 r">p</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>, <span class="r49 r">n</span>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>);
+				}
+				<b>if</b> (<span class="r64 r">editList</span>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+				{
+					<span class="c">// Ignoring whitespace (or some other special comparator) can</span>
+					<span class="c">// cause non-identical blobs to have an empty edit list. In</span>
+					<span class="c">// a case like this push the parent alone.</span>
+					<b>if</b> (<span class="r49 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>)
+					{
+						<span class="r60 r">parents</span>[<span class="r61 r">pIdx_3</span>] = <span class="r63 r">p</span>;
+						<b>continue</b>;
+					}
+					<span class="r63 r">p</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+					<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r63 r">p</span>);
+					<b>return false</b>;
+				}
+				<span class="r63 r">p</span>.<a href="Candidate.cs.html#ede3a0ff646e9d6e" class="i method">TakeBlame</a>(<span class="r64 r">editList</span>, <span class="r49 r">n</span>);
+				<span class="c">// Only remember this parent candidate if there is at least</span>
+				<span class="c">// one region that was blamed on the parent.</span>
+				<b>if</b> (<span class="r63 r">p</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> != <b>null</b>)
+				{
+					<span class="c">// Reverse blame requires inverting the regions. This puts</span>
+					<span class="c">// the regions the parent deleted from us into the parent,</span>
+					<span class="c">// and retains the common regions to look at other parents</span>
+					<span class="c">// for deletions.</span>
+					<b>if</b> (<span class="r49 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>)
+					{
+						<a href="Region.cs.html#097a8f7f86433340" class="t t">Region</a> <span id="r65 rd" class="r65 r">r</span> = <span class="r63 r">p</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+						<span class="r63 r">p</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+						<span class="r49 r">n</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r65 r">r</span>;
+					}
+					<span class="r60 r">parents</span>[<span class="r61 r">pIdx_3</span>] = <span class="r63 r">p</span>;
+				}
+			}
+			<b>if</b> (<span class="r49 r">n</span> <b>is</b> <a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a>.<a href="Candidate.cs.html#f7283c58eddd0437" class="t t">ReverseCandidate</a>)
+			{
+				<span class="c">// On a reverse blame report all deletions found in the children,</span>
+				<span class="c">// and pass on to them a copy of our region list.</span>
+				<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r66 rd" class="r66 r">resultHead</span> = <b>null</b>;
+				<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r67 rd" class="r67 r">resultTail</span> = <b>null</b>;
+				<b>for</b> (<b>int</b> <span id="r68 rd" class="r68 r">pIdx_2</span> = 0; <span class="r68 r">pIdx_2</span> &lt; <span class="r50 r">pCnt</span>; <span class="r68 r">pIdx_2</span>++)
+				{
+					<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r69 rd" class="r69 r">p</span> = <span class="r60 r">parents</span>[<span class="r68 r">pIdx_2</span>];
+					<b>if</b> (<span class="r69 r">p</span> == <b>null</b>)
+					{
+						<b>continue</b>;
+					}
+					<b>if</b> (<span class="r69 r">p</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> != <b>null</b>)
+					{
+						<a href="Candidate.cs.html#cd78ec47a4cad5bf" class="t t">Candidate</a> <span id="r70 rd" class="r70 r">r</span> = <span class="r69 r">p</span>.<a href="Candidate.cs.html#27d5b5e852bedd56" class="i method">Copy</a>(<span class="r69 r">p</span>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a>);
+						<b>if</b> (<span class="r67 r">resultTail</span> != <b>null</b>)
+						{
+							<span class="r67 r">resultTail</span>.<a href="Candidate.cs.html#be3e8f1586f40491" class="i field">queueNext</a> = <span class="r70 r">r</span>;
+							<span class="r67 r">resultTail</span> = <span class="r70 r">r</span>;
+						}
+						<b>else</b>
+						{
+							<span class="r66 r">resultHead</span> = <span class="r70 r">r</span>;
+							<span class="r67 r">resultTail</span> = <span class="r70 r">r</span>;
+						}
+					}
+					<b>if</b> (<span class="r49 r">n</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> != <b>null</b>)
+					{
+						<span class="r69 r">p</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> = <span class="r49 r">n</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>.<a href="Region.cs.html#cb8a3004faa83370" class="i method">DeepCopy</a>();
+						<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r69 r">p</span>);
+					}
+				}
+				<b>if</b> (<span class="r66 r">resultHead</span> != <b>null</b>)
+				{
+					<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r66 r">resultHead</span>);
+				}
+				<b>return false</b>;
+			}
+			<span class="c">// Push any parents that are still candidates.</span>
+			<b>for</b> (<b>int</b> <span id="r71 rd" class="r71 r">pIdx_4</span> = 0; <span class="r71 r">pIdx_4</span> &lt; <span class="r50 r">pCnt</span>; <span class="r71 r">pIdx_4</span>++)
+			{
+				<b>if</b> (<span class="r60 r">parents</span>[<span class="r71 r">pIdx_4</span>] != <b>null</b>)
+				{
+					<a href="#1ed214d7335415bc" class="i method">Push</a>(<span class="r60 r">parents</span>[<span class="r71 r">pIdx_4</span>]);
+				}
+			}
+			<b>if</b> (<span class="r49 r">n</span>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a> != <b>null</b>)
+			{
+				<b>return</b> <a href="#af697ded67c80dc3" class="i method">Result</a>(<span class="r49 r">n</span>);
+			}
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the revision blamed for the current region.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the revision blamed for the current region.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The source commit may be null if the line was blamed to an uncommitted</span>
+		<span class="c">///</span><span class="c"> revision, such as the working tree copy, or during a reverse blame if the</span>
+		<span class="c">///</span><span class="c"> line survives to the end revision (e.g. the branch tip).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">current revision being blamed.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="e0a965ebcc8fa46f" href="../R/e0a965ebcc8fa46f.html" target="n" data-glyph="72,1" class="i method">GetSourceCommit</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#9057fff817b25a13" class="i field">sourceCommit</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">current author being blamed.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="c4370d6aa9f96dba" href="../R/c4370d6aa9f96dba.html" target="n" data-glyph="72,1" class="i method">GetSourceAuthor</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#a1860d294ad1184a" class="i method">GetAuthor</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">current committer being blamed.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/PersonIdent.cs.html#753b6d32f0a7c466" class="t t">PersonIdent</a> <a id="110890f0520ff190" href="../R/110890f0520ff190.html" target="n" data-glyph="72,1" class="i method">GetSourceCommitter</a>()
+		{
+			<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r72 rd" class="r72 r">c</span> = <a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>();
+			<b>return</b> <span class="r72 r">c</span> != <b>null</b> ? <span class="r72 r">c</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#4c0dd3b8b4a4fcbb" class="i method">GetCommitterIdent</a>() : <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">path of the file being blamed.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="30ccb544c47ac88b" href="../R/30ccb544c47ac88b.html" target="n" data-glyph="72,1" class="i method">GetSourcePath</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#a037f3d49789e47c" class="i field">sourcePath</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#a20bf4f1244cbe54" class="i method">GetPath</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> rename score if a rename occurred in</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="d0ad54f3849a0ac3" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetRenameScore</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#d5fdf7e22f783a3d" class="i field">renameScore</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first line of the source data that has been blamed for the</span>
+		<span class="c">///</span><span class="c"> current region. This is line number of where the region was added</span>
+		<span class="c">///</span><span class="c"> during</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> in file</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#30ccb544c47ac88b" class="i method">GetSourcePath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourcePath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="2b15c0615fa7c745" href="../R/2b15c0615fa7c745.html" target="n" data-glyph="72,1" class="i method">GetSourceStart</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>.<a href="Region.cs.html#8ec5a38f35b4b5a6" class="i field">sourceStart</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> one past the range of the source data that has been blamed for</span>
+		<span class="c">///</span><span class="c"> the current region. This is line number of where the region was</span>
+		<span class="c">///</span><span class="c"> added during</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> in file</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#30ccb544c47ac88b" class="i method">GetSourcePath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourcePath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="11145855b51839c7" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourceEnd</a>()
+		{
+			<a href="Region.cs.html#097a8f7f86433340" class="t t">Region</a> <span id="r73 rd" class="r73 r">r</span> = <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+			<b>return</b> <span class="r73 r">r</span>.<a href="Region.cs.html#8ec5a38f35b4b5a6" class="i field">sourceStart</a> + <span class="r73 r">r</span>.<a href="Region.cs.html#70a29b66e21d2680" class="i field">length</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> first line of the result that</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> has been</span>
+		<span class="c">///</span><span class="c"> blamed for providing. Line numbers use 0 based indexing.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="6bbf77afc509ed55" href="../R/6bbf77afc509ed55.html" target="n" data-glyph="72,1" class="i method">GetResultStart</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>.<a href="Region.cs.html#d6ae52e134bbf1ac" class="i field">resultStart</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> one past the range of the result that</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> has been blamed for providing. Line numbers use 0 based indexing.</span>
+		<span class="c">///</span><span class="c"> Because a source cannot be blamed for an empty region of the</span>
+		<span class="c">///</span><span class="c"> result,</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#91303a71d7a35acc" class="i method">GetResultEnd</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetResultEnd()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is always at least one larger</span>
+		<span class="c">///</span><span class="c"> than</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#6bbf77afc509ed55" class="i method">GetResultStart</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetResultStart()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="91303a71d7a35acc" href="../R/91303a71d7a35acc.html" target="n" data-glyph="72,1" class="i method">GetResultEnd</a>()
+		{
+			<a href="Region.cs.html#097a8f7f86433340" class="t t">Region</a> <span id="r74 rd" class="r74 r">r</span> = <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>;
+			<b>return</b> <span class="r74 r">r</span>.<a href="Region.cs.html#d6ae52e134bbf1ac" class="i field">resultStart</a> + <span class="r74 r">r</span>.<a href="Region.cs.html#70a29b66e21d2680" class="i field">length</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of lines in the current region being blamed to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . This is always the value of the</span>
+		<span class="c">///</span><span class="c"> expression</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">getResultEnd() - getResultStart()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , but also</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">getSourceEnd() - getSourceStart()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="f9e828e07f5a92ec" href="../R/f9e828e07f5a92ec.html" target="n" data-glyph="72,1" class="i method">GetRegionLength</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#3c8aa210628f3733" class="i field">regionList</a>.<a href="Region.cs.html#70a29b66e21d2680" class="i field">length</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> complete contents of the source file blamed for the current</span>
+		<span class="c">///</span><span class="c"> output region. This is the contents of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#30ccb544c47ac88b" class="i method">GetSourcePath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourcePath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> within</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e0a965ebcc8fa46f" class="i method">GetSourceCommit</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetSourceCommit()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . The source contents is</span>
+		<span class="c">///</span><span class="c"> temporarily available as an artifact of the blame algorithm. Most</span>
+		<span class="c">///</span><span class="c"> applications will want the result contents for display to users.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <a id="ade3d64ed12a972b" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetSourceContents</a>()
+		{
+			<b>return</b> <a href="#d088536056a1e27c" class="i field">currentSource</a>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> complete file contents of the result file blame is annotating.</span>
+		<span class="c">///</span><span class="c"> This value is accessible only after being configured and only</span>
+		<span class="c">///</span><span class="c"> immediately before the first call to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#02739fda1ad06504" class="i method">Next</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Next()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . Returns</span>
+		<span class="c">///</span><span class="c"> null if the path does not exist.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">repository cannot be read.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#02739fda1ad06504" class="i method">Next</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Next()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> has already been invoked.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit.Diff/RawText.cs.html#beb2363b4b9c8c5f" class="t t">RawText</a> <a id="61a10db65b4931d0" href="../R/61a10db65b4931d0.html" target="n" data-glyph="72,1" class="i method">GetResultContents</a>()
+		{
+			<b>return</b> <a href="#71cfda4c43418a9f" class="i field">queue</a> != <b>null</b> ? <a href="#71cfda4c43418a9f" class="i field">queue</a>.<a href="Candidate.cs.html#ee1b6e10d100ab16" class="i field">sourceText</a> : <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Release the current blame session.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Release the current blame session.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="572f4b05d53900ad" href="../R/572f4b05d53900ad.html" target="n" data-glyph="72,1" class="i method">Release</a>()
+		{
+			<a href="#437eb5e9ea8a0b94" class="i field">revPool</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			<a href="#71cfda4c43418a9f" class="i field">queue</a> = <b>null</b>;
+			<a href="#d088536056a1e27c" class="i field">currentSource</a> = <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="3575066a6eb1921d" href="../R/3575066a6eb1921d.html" target="n" data-glyph="76,1" class="i method">Find</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r75 rd" class="r75 r">commit</span>, <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a> <span id="r76 rd" class="r76 r">path</span>)
+		{
+			<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <span class="r76 r">path</span>;
+			<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#fd547e330b5d3dd0" class="i method">Reset</a>(<span class="r75 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+			<b>while</b> (<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<b>if</b> (<span class="r76 r">path</span>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#99ab062f8153b2da" class="i method">IsDone</a>(<a href="#9c8b6227a956844b" class="i field">treeWalk</a>))
+				{
+					<b>if</b> (<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#b1724a1eb4d8d6ac" class="i method">GetFileMode</a>(0).<a href="../NGit/FileMode.cs.html#6d8835bb81f9e7ef" class="i method">GetObjectType</a>() != <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>)
+					{
+						<b>return false</b>;
+					}
+					<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#675c3b09413e01b4" class="i method">GetObjectId</a>(<a href="#281485f53461e212" class="i field">idBuf</a>, 0);
+					<b>return true</b>;
+				}
+				<b>if</b> (<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#49a66eb4418994dd" class="i property">IsSubtree</a>)
+				{
+					<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#3f320d61dd0fe634" class="i method">EnterSubtree</a>();
+				}
+			}
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <a id="21021c739c8e1417" href="../R/21021c739c8e1417.html" target="n" data-glyph="76,1" class="i method">FindRename</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r77 rd" class="r77 r">parent</span>, <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r78 rd" class="r78 r">commit</span>, <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a> <span id="r79 rd" class="r79 r">path</span>)
+		{
+			<b>if</b> (<a href="#49beece02d890702" class="i field">renameDetector</a> == <b>null</b>)
+			{
+				<b>return null</b>;
+			}
+			<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>.<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#0797802ba9a37bc5" class="i field">ANY_DIFF</a>;
+			<a href="#9c8b6227a956844b" class="i field">treeWalk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#a48b19d13e227c36" class="i method">Reset</a>(<span class="r77 r">parent</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>, <span class="r78 r">commit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+			<a href="#49beece02d890702" class="i field">renameDetector</a>.<a href="../NGit.Diff/RenameDetector.cs.html#efd8b76d2228c9f5" class="i method">Reset</a>();
+			<a href="#49beece02d890702" class="i field">renameDetector</a>.<a href="../NGit.Diff/RenameDetector.cs.html#730fdc4202db3df3" class="i method">AddAll</a>(<a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="../NGit.Diff/DiffEntry.cs.html#fabe1f8a939fc63f" class="i method">Scan</a>(<a href="#9c8b6227a956844b" class="i field">treeWalk</a>));
+			<b>foreach</b> (<a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r80 rd" class="r80 r">ent</span> <b>in</b> <a href="#49beece02d890702" class="i field">renameDetector</a>.<a href="../NGit.Diff/RenameDetector.cs.html#9a5cd24aa46a55dc" class="i method">Compute</a>())
+			{
+				<b>if</b> (<a href="#17e3b851c509082d" class="i method">IsRename</a>(<span class="r80 r">ent</span>) &amp;&amp; <span class="r80 r">ent</span>.<a href="../NGit.Diff/DiffEntry.cs.html#e15ba056919bec45" class="i method">GetNewPath</a>().<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r79 r">path</span>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#a20bf4f1244cbe54" class="i method">GetPath</a>()))
+				{
+					<b>return</b> <span class="r80 r">ent</span>;
+				}
+			}
+			<b>return null</b>;
+		}
+
+		<b>private static bool</b> <a id="17e3b851c509082d" href="../R/17e3b851c509082d.html" target="n" data-glyph="76,1" class="i method">IsRename</a>(<a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r81 rd" class="r81 r">ent</span>)
+		{
+			<b>return</b> <span class="r81 r">ent</span>.<a href="../NGit.Diff/DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>() == <a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="../NGit.Diff/DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="../NGit.Diff/DiffEntry.cs.html#0ea2ec551f0fa71c" class="i field">RENAME</a> || <span class="r81 r">ent</span>.<a href="../NGit.Diff/DiffEntry.cs.html#09360514268bbbb2" class="i method">GetChangeType</a>() 
+				== <a href="../NGit.Diff/DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="../NGit.Diff/DiffEntry.cs.html#30cb481f8e051298" class="t t">ChangeType</a>.<a href="../NGit.Diff/DiffEntry.cs.html#92f05c1e04cf35a9" class="i field">COPY</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,406 @@
+﻿<!DOCTYPE html>
+<html><head><title>ObjectWriter.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(397);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/ObjectWriter.cs" target="_top">ObjectWriter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>;
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>.<span class="i n">Streams</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <b>public class</b> <a id="edd7e08e5ab8145e" href="R/edd7e08e5ab8145e.html" target="n" data-glyph="0,0" class="t t">ObjectWriter</a>
+    {
+        <span class="c">// Fields</span>
+        <b>private static readonly byte</b>[] <a id="d101c83289e7d9bc" href="R/d101c83289e7d9bc.html" target="n" data-glyph="46,1" class="i field">HAuthor</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;author&quot;</span>);
+        <b>private static readonly byte</b>[] <a id="6a22cb54110ab566" href="R/6a22cb54110ab566.html" target="n" data-glyph="46,1" class="i field">HCommitter</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;committer&quot;</span>);
+        <b>private static readonly byte</b>[] <a id="c359e4e6da682bfb" href="R/c359e4e6da682bfb.html" target="n" data-glyph="46,1" class="i field">HEncoding</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;encoding&quot;</span>);
+        <b>private static readonly byte</b>[] <a id="1077aa7b0297e235" href="R/1077aa7b0297e235.html" target="n" data-glyph="46,1" class="i field">HParent</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;parent&quot;</span>);
+        <b>private static readonly byte</b>[] <a id="9007d955ff9c3d1c" href="R/9007d955ff9c3d1c.html" target="n" data-glyph="46,1" class="i field">HTree</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="s">&quot;tree&quot;</span>);
+        <b>private readonly byte</b>[] <a id="1b578406470cc657" href="R/1b578406470cc657.html" target="n" data-glyph="46,1" class="i field">_buf</a>;
+        <b>private readonly</b> <a href="Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <a id="4810e4c932585332" href="R/4810e4c932585332.html" target="n" data-glyph="46,1" class="i field">_md</a>;
+        <b>private readonly</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="ac41e90df38a83c4" href="R/ac41e90df38a83c4.html" target="n" data-glyph="46,1" class="i field">_r</a>;
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct an object writer for the specified repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="81656ecc2c2175d2" href="R/81656ecc2c2175d2.html" target="n" data-glyph="72,1" class="i constructor">ObjectWriter</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>)
+        {
+            <a href="#ac41e90df38a83c4" class="i field">_r</a> = <span class="r0 r">repo</span>;
+            <a href="#1b578406470cc657" class="i field">_buf</a> = <b>new</b> <b>byte</b>[0x2000];
+            <a href="#4810e4c932585332" class="i field">_md</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c3b287d96df31211" class="i method">newMessageDigest</a>();
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Compute the SHA-1 of a blob without creating an object. This is for</span>
+        <span class="c">///</span><span class="c">	figuring out if we already have a blob or not.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">length</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> number of bytes to consume.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">input</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> stream for read blob data from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of a looked for blob.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="ee9c12d49337df97" href="R/ee9c12d49337df97.html" target="n" data-glyph="72,1" class="i method">ComputeBlobSha1</a>(<b>long</b> <span id="r1 rd" class="r1 r">length</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r2 rd" class="r2 r">input</span>)
+        {
+            <b>return</b> <a href="#fcb3ee3d094fa4c4" class="i method">WriteObject</a>(<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#69c2908118b8b8c1" class="i field">Blob</a>, <span class="r1 r">length</span>, <span class="r2 r">input</span>, <b>false</b>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write a blob with the data in the specified file</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">fileInfo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A file containing blob data.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the blob.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="ce5a23cc3ba75504" href="R/ce5a23cc3ba75504.html" target="n" data-glyph="72,1" class="i method">WriteBlob</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r3 rd" class="r3 r">fileInfo</span>)
+        {
+            <b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <span id="r4 rd" class="r4 r">stream</span> = <span class="r3 r">fileInfo</span>.<a href="@0@mscorlib/A.html#950e0a34bec823b1" class="i method">OpenRead</a>())
+            {
+                <b>return</b> <a href="#2a5ef581770d366b" class="i method">WriteBlob</a>(<span class="r3 r">fileInfo</span>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>, <span class="r4 r">stream</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write a blob with the specified data.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">b</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Bytes of the blob.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the blob.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="09bc1ecf3a7883ba" href="R/09bc1ecf3a7883ba.html" target="n" data-glyph="72,1" class="i method">WriteBlob</a>(<b>byte</b>[] <span id="r5 rd" class="r5 r">b</span>)
+        {
+            <b>return</b> <a href="#2a5ef581770d366b" class="i method">WriteBlob</a>(<span class="r5 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <b>new</b> <a href="@0@mscorlib/A.html#f92fa270fda9a82b" class="t constructor">MemoryStream</a>(<span class="r5 r">b</span>));
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write a blob with data from a stream</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">len</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Number of bytes to consume from the stream.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">input</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Stream with blob data.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the blob.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="2a5ef581770d366b" href="R/2a5ef581770d366b.html" target="n" data-glyph="72,1" class="i method">WriteBlob</a>(<b>long</b> <span id="r6 rd" class="r6 r">len</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r7 rd" class="r7 r">input</span>)
+        {
+            <b>return</b> <a href="#fcb3ee3d094fa4c4" class="i method">WriteObject</a>(<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#69c2908118b8b8c1" class="i field">Blob</a>, <span class="r6 r">len</span>, <span class="r7 r">input</span>, <b>true</b>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write a canonical tree to the object database.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">buffer</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The canonical encoding of the tree object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the tree.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="a4564a446eb8863a" href="R/a4564a446eb8863a.html" target="n" data-glyph="72,1" class="i method">WriteCanonicalTree</a>(<b>byte</b>[] <span id="r8 rd" class="r8 r">buffer</span>)
+        {
+            <b>return</b> <a href="#2e945e4751bfd998" class="i method">WriteTree</a>(<span class="r8 r">buffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <b>new</b> <a href="@0@mscorlib/A.html#f92fa270fda9a82b" class="t constructor">MemoryStream</a>(<span class="r8 r">buffer</span>));
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write a Commit to the object database</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">c</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Commit to store.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the commit.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="98fc641e878e50b5" href="R/98fc641e878e50b5.html" target="n" data-glyph="72,1" class="i method">WriteCommit</a>(<a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <span id="r9 rd" class="r9 r">c</span>)
+        {
+            <a href="@0@mscorlib/A.html#3b6090c501893c25" class="t t">Encoding</a> <span id="r10 rd" class="r10 r">encoding</span> = <span class="r9 r">c</span>.<a href="Commit.cs.html#5037496c84af9ccd" class="i property">Encoding</a> ?? <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#b2fcdc67ec48e578" class="i field">CHARSET</a>;
+            <a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r11 rd" class="r11 r">output</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>();
+            <a href="@0@mscorlib/A.html#cf806b417abe1a35" class="k">var</a> <span id="r12 rd" class="r12 r">s</span> = <b>new</b> <a href="@0@mscorlib/A.html#cd70ae8f05c5d055" class="t constructor">BinaryWriter</a>(<span class="r11 r">output</span>, <span class="r10 r">encoding</span>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#9007d955ff9c3d1c" class="i field">HTree</a>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+            <span class="r9 r">c</span>.<a href="Commit.cs.html#d31cf65fa59515a3" class="i property">TreeId</a>.<a href="AnyObjectId.cs.html#48504479afb2d920" class="i method">CopyTo</a>(<span class="r12 r">s</span>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>[] <span id="r13 rd" class="r13 r">parentIds</span> = <span class="r9 r">c</span>.<a href="Commit.cs.html#05ed469ec0352a50" class="i property">ParentIds</a>;
+            <b>for</b> (<b>int</b> <span id="r14 rd" class="r14 r">i</span> = 0; <span class="r14 r">i</span> &lt; <span class="r13 r">parentIds</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r14 r">i</span>++)
+            {
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#1077aa7b0297e235" class="i field">HParent</a>);
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+                <span class="r13 r">parentIds</span>[<span class="r14 r">i</span>].<a href="AnyObjectId.cs.html#48504479afb2d920" class="i method">CopyTo</a>(<span class="r12 r">s</span>);
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+            }
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#d101c83289e7d9bc" class="i field">HAuthor</a>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r9 r">c</span>.<a href="Commit.cs.html#34241d839085af6d" class="i property">Author</a>.<a href="PersonIdent.cs.html#7324f784f9f079d1" class="i method">ToExternalString</a>().<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#6a22cb54110ab566" class="i field">HCommitter</a>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r9 r">c</span>.<a href="Commit.cs.html#ce367880e413101f" class="i property">Committer</a>.<a href="PersonIdent.cs.html#7324f784f9f079d1" class="i method">ToExternalString</a>().<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+
+            <b>if</b> (<span class="r10 r">encoding</span> != <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#b2fcdc67ec48e578" class="i field">CHARSET</a>)
+            {
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#c359e4e6da682bfb" class="i field">HEncoding</a>);
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39; &#39;</span>);
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="r10 r">encoding</span>.<a href="@0@mscorlib/A.html#0a3ce4fe019af38f" class="i property">HeaderName</a>.<a href="@0@mscorlib/A.html#b1bb64f94f2814f6" class="i method">ToUpperInvariant</a>()));
+                <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+            }
+
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+            <span class="r12 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r9 r">c</span>.<a href="Commit.cs.html#28567699584cce31" class="i property">Message</a>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+
+            <b>return</b> <a href="#336a630bdb4eca4f" class="i method">WriteCommit</a>(<span class="r11 r">output</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+        }
+
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="336a630bdb4eca4f" href="R/336a630bdb4eca4f.html" target="n" data-glyph="76,1" class="i method">WriteCommit</a>(<b>byte</b>[] <span id="r15 rd" class="r15 r">b</span>)
+        {
+            <b>return</b> <a href="#955c0991856510fc" class="i method">WriteCommit</a>(<span class="r15 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <b>new</b> <a href="@0@mscorlib/A.html#f92fa270fda9a82b" class="t constructor">MemoryStream</a>(<span class="r15 r">b</span>));
+        }
+
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="955c0991856510fc" href="R/955c0991856510fc.html" target="n" data-glyph="76,1" class="i method">WriteCommit</a>(<b>long</b> <span id="r16 rd" class="r16 r">len</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r17 rd" class="r17 r">input</span>)
+        {
+            <b>return</b> <a href="#fcb3ee3d094fa4c4" class="i method">WriteObject</a>(<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>, <span class="r16 r">len</span>, <span class="r17 r">input</span>, <b>true</b>);
+        }
+
+        <b>internal</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="fcb3ee3d094fa4c4" href="R/fcb3ee3d094fa4c4.html" target="n" data-glyph="74,1" class="i method">WriteObject</a>(<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a> <span id="r18 rd" class="r18 r">type</span>, <b>long</b> <span id="r19 rd" class="r19 r">len</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r20 rd" class="r20 r">input</span>, <b>bool</b> <span id="r21 rd" class="r21 r">store</span>)
+        {
+            <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r22 rd" class="r22 r">info</span>;
+            <span class="t t">DeflaterOutputStream</span> <span id="r23 rd" class="r23 r">stream</span>;
+            <a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <span id="r24 rd" class="r24 r">stream2</span>;
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r25 rd" class="r25 r">objectId</span> = <b>null</b>;
+            <span class="t t">Deflater</span> <span id="r26 rd" class="r26 r">def</span> = <b>null</b>;
+
+            <b>if</b> (<span class="r21 r">store</span>)
+            {
+                <span class="r22 r">info</span> = <a href="#ac41e90df38a83c4" class="i field">_r</a>.<a href="Repository.cs.html#8335808da30bf0cd" class="i property">ObjectsDirectory</a>.<a href="Util/Extensions.cs.html#32bb4602b998fc0a" class="i method">CreateTempFile</a>(<span class="s">&quot;noz&quot;</span>);
+                <span class="r24 r">stream2</span> = <span class="r22 r">info</span>.<a href="@0@mscorlib/A.html#4e528f9f26896692" class="i method">OpenWrite</a>();
+            }
+            <b>else</b>
+            {
+                <span class="r22 r">info</span> = <b>null</b>;
+                <span class="r24 r">stream2</span> = <b>null</b>;
+            }
+
+            <a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#cd4e77fc3d87d149" class="i method">Reset</a>();
+            <b>if</b> (<span class="r21 r">store</span>)
+            {
+                <span class="r26 r">def</span> = <b>new</b> <span class="t constructor">Deflater</span>(<a href="#ac41e90df38a83c4" class="i field">_r</a>.<a href="Repository.cs.html#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="RepositoryConfig.cs.html#288eed24ede43959" class="i method">getCore</a>().<a href="CoreConfig.cs.html#21944de5f6bbd54f" class="i method">getCompression</a>());
+                <span class="r23 r">stream</span> = <b>new</b> <span class="t constructor">DeflaterOutputStream</span>(<span class="r24 r">stream2</span>, <span class="r26 r">def</span>);
+            }
+            <b>else</b>
+            {
+                <span class="r23 r">stream</span> = <b>null</b>;
+            }
+
+            <b>try</b>
+            {
+                <b>int</b> <span id="r27 rd" class="r27 r">num</span>;
+                <b>byte</b>[] <span id="r28 rd" class="r28 r">bytes</span> = <a href="Codec.cs.html#5591adc7c6b3b8f1" class="t t">Codec</a>.<a href="Codec.cs.html#769a08d9893eceb5" class="i method">EncodedTypeString</a>(<span class="r18 r">type</span>);
+                <a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#3c8fc7c35c752c3b" class="i method">Update</a>(<span class="r28 r">bytes</span>);
+                <b>if</b> (<span class="r23 r">stream</span> != <b>null</b>)
+                {
+                    <span class="r23 r">stream</span>.<span class="i method">Write</span>(<span class="r28 r">bytes</span>, 0, <span class="r28 r">bytes</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                }
+
+                <a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#8efff86bd6253854" class="i method">Update</a>(0x20);
+                <b>if</b> (<span class="r23 r">stream</span> != <b>null</b>)
+                {
+                    <span class="r23 r">stream</span>.<span class="i method">WriteByte</span>(0x20);
+                }
+
+                <span class="r28 r">bytes</span> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#af14cec28cefe1b4" class="i method">encodeASCII</a>(<span class="r19 r">len</span>.<a href="@0@mscorlib/A.html#76873dfc1b95c712" class="i method">ToString</a>());
+                <a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#3c8fc7c35c752c3b" class="i method">Update</a>(<span class="r28 r">bytes</span>);
+                <b>if</b> (<span class="r23 r">stream</span> != <b>null</b>)
+                {
+                    <span class="r23 r">stream</span>.<span class="i method">Write</span>(<span class="r28 r">bytes</span>, 0, <span class="r28 r">bytes</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+                }
+
+                <a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#8efff86bd6253854" class="i method">Update</a>(0);
+                <b>if</b> (<span class="r23 r">stream</span> != <b>null</b>)
+                {
+                    <span class="r23 r">stream</span>.<span class="i method">WriteByte</span>(0);
+                }
+                <b>while</b> ((<span class="r19 r">len</span> &gt; 0L) &amp;&amp; ((<span class="r27 r">num</span> = <span class="r20 r">input</span>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<a href="#1b578406470cc657" class="i field">_buf</a>, 0, (<b>int</b>)<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<span class="r19 r">len</span>, <a href="#1b578406470cc657" class="i field">_buf</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>))) &gt; 0))
+                {
+                    <a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<a href="#1b578406470cc657" class="i field">_buf</a>, 0, <span class="r27 r">num</span>);
+                    <b>if</b> (<span class="r23 r">stream</span> != <b>null</b>)
+                    {
+                        <span class="r23 r">stream</span>.<span class="i method">Write</span>(<a href="#1b578406470cc657" class="i field">_buf</a>, 0, <span class="r27 r">num</span>);
+                    }
+                    <span class="r19 r">len</span> -= <span class="r27 r">num</span>;
+                }
+
+                <b>if</b> (<span class="r19 r">len</span> != 0L)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Input did not match supplied Length. &quot;</span> + <span class="r19 r">len</span> + <span class="s">&quot; bytes are missing.&quot;</span>);
+                }
+
+                <b>if</b> (<span class="r23 r">stream</span> != <b>null</b>)
+                {
+                    <span class="r23 r">stream</span>.<span class="i method">Close</span>();
+                    <b>if</b> (<span class="r22 r">info</span> != <b>null</b>)
+                    {
+                        <span class="r22 r">info</span>.<a href="@0@mscorlib/A.html#37ee700f18773394" class="i property">IsReadOnly</a> = <b>true</b>;
+                    }
+                }
+                <span class="r25 r">objectId</span> = <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a84de848edbd5661" class="i method">FromRaw</a>(<a href="#4810e4c932585332" class="i field">_md</a>.<a href="Util/MessageDigest.cs.html#032ba42f3411690d" class="i method">Digest</a>());
+            }
+            <b>finally</b>
+            {
+                <b>if</b> ((<span class="r25 r">objectId</span> == <b>null</b>) &amp;&amp; (<span class="r23 r">stream</span> != <b>null</b>))
+                {
+                    <b>try</b>
+                    {
+                        <span class="r23 r">stream</span>.<span class="i method">Close</span>();
+                    }
+                    <b>finally</b>
+                    {
+                        <span class="r22 r">info</span>.<a href="Util/PathUtil.cs.html#bf54af593f7b2aad" class="i method">DeleteFile</a>();
+                    }
+
+                    <b>if</b> (<span class="r26 r">def</span> != <b>null</b>)
+                    {
+                        <span class="r26 r">def</span>.<span class="i method">Finish</span>();
+                    }
+                }
+            }
+            <b>if</b> (<span class="r22 r">info</span> != <b>null</b>)
+            {
+                <b>if</b> (<a href="#ac41e90df38a83c4" class="i field">_r</a>.<a href="Repository.cs.html#02a2ce785759ae90" class="i method">HasObject</a>(<span class="r25 r">objectId</span>))
+                {
+                    <span class="c">// Object is already in the repository so remove</span>
+                    <span class="c">// the temporary file.</span>
+                    <span class="c">//</span>
+                    <span class="r22 r">info</span>.<a href="Util/PathUtil.cs.html#bf54af593f7b2aad" class="i method">DeleteFile</a>();
+                }
+                <b>else</b>
+                {
+                    <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r29 rd" class="r29 r">info2</span> = <a href="#ac41e90df38a83c4" class="i field">_r</a>.<a href="Repository.cs.html#c79c19964e8db0e6" class="i method">ToFile</a>(<span class="r25 r">objectId</span>);
+                    <b>if</b> (!<span class="r22 r">info</span>.<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<span class="r29 r">info2</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+                    {
+                        <span class="c">// Maybe the directory doesn&#39;t exist yet as the object</span>
+                        <span class="c">// directories are always lazily created. Note that we</span>
+                        <span class="c">// try the rename first as the directory likely does exist.</span>
+                        <span class="c">//</span>
+                        <b>if</b> (<span class="r29 r">info2</span>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a> != <b>null</b>)
+                        {
+                            <span class="r29 r">info2</span>.<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>.<a href="@0@mscorlib/A.html#368db83772a7dab0" class="i method">Create</a>();
+                        }
+                        <b>if</b> (!<span class="r22 r">info</span>.<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<span class="r29 r">info2</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>) &amp;&amp; !<a href="#ac41e90df38a83c4" class="i field">_r</a>.<a href="Repository.cs.html#02a2ce785759ae90" class="i method">HasObject</a>(<span class="r25 r">objectId</span>))
+                        {
+                            <span class="c">// The object failed to be renamed into its proper</span>
+                            <span class="c">// location and it doesn&#39;t exist in the repository</span>
+                            <span class="c">// either. We really don&#39;t know what went wrong, so</span>
+                            <span class="c">// fail.</span>
+                            <span class="c">//</span>
+                            <span class="r22 r">info</span>.<a href="Util/PathUtil.cs.html#bf54af593f7b2aad" class="i method">DeleteFile</a>();
+                            <b>throw</b> <b>new</b> <a href="Exceptions/ObjectWritingException.cs.html#d5c41605ef7a6b89" class="t constructor">ObjectWritingException</a>(<span class="s">&quot;Unable to create new object: &quot;</span> + <span class="r29 r">info2</span>);
+                        }
+                    }
+                }
+            }
+            <b>return</b> <span class="r25 r">objectId</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Write an annotated Tag to the object database</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">tag</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Tag</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">SHA-1 of the tag.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="98850345db430ee6" href="R/98850345db430ee6.html" target="n" data-glyph="72,1" class="i method">WriteTag</a>(<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a> <span id="r30 rd" class="r30 r">tag</span>)
+        {
+            <b>using</b> (<a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r31 rd" class="r31 r">output</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>())
+            <b>using</b> (<a href="@0@mscorlib/A.html#cf806b417abe1a35" class="k">var</a> <span id="r32 rd" class="r32 r">s</span> = <b>new</b> <a href="@0@mscorlib/A.html#93163b0edbac85a5" class="t constructor">BinaryWriter</a>(<span class="r31 r">output</span>))
+            {
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="s">&quot;object &quot;</span>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r30 r">tag</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>.<a href="AnyObjectId.cs.html#48504479afb2d920" class="i method">CopyTo</a>(<span class="r32 r">s</span>);
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="s">&quot;type &quot;</span>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r30 r">tag</span>.<a href="Tag.cs.html#9f59208014e0bbeb" class="i property">TagType</a>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="s">&quot;tag &quot;</span>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r30 r">tag</span>.<a href="Tag.cs.html#99f0c9e2e4e32023" class="i property">TagName</a>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="s">&quot;tagger &quot;</span>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r30 r">tag</span>.<a href="Tag.cs.html#9d8b792a844e92bd" class="i property">Author</a>.<a href="PersonIdent.cs.html#7324f784f9f079d1" class="i method">ToExternalString</a>().<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#41e8bc536629d58c" class="i method">Write</a>(<span class="s">&#39;\n&#39;</span>);
+                <span class="r32 r">s</span>.<a href="@0@mscorlib/A.html#3a19d8dc22f452e6" class="i method">Write</a>(<span class="r30 r">tag</span>.<a href="Tag.cs.html#f18625db46b02c51" class="i property">Message</a>.<a href="@0@mscorlib/A.html#81c2d980f5d0ee35" class="i method">ToCharArray</a>());
+
+                <b>return</b> <a href="#3d3857833da1807f" class="i method">WriteTag</a>(<span class="r31 r">output</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+            }
+        }
+
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="3d3857833da1807f" href="R/3d3857833da1807f.html" target="n" data-glyph="76,1" class="i method">WriteTag</a>(<b>byte</b>[] <span id="r33 rd" class="r33 r">b</span>)
+        {
+            <b>return</b> <a href="#330720429084b1c5" class="i method">WriteTag</a>(<span class="r33 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <b>new</b> <a href="@0@mscorlib/A.html#f92fa270fda9a82b" class="t constructor">MemoryStream</a>(<span class="r33 r">b</span>));
+        }
+
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="330720429084b1c5" href="R/330720429084b1c5.html" target="n" data-glyph="76,1" class="i method">WriteTag</a>(<b>long</b> <span id="r34 rd" class="r34 r">len</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r35 rd" class="r35 r">input</span>)
+        {
+            <b>return</b> <a href="#fcb3ee3d094fa4c4" class="i method">WriteObject</a>(<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#ef24a02f56064bf4" class="i field">Tag</a>, <span class="r34 r">len</span>, <span class="r35 r">input</span>, <b>true</b>);
+        }
+
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="d5ee2ee55acc21f3" href="R/d5ee2ee55acc21f3.html" target="n" data-glyph="72,1" class="i method">WriteTree</a>(<a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <span id="r36 rd" class="r36 r">t</span>)
+        {
+            <a href="@0@mscorlib/A.html#1a4dcb744a23ba6f" class="k">var</a> <span id="r37 rd" class="r37 r">output</span> = <b>new</b> <a href="@0@mscorlib/A.html#d308091cc690e78d" class="t constructor">MemoryStream</a>();
+            <a href="@0@mscorlib/A.html#cf806b417abe1a35" class="k">var</a> <span id="r38 rd" class="r38 r">writer</span> = <b>new</b> <a href="@0@mscorlib/A.html#93163b0edbac85a5" class="t constructor">BinaryWriter</a>(<span class="r37 r">output</span>);
+            <b>foreach</b> (<a href="TreeEntry.cs.html#c199e8ce68862a03" class="t t">TreeEntry</a> <span id="r39 rd" class="r39 r">entry</span> <b>in</b> <span class="r36 r">t</span>.<a href="Tree.cs.html#9883e64bacef8470" class="i property">Members</a>)
+            {
+                <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r40 rd" class="r40 r">id</span> = <span class="r39 r">entry</span>.<a href="TreeEntry.cs.html#87240feeca841fd1" class="i property">Id</a>;
+                <b>if</b> (<span class="r40 r">id</span> == <b>null</b>)
+                {
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ObjectWritingException.cs.html#d5c41605ef7a6b89" class="t constructor">ObjectWritingException</a>(<span class="s">&quot;object at path \&quot;&quot;</span> + <span class="r39 r">entry</span>.<a href="TreeEntry.cs.html#f2fc52ae001c479c" class="i property">FullName</a> +
+                                                     <span class="s">&quot;\&quot; does not have an id assigned.  All object ids must be assigned prior to writing a tree.&quot;</span>);
+                }
+                <span class="r39 r">entry</span>.<a href="TreeEntry.cs.html#16a0bfc267995533" class="i property">Mode</a>.<a href="FileMode.cs.html#71a76d6e2d338a3f" class="i method">CopyTo</a>(<span class="r37 r">output</span>);
+                <span class="r38 r">writer</span>.<a href="@0@mscorlib/A.html#430d3c5573a2b429" class="i method">Write</a>((<b>byte</b>)0x20);
+                <span class="r38 r">writer</span>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<span class="r39 r">entry</span>.<a href="TreeEntry.cs.html#c68618c8cb939fd5" class="i property">NameUTF8</a>);
+                <span class="r38 r">writer</span>.<a href="@0@mscorlib/A.html#430d3c5573a2b429" class="i method">Write</a>((<b>byte</b>)0);
+                <span class="r40 r">id</span>.<a href="AnyObjectId.cs.html#76733ba2b587238b" class="i method">copyRawTo</a>(<span class="r37 r">output</span>);
+            }
+            <b>return</b> <a href="#a4564a446eb8863a" class="i method">WriteCanonicalTree</a>(<span class="r37 r">output</span>.<a href="@0@mscorlib/A.html#5df5fc757781f05e" class="i method">ToArray</a>());
+        }
+
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="2e945e4751bfd998" href="R/2e945e4751bfd998.html" target="n" data-glyph="76,1" class="i method">WriteTree</a>(<b>long</b> <span id="r41 rd" class="r41 r">len</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r42 rd" class="r42 r">input</span>)
+        {
+            <b>return</b> <a href="#fcb3ee3d094fa4c4" class="i method">WriteObject</a>(<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#d3cd40a2991d1aba" class="i field">Tree</a>, <span class="r41 r">len</span>, <span class="r42 r">input</span>, <b>true</b>);
+        }
+    }
+}</pre></td></tr></table></div></body></html>

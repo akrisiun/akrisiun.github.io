@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html><head><title>jquery.unobtrusive-ajax.js</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="ix(168);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/d:/Sanitex/webstack/Mvc/src/System.Web.Mvc/JavaScript/jquery.unobtrusive-ajax.js" target="_top">d:\Sanitex\webstack\Mvc\src\System.Web.Mvc\JavaScript\jquery.unobtrusive-ajax.js</a><br/></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+/*!
+** Unobtrusive Ajax support library for jQuery
+** Copyright (C) Microsoft Corporation. All rights reserved.
+*/
+ 
+/*jslint white: true, browser: true, onevar: true, undef: true, nomen: true, eqeqeq: true, plusplus: true, bitwise: true, regexp: true, newcap: true, immed: true, strict: false */
+/*global window: false, jQuery: false */
+ 
+(function ($) {
+    var data_click = &quot;unobtrusiveAjaxClick&quot;,
+        data_target = &quot;unobtrusiveAjaxClickTarget&quot;,
+        data_validation = &quot;unobtrusiveValidation&quot;;
+ 
+    function getFunction(code, argNames) {
+        var fn = window, parts = (code || &quot;&quot;).split(&quot;.&quot;);
+        while (fn <span class="xer">&amp;</span><span class="xer">&amp;</span> parts.length) {
+            fn = fn[parts.shift()];
+        }
+        if (typeof (fn) === &quot;function&quot;) {
+            return fn;
+        }
+        argNames.push(code);
+        return Function.constructor.apply(null, argNames);
+    }
+ 
+    function isMethodProxySafe(method) {
+        return method === &quot;GET&quot; || method === &quot;POST&quot;;
+    }
+ 
+    function asyncOnBeforeSend(xhr, method) {
+        if (!isMethodProxySafe(method)) {
+            xhr.setRequestHeader(&quot;X-HTTP-Method-Override&quot;, method);
+        }
+    }
+ 
+    function asyncOnSuccess(element, data, contentType) {
+        var mode;
+ 
+        if (contentType.indexOf(&quot;application/x-javascript&quot;) !== -1) {  // jQuery already executes JavaScript for us
+            return;
+        }
+ 
+        mode = (element.getAttribute(&quot;data-ajax-mode&quot;) || &quot;&quot;).toUpperCase();
+        $(element.getAttribute(&quot;data-ajax-update&quot;)).each(function (i, update) {
+            switch (mode) {
+            case &quot;BEFORE&quot;:
+                $(update).prepend(data);
+                break;
+            case &quot;AFTER&quot;:
+                $(update).append(data);
+                break;
+            case &quot;REPLACE-WITH&quot;:
+                $(update).replaceWith(data);
+                break;
+            default:
+                $(update).html(data);
+                break;
+            }
+        });
+    }
+ 
+    function asyncRequest(element, options) {
+        var confirm, loading, method, duration;
+ 
+        confirm = element.getAttribute(&quot;data-ajax-confirm&quot;);
+        if (confirm <span class="xer">&amp;</span><span class="xer">&amp;</span> !window.confirm(confirm)) {
+            return;
+        }
+ 
+        loading = $(element.getAttribute(&quot;data-ajax-loading&quot;));
+        duration = parseInt(element.getAttribute(&quot;data-ajax-loading-duration&quot;), 10) || 0;
+ 
+        $.extend(options, {
+            type: element.getAttribute(&quot;data-ajax-method&quot;) || undefined,
+            url: element.getAttribute(&quot;data-ajax-url&quot;) || undefined,
+            cache: !!element.getAttribute(&quot;data-ajax-cache&quot;),
+            beforeSend: function (xhr) {
+                var result;
+                asyncOnBeforeSend(xhr, method);
+                result = getFunction(element.getAttribute(&quot;data-ajax-begin&quot;), [&quot;xhr&quot;]).apply(element, arguments);
+                if (result !== false) {
+                    loading.show(duration);
+                }
+                return result;
+            },
+            complete: function () {
+                loading.hide(duration);
+                getFunction(element.getAttribute(&quot;data-ajax-complete&quot;), [&quot;xhr&quot;, &quot;status&quot;]).apply(element, arguments);
+            },
+            success: function (data, status, xhr) {
+                asyncOnSuccess(element, data, xhr.getResponseHeader(&quot;Content-Type&quot;) || &quot;text/html&quot;);
+                getFunction(element.getAttribute(&quot;data-ajax-success&quot;), [&quot;data&quot;, &quot;status&quot;, &quot;xhr&quot;]).apply(element, arguments);
+            },
+            error: function () {
+                getFunction(element.getAttribute(&quot;data-ajax-failure&quot;), [&quot;xhr&quot;, &quot;status&quot;, &quot;error&quot;]).apply(element, arguments);
+            }
+        });
+ 
+        options.data.push({ name: &quot;X-Requested-With&quot;, value: &quot;XMLHttpRequest&quot; });
+ 
+        method = options.type.toUpperCase();
+        if (!isMethodProxySafe(method)) {
+            options.type = &quot;POST&quot;;
+            options.data.push({ name: &quot;X-HTTP-Method-Override&quot;, value: method });
+        }
+ 
+        $.ajax(options);
+    }
+ 
+    function validate(form) {
+        var validationInfo = $(form).data(data_validation);
+        return !validationInfo || !validationInfo.validate || validationInfo.validate();
+    }
+ 
+    $(document).on(&quot;click&quot;, &quot;a[data-ajax=true]&quot;, function (evt) {
+        evt.preventDefault();
+        asyncRequest(this, {
+            url: this.href,
+            type: &quot;GET&quot;,
+            data: []
+        });
+    });
+ 
+    $(document).on(&quot;click&quot;, &quot;form[data-ajax=true] input[type=image]&quot;, function (evt) {
+        var name = evt.target.name,
+            target = $(evt.target),
+            form = $(target.parents(&quot;form&quot;)[0]),
+            offset = target.offset();
+ 
+        form.data(data_click, [
+            { name: name + &quot;.x&quot;, value: Math.round(evt.pageX - offset.left) },
+            { name: name + &quot;.y&quot;, value: Math.round(evt.pageY - offset.top) }
+        ]);
+ 
+        setTimeout(function () {
+            form.removeData(data_click);
+        }, 0);
+    });
+ 
+    $(document).on(&quot;click&quot;, &quot;form[data-ajax=true] :submit&quot;, function (evt) {
+        var name = evt.currentTarget.name,
+            target = $(evt.target),
+            form = $(target.parents(&quot;form&quot;)[0]);
+ 
+        form.data(data_click, name ? [{ name: name, value: evt.currentTarget.value }] : []);
+        form.data(data_target, target);
+ 
+        setTimeout(function () {
+            form.removeData(data_click);
+            form.removeData(data_target);
+        }, 0);
+    });
+ 
+    $(document).on(&quot;submit&quot;, &quot;form[data-ajax=true]&quot;, function (evt) {
+        var clickInfo = $(this).data(data_click) || [],
+            clickTarget = $(this).data(data_target),
+            isCancel = clickTarget <span class="xer">&amp;</span><span class="xer">&amp;</span> clickTarget.hasClass(&quot;cancel&quot;);
+        evt.preventDefault();
+        if (!isCancel <span class="xer">&amp;</span><span class="xer">&amp;</span> !validate(this)) {
+            return;
+        }
+        asyncRequest(this, {
+            url: this.action,
+            type: this.method || &quot;GET&quot;,
+            data: clickInfo.concat($(this).serializeArray())
+        });
+    });
+}(jQuery));</pre></td></tr></table></div></body></html>

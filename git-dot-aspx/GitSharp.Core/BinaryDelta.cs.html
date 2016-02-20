@@ -1,0 +1,159 @@
+﻿<!DOCTYPE html>
+<html><head><title>BinaryDelta.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(150);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/BinaryDelta.cs" target="_top">BinaryDelta.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2007, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Recreate a stream from a base stream and a GIT pack delta.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> This entire class is heavily cribbed from </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">patch-delta.c</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> in the</span>
+	<span class="c">///</span><span class="c"> GIT project. The original delta patching code was written by Nicolas Pitre</span>
+	<span class="c">///</span><span class="c"> (</span><span class="c">&amp;lt;</span><span class="c">nico@cam.org</span><span class="c">&amp;gt;</span><span class="c">).</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public static class</b> <a id="1d3224038d16462a" href="R/1d3224038d16462a.html" target="n" data-glyph="0,0" class="t t">BinaryDelta</a>
+	{
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Apply the changes defined by delta to the data in base, yielding a new</span>
+		<span class="c">///</span><span class="c"> array of bytes.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">baseData</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">some byte representing an object of some kind.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">delta</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A git pack delta defining the transform from one version to</span>
+		<span class="c">///</span><span class="c"> another.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Patched base</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static byte</b>[] <a id="83a7012afb777f16" href="R/83a7012afb777f16.html" target="n" data-glyph="72,1" class="i method">Apply</a>(<b>byte</b>[] <span id="r0 rd" class="r0 r">baseData</span>, <b>byte</b>[] <span id="r1 rd" class="r1 r">delta</span>)
+		{
+			<b>int</b> <span id="r2 rd" class="r2 r">deltaPtr</span> = 0;
+
+			<span class="c">// Length of the base object (a variable Length int).</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r3 rd" class="r3 r">baseLen</span> = 0;
+			<b>int</b> <span id="r4 rd" class="r4 r">c</span>, <span id="r5 rd" class="r5 r">shift</span> = 0;
+			<b>do</b>
+			{
+				<span class="r4 r">c</span> = <span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff;
+				<span class="r3 r">baseLen</span> |= (<span class="r4 r">c</span> &amp; 0x7f) &lt;&lt; <span class="r5 r">shift</span>;
+				<span class="r5 r">shift</span> += 7;
+			} <b>while</b> ((<span class="r4 r">c</span> &amp; 0x80) != 0);
+
+			<b>if</b> (<span class="r0 r">baseData</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> != <span class="r3 r">baseLen</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;baseData Length incorrect&quot;</span>);
+			}
+
+			<span class="c">// Length of the resulting object (a variable Length int).</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r6 rd" class="r6 r">resLen</span> = 0;
+			<span class="r5 r">shift</span> = 0;
+			<b>do</b>
+			{
+				<span class="r4 r">c</span> = <span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff;
+				<span class="r6 r">resLen</span> |= (<span class="r4 r">c</span> &amp; 0x7f) &lt;&lt; <span class="r5 r">shift</span>;
+				<span class="r5 r">shift</span> += 7;
+			} <b>while</b> ((<span class="r4 r">c</span> &amp; 0x80) != 0);
+
+			<b>var</b> <span id="r7 rd" class="r7 r">result</span> = <b>new</b> <b>byte</b>[<span class="r6 r">resLen</span>];
+			<b>int</b> <span id="r8 rd" class="r8 r">resultPtr</span> = 0;
+			<b>while</b> (<span class="r2 r">deltaPtr</span> &lt; <span class="r1 r">delta</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>int</b> <span id="r9 rd" class="r9 r">cmd</span> = <span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff;
+				<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x80) != 0)
+				{
+					<span class="c">// Determine the segment of the base which should</span>
+					<span class="c">// be copied into the output. The segment is given</span>
+					<span class="c">// as an offset and a Length.</span>
+					<span class="c">//</span>
+					<b>int</b> <span id="r10 rd" class="r10 r">copyOffset</span> = 0;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x01) != 0)
+						<span class="r10 r">copyOffset</span> = <span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x02) != 0)
+						<span class="r10 r">copyOffset</span> |= (<span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff) &lt;&lt; 8;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x04) != 0)
+						<span class="r10 r">copyOffset</span> |= (<span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff) &lt;&lt; 16;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x08) != 0)
+						<span class="r10 r">copyOffset</span> |= (<span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff) &lt;&lt; 24;
+
+					<b>int</b> <span id="r11 rd" class="r11 r">copySize</span> = 0;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x10) != 0)
+						<span class="r11 r">copySize</span> = <span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x20) != 0)
+						<span class="r11 r">copySize</span> |= (<span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff) &lt;&lt; 8;
+					<b>if</b> ((<span class="r9 r">cmd</span> &amp; 0x40) != 0)
+						<span class="r11 r">copySize</span> |= (<span class="r1 r">delta</span>[<span class="r2 r">deltaPtr</span>++] &amp; 0xff) &lt;&lt; 16;
+					<b>if</b> (<span class="r11 r">copySize</span> == 0)
+						<span class="r11 r">copySize</span> = 0x10000;
+
+					<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r0 r">baseData</span>, <span class="r10 r">copyOffset</span>, <span class="r7 r">result</span>, <span class="r8 r">resultPtr</span>, <span class="r11 r">copySize</span>);
+					<span class="r8 r">resultPtr</span> += <span class="r11 r">copySize</span>;
+				}
+				<b>else if</b> (<span class="r9 r">cmd</span> != 0)
+				{
+					<span class="c">// Anything else the data is literal within the delta</span>
+					<span class="c">// itself.</span>
+					<span class="c">//</span>
+					<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r1 r">delta</span>, <span class="r2 r">deltaPtr</span>, <span class="r7 r">result</span>, <span class="r8 r">resultPtr</span>, <span class="r9 r">cmd</span>);
+					<span class="r2 r">deltaPtr</span> += <span class="r9 r">cmd</span>;
+					<span class="r8 r">resultPtr</span> += <span class="r9 r">cmd</span>;
+				}
+				<b>else</b>
+				{
+					<span class="c">// cmd == 0 has been reserved for future encoding but</span>
+					<span class="c">// for now its not acceptable.</span>
+					<span class="c">//</span>
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;unsupported command 0&quot;</span>);
+				}
+			}
+
+			<b>return</b> <span class="r7 r">result</span>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

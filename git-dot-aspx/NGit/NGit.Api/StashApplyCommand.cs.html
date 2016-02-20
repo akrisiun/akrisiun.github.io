@@ -1,0 +1,398 @@
+﻿<!DOCTYPE html>
+<html><head><title>StashApplyCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(389);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/StashApplyCommand.cs" target="_top">NGit.Api\StashApplyCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Command class to apply a stashed commit.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Command class to apply a stashed commit.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span><span class="c"> </span><span class="c">href</span><span class="c">=</span><span class="c">&quot;</span><span class="c">http://www.kernel.org/pub/software/scm/git/docs/git-stash.html</span><span class="c">&quot;</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about Stash</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">since</span><span class="c">&gt;</span><span class="c">2.0</span><span class="c">&lt;/</span><span class="c">since</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="559d02d07202e353" href="../R/559d02d07202e353.html" target="n" data-glyph="0,0" class="t t">StashApplyCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>&gt;
+	{
+		<b>private static readonly string</b> <a id="34b93c984a8864f0" href="../R/34b93c984a8864f0.html" target="n" data-glyph="46,1" class="i field">DEFAULT_REF</a> = <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#ae8e113f96e49500" class="i field">STASH</a> + <span class="s">&quot;@{0}&quot;</span>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Stash diff filter that looks for differences in the first three trees</span>
+		<span class="c">///</span><span class="c"> which must be the stash head tree, stash index tree, and stash working</span>
+		<span class="c">///</span><span class="c"> directory tree in any order.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Stash diff filter that looks for differences in the first three trees</span>
+		<span class="c">///</span><span class="c"> which must be the stash head tree, stash index tree, and stash working</span>
+		<span class="c">///</span><span class="c"> directory tree in any order.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private class</b> <a id="b5500ff4a6c8b750" href="../R/b5500ff4a6c8b750.html" target="n" data-glyph="4,1" class="t t"><span id="75e3e5ab56a01405">StashDiffFilter</span></a> : <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>
+		{
+			<b>public override bool</b> <a id="23f1c2922d553c6a" href="../R/23f1c2922d553c6a.html" target="n" data-glyph="72,2" class="i method">Include</a>(<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r0 rd" class="r0 r">walker</span>)
+			{
+				<b>int</b> <span id="r1 rd" class="r1 r">m</span> = <span class="r0 r">walker</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#741283662f5e741c" class="i method">GetRawMode</a>(0);
+				<b>if</b> (<span class="r0 r">walker</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#741283662f5e741c" class="i method">GetRawMode</a>(1) != <span class="r1 r">m</span> || !<span class="r0 r">walker</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#9d5ac5827a891d5f" class="i method">IdEqual</a>(1, 0))
+				{
+					<b>return true</b>;
+				}
+				<b>if</b> (<span class="r0 r">walker</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#741283662f5e741c" class="i method">GetRawMode</a>(2) != <span class="r1 r">m</span> || !<span class="r0 r">walker</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#9d5ac5827a891d5f" class="i method">IdEqual</a>(2, 0))
+				{
+					<b>return true</b>;
+				}
+				<b>return false</b>;
+			}
+
+			<b>public override bool</b> <a id="d535b54fb10a5d9e" href="../R/d535b54fb10a5d9e.html" target="n" data-glyph="72,2" class="i method">ShouldBeRecursive</a>()
+			{
+				<b>return false</b>;
+			}
+
+			<b>public override</b> <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <a id="2dd4723d5cc3d56e" href="../R/2dd4723d5cc3d56e.html" target="n" data-glyph="72,2" class="i method">Clone</a>()
+			{
+				<b>return</b> <a href="#b5500ff4a6c8b750" class="k">this</a>;
+			}
+
+			<b>public override string</b> <a id="89b43eee89d8a5aa" href="../R/89b43eee89d8a5aa.html" target="n" data-glyph="72,2" class="i method">ToString</a>()
+			{
+				<b>return</b> <span class="s">&quot;STASH_DIFF&quot;</span>;
+			}
+		}
+
+		<b>private string</b> <a id="84e538cbffa73c4d" href="../R/84e538cbffa73c4d.html" target="n" data-glyph="46,1" class="i field">stashRef</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create command to apply the changes of a stashed commit</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="2498544e168c44bc" href="../R/2498544e168c44bc.html" target="n" data-glyph="75,1" class="i constructor">StashApplyCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r2 rd" class="r2 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r2 r">repo</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the stash reference to apply</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This will default to apply the latest stashed commit (stash@{0}) if</span>
+		<span class="c">///</span><span class="c"> unspecified</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">stashRef</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#559d02d07202e353" class="t t">StashApplyCommand</a> <a id="cf57130342e95b0f" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetStashRef</a>(<b>string</b> <span id="r3 rd" class="r3 r">stashRef</span>)
+		{
+			<a href="#559d02d07202e353" class="k">this</a>.<a href="#84e538cbffa73c4d" class="i field">stashRef</a> = <span class="r3 r">stashRef</span>;
+			<b>return</b> <a href="#559d02d07202e353" class="k">this</a>;
+		}
+
+		<b>private bool</b> <a id="4c991ad7631a0c68" href="../R/4c991ad7631a0c68.html" target="n" data-glyph="76,1" class="i method">IsEqualEntry</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r4 rd" class="r4 r">iter1</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r5 rd" class="r5 r">iter2</span>)
+		{
+			<b>if</b> (!<span class="r4 r">iter1</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#5f740308b516a2ae" class="i property">EntryFileMode</a>.<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<span class="r5 r">iter2</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#5f740308b516a2ae" class="i property">EntryFileMode</a>))
+			{
+				<b>return false</b>;
+			}
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r6 rd" class="r6 r">id1</span> = <span class="r4 r">iter1</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>;
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r7 rd" class="r7 r">id2</span> = <span class="r5 r">iter2</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>;
+			<b>return</b> <span class="r6 r">id1</span> != <b>null</b> ? <span class="r6 r">id1</span>.<a href="../NGit/AnyObjectId.cs.html#1368a7cdab9bbc10" class="i method">Equals</a>(<span class="r7 r">id2</span>) : <span class="r7 r">id2</span> == <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Would unstashing overwrite local changes?</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">stashIndexIter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">stashWorkingTreeIter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">headIter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">indexIter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">workingTreeIter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if unstash conflict, false otherwise</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="dfa268683c293bf2" href="../R/dfa268683c293bf2.html" target="n" data-glyph="76,1" class="i method">IsConflict</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r8 rd" class="r8 r">stashIndexIter</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>
+			 <span id="r9 rd" class="r9 r">stashWorkingTreeIter</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r10 rd" class="r10 r">headIter</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r11 rd" class="r11 r">indexIter</span>
+			, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r12 rd" class="r12 r">workingTreeIter</span>)
+		{
+			<span class="c">// Is the current index dirty?</span>
+			<b>bool</b> <span id="r13 rd" class="r13 r">indexDirty</span> = <span class="r11 r">indexIter</span> != <b>null</b> &amp;&amp; (<span class="r10 r">headIter</span> == <b>null</b> || !<a href="#4c991ad7631a0c68" class="i method">IsEqualEntry</a>(<span class="r11 r">indexIter</span>
+				, <span class="r10 r">headIter</span>));
+			<span class="c">// Is the current working tree dirty?</span>
+			<b>bool</b> <span id="r14 rd" class="r14 r">workingTreeDirty</span> = <span class="r12 r">workingTreeIter</span> != <b>null</b> &amp;&amp; (<span class="r10 r">headIter</span> == <b>null</b> || !<a href="#4c991ad7631a0c68" class="i method">IsEqualEntry</a>
+				(<span class="r12 r">workingTreeIter</span>, <span class="r10 r">headIter</span>));
+			<span class="c">// Would unstashing overwrite existing index changes?</span>
+			<b>if</b> (<span class="r13 r">indexDirty</span> &amp;&amp; <span class="r8 r">stashIndexIter</span> != <b>null</b> &amp;&amp; <span class="r11 r">indexIter</span> != <b>null</b> &amp;&amp; !<a href="#4c991ad7631a0c68" class="i method">IsEqualEntry</a>(<span class="r8 r">stashIndexIter</span>
+				, <span class="r11 r">indexIter</span>))
+			{
+				<b>return true</b>;
+			}
+			<span class="c">// Would unstashing overwrite existing working tree changes?</span>
+			<b>if</b> (<span class="r14 r">workingTreeDirty</span> &amp;&amp; <span class="r9 r">stashWorkingTreeIter</span> != <b>null</b> &amp;&amp; <span class="r12 r">workingTreeIter</span> != <b>null</b> &amp;&amp;
+				 !<a href="#4c991ad7631a0c68" class="i method">IsEqualEntry</a>(<span class="r9 r">stashWorkingTreeIter</span>, <span class="r12 r">workingTreeIter</span>))
+			{
+				<b>return true</b>;
+			}
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="8c4508cab14ef26f" href="../R/8c4508cab14ef26f.html" target="n" data-glyph="76,1" class="i method">GetHeadTree</a>()
+		{
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r15 rd" class="r15 r">headTree</span>;
+			<b>try</b>
+			{
+				<span class="r15 r">headTree</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a> + <span class="s">&quot;^{tree}&quot;</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r16 rd" class="r16 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#bd247ecd7a08ca0c" class="i field">cannotReadTree</a>, <span class="r16 r">e</span>);
+			}
+			<b>if</b> (<span class="r15 r">headTree</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#bd247ecd7a08ca0c" class="i field">cannotReadTree</a>);
+			}
+			<b>return</b> <span class="r15 r">headTree</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="b379ec36d4127ede" href="../R/b379ec36d4127ede.html" target="n" data-glyph="76,1" class="i method">GetStashId</a>()
+		{
+			<b>string</b> <span id="r17 rd" class="r17 r">revision</span> = <a href="#84e538cbffa73c4d" class="i field">stashRef</a> != <b>null</b> ? <a href="#84e538cbffa73c4d" class="i field">stashRef</a> : <a href="#34b93c984a8864f0" class="i field">DEFAULT_REF</a>;
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r18 rd" class="r18 r">stashId</span>;
+			<b>try</b>
+			{
+				<span class="r18 r">stashId</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<span class="r17 r">revision</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r19 rd" class="r19 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/InvalidRefNameException.cs.html#8a627fb6100bb8d3" class="t constructor">InvalidRefNameException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#22003363df33a3de" class="i field">stashResolveFailed</a>
+					, <span class="r17 r">revision</span>), <span class="r19 r">e</span>);
+			}
+			<b>if</b> (<span class="r18 r">stashId</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/InvalidRefNameException.cs.html#810cb5d9988ff0a7" class="t constructor">InvalidRefNameException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#22003363df33a3de" class="i field">stashResolveFailed</a>
+					, <span class="r17 r">revision</span>));
+			}
+			<b>return</b> <span class="r18 r">stashId</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="a47e0510c2558b77" href="../R/a47e0510c2558b77.html" target="n" data-glyph="76,1" class="i method">ScanForConflicts</a>(<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r20 rd" class="r20 r">treeWalk</span>)
+		{
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r21 rd" class="r21 r">workingTree</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>;
+			<b>while</b> (<span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<span class="c">// State of the stashed index and working directory</span>
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r22 rd" class="r22 r">stashIndexIter</span> = <span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(1);
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r23 rd" class="r23 r">stashWorkingIter</span> = <span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(2);
+				<span class="c">// State of the current HEAD, index, and working directory</span>
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r24 rd" class="r24 r">headIter</span> = <span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(3);
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r25 rd" class="r25 r">indexIter</span> = <span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(4);
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r26 rd" class="r26 r">workingIter</span> = <span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(5);
+				<b>if</b> (<a href="#dfa268683c293bf2" class="i method">IsConflict</a>(<span class="r22 r">stashIndexIter</span>, <span class="r23 r">stashWorkingIter</span>, <span class="r24 r">headIter</span>, <span class="r25 r">indexIter</span>, <span class="r26 r">workingIter</span>
+					))
+				{
+					<b>string</b> <span id="r27 rd" class="r27 r">path</span> = <span class="r20 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>;
+					<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r28 rd" class="r28 r">file</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r21 r">workingTree</span>, <span class="r27 r">path</span>);
+					<b>throw</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CheckoutConflictException.cs.html#8b5eeda18a704710" class="t constructor">CheckoutConflictException</a>(<span class="r28 r">file</span>.<a href="/Sharpen/A.html#26770e74c1c011f6" class="i method">GetAbsolutePath</a>());
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="9b415fe407a633a4" href="../R/9b415fe407a633a4.html" target="n" data-glyph="76,1" class="i method">ApplyChanges</a>(<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r29 rd" class="r29 r">treeWalk</span>, <a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r30 rd" class="r30 r">cache</span>, <a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a> <span id="r31 rd" class="r31 r">editor</span>
+			)
+		{
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r32 rd" class="r32 r">workingTree</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>;
+			<b>while</b> (<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<b>string</b> <span id="r33 rd" class="r33 r">path</span> = <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>;
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r34 rd" class="r34 r">file</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r32 r">workingTree</span>, <span class="r33 r">path</span>);
+				<span class="c">// State of the stashed HEAD, index, and working directory</span>
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r35 rd" class="r35 r">stashHeadIter</span> = <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(0);
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r36 rd" class="r36 r">stashIndexIter</span> = <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(1);
+				<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r37 rd" class="r37 r">stashWorkingIter</span> = <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>&gt;(2);
+				<b>if</b> (<span class="r37 r">stashWorkingIter</span> != <b>null</b> &amp;&amp; <span class="r36 r">stashIndexIter</span> != <b>null</b>)
+				{
+					<span class="c">// Checkout index change</span>
+					<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r38 rd" class="r38 r">entry</span> = <span class="r30 r">cache</span>.<a href="../NGit.Dircache/DirCache.cs.html#90914b2f4f78df62" class="i method">GetEntry</a>(<span class="r33 r">path</span>);
+					<b>if</b> (<span class="r38 r">entry</span> == <b>null</b>)
+					{
+						<span class="r38 r">entry</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheEntry.cs.html#4df64496dc4d2dee" class="t constructor">DirCacheEntry</a>(<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#f0f54768669fb833" class="i property">RawPath</a>);
+					}
+					<span class="r38 r">entry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#d64ac705edad125d" class="i property">FileMode</a> = <span class="r36 r">stashIndexIter</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#5f740308b516a2ae" class="i property">EntryFileMode</a>;
+					<span class="r38 r">entry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<span class="r36 r">stashIndexIter</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>);
+					<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#90990bd58db5cb61" class="i method">CheckoutEntry</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r34 r">file</span>, <span class="r38 r">entry</span>, <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#36c5cf926726aefc" class="i property">ObjectReader</a>);
+					<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r39 rd" class="r39 r">updatedEntry</span> = <span class="r38 r">entry</span>;
+					<span class="r31 r">editor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#21a67cfbbba09c6d" class="i method">Add</a>(<b>new</b> <a href="#503a94b1a085d6f4" class="t constructor">_PathEdit_270</a>(<span class="r39 r">updatedEntry</span>, <span class="r33 r">path</span>));
+					<span class="c">// Checkout working directory change</span>
+					<b>if</b> (!<span class="r37 r">stashWorkingIter</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#29981bbb9e6bf35f" class="i method">IdEqual</a>(<span class="r36 r">stashIndexIter</span>))
+					{
+						<span class="r38 r">entry</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheEntry.cs.html#4df64496dc4d2dee" class="t constructor">DirCacheEntry</a>(<span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#f0f54768669fb833" class="i property">RawPath</a>);
+						<span class="r38 r">entry</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<span class="r37 r">stashWorkingIter</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#68322c221d4961d0" class="i property">EntryObjectId</a>);
+						<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#90990bd58db5cb61" class="i method">CheckoutEntry</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r34 r">file</span>, <span class="r38 r">entry</span>, <span class="r29 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#36c5cf926726aefc" class="i property">ObjectReader</a>);
+					}
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r36 r">stashIndexIter</span> == <b>null</b> || (<span class="r35 r">stashHeadIter</span> != <b>null</b> &amp;&amp; !<span class="r36 r">stashIndexIter</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#29981bbb9e6bf35f" class="i method">IdEqual</a>(<span class="r35 r">stashHeadIter</span>
+						)))
+					{
+						<span class="r31 r">editor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#21a67cfbbba09c6d" class="i method">Add</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#c64bacb9f5f974aa" class="t constructor">DeletePath</a>(<span class="r33 r">path</span>));
+					}
+					<a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#5d45cc3b4ddbc04e" class="i method">Delete</a>(<span class="r34 r">file</span>, <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#d0b76c2ee601fdce" class="i field">RETRY</a> | <a href="../NGit.Util/FileUtils.cs.html#3295d5351faf7c6b" class="t t">FileUtils</a>.<a href="../NGit.Util/FileUtils.cs.html#d12c4c41c685be7b" class="i field">SKIP_MISSING</a>);
+				}
+			}
+		}
+
+		<b>private sealed class</b> <a id="e788c7de8a98a16c" href="../R/e788c7de8a98a16c.html" target="n" data-glyph="4,1" class="t t">_PathEdit_270</a> : <a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#f871798ba8839c56" class="t t">PathEdit</a>
+		{
+			<b>public</b> <a id="503a94b1a085d6f4" href="../R/503a94b1a085d6f4.html" target="n" data-glyph="72,2" class="i constructor">_PathEdit_270</a>(<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r40 rd" class="r40 r">updatedEntry</span>, <b>string</b> <span id="r41 rd" class="r41 r">baseArg1</span>) : <a href="../NGit.Dircache/DirCacheEditor.cs.html#ccd803fd5aad55a2" class="k">base</a>(<span class="r41 r">baseArg1</span>
+				)
+			{
+				<a href="#e788c7de8a98a16c" class="k">this</a>.<a href="#2864410ee284e4e4" class="i field">updatedEntry</a> = <span class="r40 r">updatedEntry</span>;
+			}
+
+			<b>public override void</b> <a id="ea43982f1314e28d" href="../R/ea43982f1314e28d.html" target="n" data-glyph="72,2" class="i method">Apply</a>(<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r42 rd" class="r42 r">ent</span>)
+			{
+				<span class="r42 r">ent</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#0feb3a69664afd1a" class="i method">CopyMetaData</a>(<a href="#2864410ee284e4e4" class="i field">updatedEntry</a>);
+			}
+
+			<b>private readonly</b> <a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <a id="2864410ee284e4e4" href="../R/2864410ee284e4e4.html" target="n" data-glyph="46,2" class="i field">updatedEntry</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Apply the changes in a stashed commit to the working directory and index</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">id of stashed commit that was applied</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.GitAPIException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#5d7264b257703642" class="t t">WrongRepositoryStateException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.WrongRepositoryStateException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="4e7944ce1932c908" href="../R/4e7944ce1932c908.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>if</b> (<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>() != <a href="../NGit/RepositoryState.cs.html#8eee3b93eb691602" class="t t">RepositoryState</a>.<a href="../NGit/RepositoryState.cs.html#d964a81e36d8cb7a" class="i field">SAFE</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/WrongRepositoryStateException.cs.html#492e06b37585b147" class="t constructor">WrongRepositoryStateException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#c6da4209a127da26" class="i field">stashApplyOnUnsafeRepository</a>
+					, <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3882aa7bec7ac110" class="i method">GetRepositoryState</a>()));
+			}
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r43 rd" class="r43 r">headTree</span> = <a href="#8c4508cab14ef26f" class="i method">GetHeadTree</a>();
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r44 rd" class="r44 r">stashId</span> = <a href="#b379ec36d4127ede" class="i method">GetStashId</a>();
+			<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r45 rd" class="r45 r">reader</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#3a94c2b862584307" class="i method">NewObjectReader</a>();
+			<b>try</b>
+			{
+				<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r46 rd" class="r46 r">revWalk</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#21ab32e904dfd8c6" class="t constructor">RevWalk</a>(<span class="r45 r">reader</span>);
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r47 rd" class="r47 r">stashCommit</span> = <span class="r46 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r44 r">stashId</span>);
+				<b>if</b> (<span class="r47 r">stashCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#6804a6589a038c04" class="i property">ParentCount</a> != 2)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#140f2d97ab3cc1c0" class="i field">stashCommitMissingTwoParents</a>
+						, <span class="r44 r">stashId</span>.<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>));
+				}
+				<a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r48 rd" class="r48 r">stashWorkingTree</span> = <span class="r47 r">stashCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>;
+				<a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r49 rd" class="r49 r">stashIndexTree</span> = <span class="r46 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r47 r">stashCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#f8123aa92e7623eb" class="i method">GetParent</a>(1)).<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>;
+				<a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r50 rd" class="r50 r">stashHeadTree</span> = <span class="r46 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r47 r">stashCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#f8123aa92e7623eb" class="i method">GetParent</a>(0)).<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>;
+				<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r51 rd" class="r51 r">stashWorkingIter</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+				<span class="r51 r">stashWorkingIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r48 r">stashWorkingTree</span>);
+				<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r52 rd" class="r52 r">stashIndexIter</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+				<span class="r52 r">stashIndexIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r49 r">stashIndexTree</span>);
+				<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r53 rd" class="r53 r">stashHeadIter</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+				<span class="r53 r">stashHeadIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r50 r">stashHeadTree</span>);
+				<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r54 rd" class="r54 r">headIter</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+				<span class="r54 r">headIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r43 r">headTree</span>);
+				<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r55 rd" class="r55 r">cache</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>();
+				<a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a> <span id="r56 rd" class="r56 r">editor</span> = <span class="r55 r">cache</span>.<a href="../NGit.Dircache/DirCache.cs.html#bc3e720b591f7011" class="i method">Editor</a>();
+				<b>try</b>
+				{
+					<a href="../NGit.Dircache/DirCacheIterator.cs.html#28377f92e030e174" class="t t">DirCacheIterator</a> <span id="r57 rd" class="r57 r">indexIter</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#8bfe310b8b94624c" class="t constructor">DirCacheIterator</a>(<span class="r55 r">cache</span>);
+					<a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a> <span id="r58 rd" class="r58 r">workingIter</span> = <b>new</b> <a href="../NGit.Treewalk/FileTreeIterator.cs.html#b46cb8801d309325" class="t constructor">FileTreeIterator</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+					<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r59 rd" class="r59 r">treeWalk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#e1052f13476153ef" class="t constructor">TreeWalk</a>(<span class="r45 r">reader</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <b>new</b> <a href="#559d02d07202e353" class="t t">StashApplyCommand</a>.<a href="#b5500ff4a6c8b750" class="t constructor">StashDiffFilter</a>();
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r53 r">stashHeadIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r52 r">stashIndexIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r51 r">stashWorkingIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r54 r">headIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r57 r">indexIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r58 r">workingIter</span>);
+					<a href="#a47e0510c2558b77" class="i method">ScanForConflicts</a>(<span class="r59 r">treeWalk</span>);
+					<span class="c">// Reset trees and walk</span>
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#8374b8406d09f7d4" class="i method">Reset</a>();
+					<span class="r51 r">stashWorkingIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r48 r">stashWorkingTree</span>);
+					<span class="r52 r">stashIndexIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r49 r">stashIndexTree</span>);
+					<span class="r53 r">stashHeadIter</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<span class="r45 r">reader</span>, <span class="r50 r">stashHeadTree</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r53 r">stashHeadIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r52 r">stashIndexIter</span>);
+					<span class="r59 r">treeWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r51 r">stashWorkingIter</span>);
+					<a href="#9b415fe407a633a4" class="i method">ApplyChanges</a>(<span class="r59 r">treeWalk</span>, <span class="r55 r">cache</span>, <span class="r56 r">editor</span>);
+				}
+				<b>finally</b>
+				{
+					<span class="r56 r">editor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#539b9ab91fdde821" class="i method">Commit</a>();
+					<span class="r55 r">cache</span>.<a href="../NGit.Dircache/DirCache.cs.html#93697cefeab6d366" class="i method">Unlock</a>();
+				}
+			}
+			<b>catch</b> (<a href="../NGit.Api.Errors/JGitInternalException.cs.html#d0350a945a011036" class="t t">JGitInternalException</a> <span id="r60 rd" class="r60 r">e</span>)
+			{
+				<b>throw</b>;
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r61 rd" class="r61 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#60f44fb887ffabd6" class="i field">stashApplyFailed</a>, <span class="r61 r">e</span>);
+			}
+			<b>finally</b>
+			{
+				<span class="r45 r">reader</span>.<a href="../NGit/ObjectReader.cs.html#9b75a15983357803" class="i method">Release</a>();
+			}
+			<b>return</b> <span class="r44 r">stashId</span>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

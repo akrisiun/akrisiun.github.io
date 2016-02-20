@@ -1,0 +1,411 @@
+﻿<!DOCTYPE html>
+<html><head><title>LogCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(402);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/LogCommand.cs" target="_top">NGit.Api\LogCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A class used to execute a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">Log</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> command. It has setters for all</span>
+	<span class="c">///</span><span class="c"> supported options and arguments of this command and a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f81841956886aa6b" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> method</span>
+	<span class="c">///</span><span class="c"> to finally execute the command. Each instance of this class should only be</span>
+	<span class="c">///</span><span class="c"> used for one invocation of the command (means: one call to</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f81841956886aa6b" class="i method">Call</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Call()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> )</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This is currently a very basic implementation which takes only one starting</span>
+	<span class="c">///</span><span class="c"> revision as option.</span>
+	<span class="c">///</span><span class="c"> TODO: add more options (revision ranges, sorting, ...)</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span><span class="c"> </span><span class="c">href</span><span class="c">=</span><span class="c">&quot;</span><span class="c">http://www.kernel.org/pub/software/scm/git/docs/git-log.html</span><span class="c">&quot;</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about Log</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="f3e36505652ea29a" href="../R/f3e36505652ea29a.html" target="n" data-glyph="0,0" class="t t">LogCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="/Sharpen/A.html#f5302991756850e2" class="t t">Iterable</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt;&gt;
+	{
+		<b>private</b> <a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <a id="eefd5a66a709ed68" href="../R/eefd5a66a709ed68.html" target="n" data-glyph="46,1" class="i field">walk</a>;
+
+		<b>private bool</b> <a id="a168168630e99f09" href="../R/a168168630e99f09.html" target="n" data-glyph="46,1" class="i field">startSpecified</a> = <b>false</b>;
+
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>&gt; <a id="736ccbe3729c2995" href="../R/736ccbe3729c2995.html" target="n" data-glyph="46,1" class="i field">pathFilters</a> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>&gt;();
+
+		<b>private int</b> <a id="3c816dd3d19b0207" href="../R/3c816dd3d19b0207.html" target="n" data-glyph="46,1" class="i field">maxCount</a> = -1;
+
+		<b>private int</b> <a id="ce8a3f87d7595cfa" href="../R/ce8a3f87d7595cfa.html" target="n" data-glyph="46,1" class="i field">skip</a> = -1;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="b48110b5b55dd53a" href="../R/b48110b5b55dd53a.html" target="n" data-glyph="75,1" class="i constructor">LogCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r0 r">repo</span>)
+		{
+			<a href="#eefd5a66a709ed68" class="i field">walk</a> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<span class="r0 r">repo</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Executes the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">Log</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> command with all the options and parameters</span>
+		<span class="c">///</span><span class="c"> collected by the setter methods (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#909e4229e0396825" class="i method">Add</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Add(NGit.AnyObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ,</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#148d3fd89abfe211" class="i method">Not</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Not(NGit.AnyObjectId)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , ..) of this class. Each instance of this class</span>
+		<span class="c">///</span><span class="c"> should only be used for one invocation of the command. Don&#39;t call this</span>
+		<span class="c">///</span><span class="c"> method twice on an instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">an iteration over RevCommits</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/NoHeadException.cs.html#70bf94d89c4eb110" class="t t">NoHeadException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">of the references ref cannot be resolved</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="/Sharpen/A.html#f5302991756850e2" class="t t">Iterable</a>&lt;<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>&gt; <a id="f81841956886aa6b" href="../R/f81841956886aa6b.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>if</b> (<a href="#736ccbe3729c2995" class="i field">pathFilters</a>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &gt; 0)
+			{
+				<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#00e639e44d6ea971" class="i method">SetTreeFilter</a>(<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#b2bdc1e3a26b2806" class="t t">AndTreeFilter</a>.<a href="../NGit.Treewalk.Filter/AndTreeFilter.cs.html#a162d17f930e199c" class="i method">Create</a>(<a href="../NGit.Treewalk.Filter/PathFilterGroup.cs.html#4d7f5bc5859d844f" class="t t">PathFilterGroup</a>.<a href="../NGit.Treewalk.Filter/PathFilterGroup.cs.html#8d1e7144691536f8" class="i method">Create</a>(<a href="#736ccbe3729c2995" class="i field">pathFilters</a>), <a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a>
+					.<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#0797802ba9a37bc5" class="i field">ANY_DIFF</a>));
+			}
+			<b>if</b> (<a href="#ce8a3f87d7595cfa" class="i field">skip</a> &gt; -1 &amp;&amp; <a href="#3c816dd3d19b0207" class="i field">maxCount</a> &gt; -1)
+			{
+				<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#3e178f8c17b91e94" class="i method">SetRevFilter</a>(<a href="../NGit.Revwalk.Filter/AndRevFilter.cs.html#89d0035f1b3bf90d" class="t t">AndRevFilter</a>.<a href="../NGit.Revwalk.Filter/AndRevFilter.cs.html#24eba7f4abeb1474" class="i method">Create</a>(<a href="../NGit.Revwalk.Filter/SkipRevFilter.cs.html#96d3bf71b354b950" class="t t">SkipRevFilter</a>.<a href="../NGit.Revwalk.Filter/SkipRevFilter.cs.html#27e45ef5a1f67944" class="i method">Create</a>(<a href="#ce8a3f87d7595cfa" class="i field">skip</a>), <a href="../NGit.Revwalk.Filter/MaxCountRevFilter.cs.html#fb92b0bbbdd7a4b1" class="t t">MaxCountRevFilter</a>
+					.<a href="../NGit.Revwalk.Filter/MaxCountRevFilter.cs.html#85f9a1137132fb2f" class="i method">Create</a>(<a href="#3c816dd3d19b0207" class="i field">maxCount</a>)));
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<a href="#ce8a3f87d7595cfa" class="i field">skip</a> &gt; -1)
+				{
+					<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#3e178f8c17b91e94" class="i method">SetRevFilter</a>(<a href="../NGit.Revwalk.Filter/SkipRevFilter.cs.html#96d3bf71b354b950" class="t t">SkipRevFilter</a>.<a href="../NGit.Revwalk.Filter/SkipRevFilter.cs.html#27e45ef5a1f67944" class="i method">Create</a>(<a href="#ce8a3f87d7595cfa" class="i field">skip</a>));
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="#3c816dd3d19b0207" class="i field">maxCount</a> &gt; -1)
+					{
+						<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#3e178f8c17b91e94" class="i method">SetRevFilter</a>(<a href="../NGit.Revwalk.Filter/MaxCountRevFilter.cs.html#fb92b0bbbdd7a4b1" class="t t">MaxCountRevFilter</a>.<a href="../NGit.Revwalk.Filter/MaxCountRevFilter.cs.html#85f9a1137132fb2f" class="i method">Create</a>(<a href="#3c816dd3d19b0207" class="i field">maxCount</a>));
+					}
+				}
+			}
+			<b>if</b> (!<a href="#a168168630e99f09" class="i field">startSpecified</a>)
+			{
+				<b>try</b>
+				{
+					<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r1 rd" class="r1 r">headId</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+					<b>if</b> (<span class="r1 r">headId</span> == <b>null</b>)
+					{
+						<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/NoHeadException.cs.html#362e5d8d246203d1" class="t constructor">NoHeadException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#8acfe5dabd49a00d" class="i field">noHEADExistsAndNoExplicitStartingRevisionWasSpecified</a>
+							);
+					}
+					<a href="#909e4229e0396825" class="i method">Add</a>(<span class="r1 r">headId</span>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r2 rd" class="r2 r">e</span>)
+				{
+					<span class="c">// all exceptions thrown by add() shouldn&#39;t occur and represent</span>
+					<span class="c">// severe low-level exception which are therefore wrapped</span>
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#d179e64306ea4108" class="i field">anExceptionOccurredWhileTryingToAddTheIdOfHEAD</a>
+						, <span class="r2 r">e</span>);
+				}
+			}
+			<a href="GitCommand.cs.html#35e336747584c82b" class="i method">SetCallable</a>(<b>false</b>);
+			<b>return</b> <a href="#eefd5a66a709ed68" class="i field">walk</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Mark a commit to start graph traversal from.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Mark a commit to start graph traversal from.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#31569254b319535a" class="i method">MarkStart</a>(<span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.MarkStart(NGit.Revwalk.RevCommit)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the commit supplied is not available from the object</span>
+		<span class="c">///</span><span class="c"> database. This usually indicates the supplied commit is</span>
+		<span class="c">///</span><span class="c"> invalid, but the reference was constructed during an earlier</span>
+		<span class="c">///</span><span class="c"> invocation to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.LookupCommit(NGit.AnyObjectId)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the object was not parsed yet and it was discovered during</span>
+		<span class="c">///</span><span class="c"> parsing that it is not actually a commit. This usually</span>
+		<span class="c">///</span><span class="c"> indicates the caller supplied a non-commit SHA-1 to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.LookupCommit(NGit.AnyObjectId)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/JGitInternalException.cs.html#d0350a945a011036" class="t t">JGitInternalException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a low-level exception of JGit has occurred. The original</span>
+		<span class="c">///</span><span class="c"> exception can be retrieved by calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.Exception.InnerException()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . Expect only</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">IOException&#39;s</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to be wrapped. Subclasses of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.MissingObjectException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ) are</span>
+		<span class="c">///</span><span class="c"> typically not wrapped here but thrown as original exception</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="909e4229e0396825" href="../R/909e4229e0396825.html" target="n" data-glyph="72,1" class="i method">Add</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r3 rd" class="r3 r">start</span>)
+		{
+			<b>return</b> <a href="#33f047cd95da2a7f" class="i method">Add</a>(<b>true</b>, <span class="r3 r">start</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Same as</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">--not start</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> , or</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">^start</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">start</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the commit supplied is not available from the object</span>
+		<span class="c">///</span><span class="c"> database. This usually indicates the supplied commit is</span>
+		<span class="c">///</span><span class="c"> invalid, but the reference was constructed during an earlier</span>
+		<span class="c">///</span><span class="c"> invocation to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.LookupCommit(NGit.AnyObjectId)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the object was not parsed yet and it was discovered during</span>
+		<span class="c">///</span><span class="c"> parsing that it is not actually a commit. This usually</span>
+		<span class="c">///</span><span class="c"> indicates the caller supplied a non-commit SHA-1 to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.LookupCommit(NGit.AnyObjectId)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/JGitInternalException.cs.html#d0350a945a011036" class="t t">JGitInternalException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a low-level exception of JGit has occurred. The original</span>
+		<span class="c">///</span><span class="c"> exception can be retrieved by calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.Exception.InnerException()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . Expect only</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">IOException&#39;s</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to be wrapped. Subclasses of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.MissingObjectException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ) are</span>
+		<span class="c">///</span><span class="c"> typically not wrapped here but thrown as original exception</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="148d3fd89abfe211" href="../R/148d3fd89abfe211.html" target="n" data-glyph="72,1" class="i method">Not</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r4 rd" class="r4 r">start</span>)
+		{
+			<b>return</b> <a href="#33f047cd95da2a7f" class="i method">Add</a>(<b>false</b>, <span class="r4 r">start</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Adds the range</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">since..until</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">since</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">until</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the commit supplied is not available from the object</span>
+		<span class="c">///</span><span class="c"> database. This usually indicates the supplied commit is</span>
+		<span class="c">///</span><span class="c"> invalid, but the reference was constructed during an earlier</span>
+		<span class="c">///</span><span class="c"> invocation to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.LookupCommit(NGit.AnyObjectId)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the object was not parsed yet and it was discovered during</span>
+		<span class="c">///</span><span class="c"> parsing that it is not actually a commit. This usually</span>
+		<span class="c">///</span><span class="c"> indicates the caller supplied a non-commit SHA-1 to</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Revwalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Revwalk.RevWalk.LookupCommit(NGit.AnyObjectId)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/JGitInternalException.cs.html#d0350a945a011036" class="t t">JGitInternalException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a low-level exception of JGit has occurred. The original</span>
+		<span class="c">///</span><span class="c"> exception can be retrieved by calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>.<a href="@0@mscorlib/A.html#89c20b39fb04108b" class="i property">InnerException</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.Exception.InnerException()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> . Expect only</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">IOException&#39;s</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to be wrapped. Subclasses of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> (e.g.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.MissingObjectException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> ) are</span>
+		<span class="c">///</span><span class="c"> typically not wrapped here but thrown as original exception</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="8fe44b1524026e80" href="../R/8fe44b1524026e80.html" target="n" data-glyph="72,1" class="i method">AddRange</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r5 rd" class="r5 r">since</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r6 rd" class="r6 r">until</span>)
+		{
+			<b>return</b> <a href="#148d3fd89abfe211" class="i method">Not</a>(<span class="r5 r">since</span>).<a href="#909e4229e0396825" class="i method">Add</a>(<span class="r6 r">until</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Add all refs as commits to start the graph traversal from.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Add all refs as commits to start the graph traversal from.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#909e4229e0396825" class="i method">Add</a>(<span class="i n">NGit</span>.<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Add(NGit.AnyObjectId)</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the references could not be accessed</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="591558e97cb0600a" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">All</a>()
+		{
+			<b>foreach</b> (<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r7 rd" class="r7 r">@ref</span> <b>in</b> <a href="GitCommand.cs.html#d09113f37676df4c" class="i method">GetRepository</a>().<a href="../NGit/Repository.cs.html#7daab26a9a915d3c" class="i method">GetAllRefs</a>().<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+			{
+				<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r8 rd" class="r8 r">objectId</span> = <span class="r7 r">@ref</span>.<a href="../NGit/Ref.cs.html#f9c6216152c573d8" class="i method">GetPeeledObjectId</a>();
+				<b>if</b> (<span class="r8 r">objectId</span> == <b>null</b>)
+				{
+					<span class="r8 r">objectId</span> = <span class="r7 r">@ref</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+				}
+				<a href="#909e4229e0396825" class="i method">Add</a>(<span class="r8 r">objectId</span>);
+			}
+			<b>return</b> <a href="#f3e36505652ea29a" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Show only commits that affect any of the specified paths.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Show only commits that affect any of the specified paths. The path must</span>
+		<span class="c">///</span><span class="c"> either name a file or a directory exactly. Note that regex expressions or</span>
+		<span class="c">///</span><span class="c"> wildcards are not supported.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a path is relative to the top level of the repository</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="cdbe56008750ce08" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">AddPath</a>(<b>string</b> <span id="r9 rd" class="r9 r">path</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#736ccbe3729c2995" class="i field">pathFilters</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r9 r">path</span>));
+			<b>return</b> <a href="#f3e36505652ea29a" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Skip the number of commits before starting to show the commit output.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Skip the number of commits before starting to show the commit output.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">skip</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the number of commits to skip</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="cb00489674239894" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetSkip</a>(<b>int</b> <span id="r10 rd" class="r10 r">skip</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#f3e36505652ea29a" class="k">this</a>.<a href="#ce8a3f87d7595cfa" class="i field">skip</a> = <span class="r10 r">skip</span>;
+			<b>return</b> <a href="#f3e36505652ea29a" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Limit the number of commits to output.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Limit the number of commits to output.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">maxCount</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the limit</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="6ffe4ae7f9546b19" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetMaxCount</a>(<b>int</b> <span id="r11 rd" class="r11 r">maxCount</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#f3e36505652ea29a" class="k">this</a>.<a href="#3c816dd3d19b0207" class="i field">maxCount</a> = <span class="r11 r">maxCount</span>;
+			<b>return</b> <a href="#f3e36505652ea29a" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/JGitInternalException.cs.html#d0350a945a011036" class="t t">JGitInternalException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#f3e36505652ea29a" class="t t">LogCommand</a> <a id="33f047cd95da2a7f" href="../R/33f047cd95da2a7f.html" target="n" data-glyph="76,1" class="i method">Add</a>(<b>bool</b> <span id="r12 rd" class="r12 r">include</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r13 rd" class="r13 r">start</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<b>try</b>
+			{
+				<b>if</b> (<span class="r12 r">include</span>)
+				{
+					<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#31569254b319535a" class="i method">MarkStart</a>(<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="r13 r">start</span>));
+					<a href="#a168168630e99f09" class="i field">startSpecified</a> = <b>true</b>;
+				}
+				<b>else</b>
+				{
+					<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#4f292d38b9d4330d" class="i method">MarkUninteresting</a>(<a href="#eefd5a66a709ed68" class="i field">walk</a>.<a href="../NGit.Revwalk/RevWalk.cs.html#32211559ef258398" class="i method">LookupCommit</a>(<span class="r13 r">start</span>));
+				}
+				<b>return</b> <a href="#f3e36505652ea29a" class="k">this</a>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a> <span id="r14 rd" class="r14 r">e</span>)
+			{
+				<b>throw</b>;
+			}
+			<b>catch</b> (<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a> <span id="r15 rd" class="r15 r">e</span>)
+			{
+				<b>throw</b>;
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r16 rd" class="r16 r">e</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#0f576fa8b5c5a976" class="i field">exceptionOccurredDuringAddingOfOptionToALogCommand</a>
+					, <span class="r13 r">start</span>), <span class="r16 r">e</span>);
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,183 @@
+﻿<!DOCTYPE html>
+<html><head><title>PipedInputStream.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(174);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#Sharpen/Sharpen/PipedInputStream.cs" target="_top">Sharpen\PipedInputStream.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#Sharpen" target="_top">lib\NGit\Sharpen\Sharpen.csproj</a> (Sharpen)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+
+<b>namespace</b> <span class="i n">Sharpen</span>
+{
+	<b>internal class</b> <a id="d0e5921cba7dfeee" href="../R/d0e5921cba7dfeee.html" target="n" data-glyph="2,0" class="t t">PipedInputStream</a> : <a href="InputStream.cs.html#5fe75b93f596f64a" class="t t">InputStream</a>
+	{
+		<b>private byte</b>[] <a id="6d3295ce7eb37932" href="../R/6d3295ce7eb37932.html" target="n" data-glyph="46,1" class="i field">oneBuffer</a>;
+		<b>public const int</b> <a id="df2563e4455ec456" href="../R/df2563e4455ec456.html" target="n" data-glyph="6,1" class="i field">PIPE_SIZE</a> = 1024;
+		
+		<b>protected byte</b>[] <a id="f3ac56d85ede1dae" href="../R/f3ac56d85ede1dae.html" target="n" data-glyph="45,1" class="i field">buffer</a>;
+		<b>private bool</b> <a id="b0eab30092338954" href="../R/b0eab30092338954.html" target="n" data-glyph="46,1" class="i field">closed</a>;
+		<b>private</b> <a href="@0@mscorlib/A.html#797f9a2c1f6fe76f" class="t t">ManualResetEvent</a> <a id="a463d087993d9757" href="../R/a463d087993d9757.html" target="n" data-glyph="46,1" class="i field">dataEvent</a>;
+		<b>private int</b> <a id="2dc2851f80280069" href="../R/2dc2851f80280069.html" target="n" data-glyph="46,1" class="i field">end</a>;
+		<b>private int</b> <a id="21e8f029a032ee36" href="../R/21e8f029a032ee36.html" target="n" data-glyph="46,1" class="i field">start</a>;
+		<b>private object</b> <a id="375c42f65904f92c" href="../R/375c42f65904f92c.html" target="n" data-glyph="46,1" class="i field">thisLock</a>;
+		<b>private bool</b> <a id="1078ae57c3c0bc29" href="../R/1078ae57c3c0bc29.html" target="n" data-glyph="46,1" class="i field">allowGrow</a> = <b>false</b>;
+		
+		<b>public int</b> <a id="a26a5fe891bbd01b" href="../R/a26a5fe891bbd01b.html" target="n" data-glyph="102,1" class="i property">@in</a> {
+			<b>get</b> { <b>return</b> <a href="#21e8f029a032ee36" class="i field">start</a>; }
+			<b>set</b> { <a href="#21e8f029a032ee36" class="i field">start</a> = <b>value</b>; }
+		}
+		
+		<b>public int</b> <a id="907ef6028d101c17" href="../R/907ef6028d101c17.html" target="n" data-glyph="102,1" class="i property">@out</a> {
+			<b>get</b> { <b>return</b> <a href="#2dc2851f80280069" class="i field">end</a>; }
+			<b>set</b> { <a href="#2dc2851f80280069" class="i field">end</a> = <b>value</b>; }
+		}
+
+		<b>public</b> <a id="7082b95e38646842" href="../R/7082b95e38646842.html" target="n" data-glyph="72,1" class="i constructor">PipedInputStream</a> ()
+		{
+			<a href="#375c42f65904f92c" class="i field">thisLock</a> = <b>new</b> <b>object</b> ();
+			<a href="#a463d087993d9757" class="i field">dataEvent</a> = <b>new</b> <a href="@0@mscorlib/A.html#3f1e8fec681dd775" class="t constructor">ManualResetEvent</a> (<b>false</b>);
+			<a href="#f3ac56d85ede1dae" class="i field">buffer</a> = <b>new</b> <b>byte</b>[<a href="#df2563e4455ec456" class="i field">PIPE_SIZE</a> + 1];
+		}
+
+		<b>public</b> <a id="10c7499098554b9f" href="../R/10c7499098554b9f.html" target="n" data-glyph="72,1" class="i constructor">PipedInputStream</a> (<a href="PipedOutputStream.cs.html#9b647d7a56760c01" class="t t">PipedOutputStream</a> <span id="r0 rd" class="r0 r">os</span>): <a href="#7082b95e38646842" class="k">this</a> ()
+		{
+			<span class="r0 r">os</span>.<a href="PipedOutputStream.cs.html#faca8a126d730ba9" class="i method">Attach</a> (<a href="#d0e5921cba7dfeee" class="k">this</a>);
+		}
+
+		<b>public override void</b> <a id="94832ae127f688c3" href="../R/94832ae127f688c3.html" target="n" data-glyph="72,1" class="i method">Close</a> ()
+		{
+			<b>lock</b> (<a href="#375c42f65904f92c" class="i field">thisLock</a>) {
+				<a href="#b0eab30092338954" class="i field">closed</a> = <b>true</b>;
+				<a href="#a463d087993d9757" class="i field">dataEvent</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+			}
+		}
+
+		<b>public override int</b> <a id="ffbde214f83050a7" href="../R/ffbde214f83050a7.html" target="n" data-glyph="72,1" class="i method">Available</a> ()
+		{
+			<b>lock</b> (<a href="#375c42f65904f92c" class="i field">thisLock</a>) {
+				<b>if</b> (<a href="#21e8f029a032ee36" class="i field">start</a> &lt;= <a href="#2dc2851f80280069" class="i field">end</a>) {
+					<b>return</b> (<a href="#2dc2851f80280069" class="i field">end</a> - <a href="#21e8f029a032ee36" class="i field">start</a>);
+				}
+				<b>return</b> ((<a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <a href="#21e8f029a032ee36" class="i field">start</a>) + <a href="#2dc2851f80280069" class="i field">end</a>);
+			}
+		}
+
+		<b>public override int</b> <a id="21ee1199dc9c7c6e" href="../R/21ee1199dc9c7c6e.html" target="n" data-glyph="72,1" class="i method">Read</a> ()
+		{
+			<b>if</b> (<a href="#6d3295ce7eb37932" class="i field">oneBuffer</a> == <b>null</b>)
+				<a href="#6d3295ce7eb37932" class="i field">oneBuffer</a> = <b>new</b> <b>byte</b>[1];
+			<b>if</b> (<a href="#31c65081021311e2" class="i method">Read</a> (<a href="#6d3295ce7eb37932" class="i field">oneBuffer</a>, 0, 1) == -1)
+				<b>return</b> -1;
+			<b>return</b> <a href="#6d3295ce7eb37932" class="i field">oneBuffer</a>[0];
+		}
+
+		<b>public override int</b> <a id="31c65081021311e2" href="../R/31c65081021311e2.html" target="n" data-glyph="72,1" class="i method">Read</a> (<b>byte</b>[] <span id="r1 rd" class="r1 r">b</span>, <b>int</b> <span id="r2 rd" class="r2 r">offset</span>, <b>int</b> <span id="r3 rd" class="r3 r">len</span>)
+		{
+			<b>int</b> <span id="r4 rd" class="r4 r">length</span> = 0;
+			<b>do</b> {
+				<a href="#a463d087993d9757" class="i field">dataEvent</a>.<a href="@0@mscorlib/A.html#8f366147dd3f5f63" class="i method">WaitOne</a> ();
+				<b>lock</b> (<a href="#375c42f65904f92c" class="i field">thisLock</a>) {
+					<b>if</b> (<a href="#b0eab30092338954" class="i field">closed</a> &amp;&amp; <a href="#ffbde214f83050a7" class="i method">Available</a> () == 0) {
+						<b>return</b> -1;
+					}
+					<b>if</b> (<a href="#21e8f029a032ee36" class="i field">start</a> &lt; <a href="#2dc2851f80280069" class="i field">end</a>) {
+						<span class="r4 r">length</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a> (<span class="r3 r">len</span>, <a href="#2dc2851f80280069" class="i field">end</a> - <a href="#21e8f029a032ee36" class="i field">start</a>);
+						<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>, <a href="#21e8f029a032ee36" class="i field">start</a>, <span class="r1 r">b</span>, <span class="r2 r">offset</span>, <span class="r4 r">length</span>);
+						<a href="#21e8f029a032ee36" class="i field">start</a> += <span class="r4 r">length</span>;
+					} <b>else if</b> (<a href="#21e8f029a032ee36" class="i field">start</a> &gt; <a href="#2dc2851f80280069" class="i field">end</a>) {
+						<span class="r4 r">length</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a> (<span class="r3 r">len</span>, <a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <a href="#21e8f029a032ee36" class="i field">start</a>);
+						<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>, <a href="#21e8f029a032ee36" class="i field">start</a>, <span class="r1 r">b</span>, <span class="r2 r">offset</span>, <span class="r4 r">length</span>);
+						<span class="r3 r">len</span> -= <span class="r4 r">length</span>;
+						<a href="#21e8f029a032ee36" class="i field">start</a> = (<a href="#21e8f029a032ee36" class="i field">start</a> + <span class="r4 r">length</span>) % <a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+						<b>if</b> (<span class="r3 r">len</span> &gt; 0) {
+							<b>int</b> <span id="r5 rd" class="r5 r">i</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a> (<span class="r3 r">len</span>, <a href="#2dc2851f80280069" class="i field">end</a>);
+							<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>, 0, <span class="r1 r">b</span>, <span class="r2 r">offset</span> + <span class="r4 r">length</span>, <span class="r5 r">i</span>);
+							<a href="#21e8f029a032ee36" class="i field">start</a> += <span class="r5 r">i</span>;
+							<span class="r4 r">length</span> += <span class="r5 r">i</span>;
+						}
+					}
+					<b>if</b> (<a href="#21e8f029a032ee36" class="i field">start</a> == <a href="#2dc2851f80280069" class="i field">end</a> &amp;&amp; !<a href="#b0eab30092338954" class="i field">closed</a>) {
+						<a href="#a463d087993d9757" class="i field">dataEvent</a>.<a href="@0@mscorlib/A.html#bd5fb33406949358" class="i method">Reset</a> ();
+					}
+					<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#f4cd375d5f3090cc" class="i method">PulseAll</a> (<a href="#375c42f65904f92c" class="i field">thisLock</a>);
+				}
+			} <b>while</b> (<span class="r4 r">length</span> == 0);
+			<b>return</b> <span class="r4 r">length</span>;
+		}
+		
+		<b>private int</b> <a id="cc1b27d09f5e1c7b" href="../R/cc1b27d09f5e1c7b.html" target="n" data-glyph="76,1" class="i method">Allocate</a> (<b>int</b> <span id="r6 rd" class="r6 r">len</span>)
+		{
+			<b>int</b> <span id="r7 rd" class="r7 r">alen</span>;
+			<b>while</b> ((<span class="r7 r">alen</span> = <a href="#eb6dd8f595573e51" class="i method">TryAllocate</a> (<span class="r6 r">len</span>)) == 0) {
+				<span class="c">// Wait until somebody reads data</span>
+				<b>try</b> {
+					<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#8873bad9bee77901" class="i method">Wait</a> (<a href="#375c42f65904f92c" class="i field">thisLock</a>);
+				} <b>catch</b> {
+					<a href="#b0eab30092338954" class="i field">closed</a> = <b>true</b>;
+					<a href="#a463d087993d9757" class="i field">dataEvent</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+					<b>throw</b>;
+				}
+			}
+			<b>return</b> <span class="r7 r">alen</span>;
+		}
+		
+		<b>int</b> <a id="eb6dd8f595573e51" href="../R/eb6dd8f595573e51.html" target="n" data-glyph="76,1" class="i method">TryAllocate</a> (<b>int</b> <span id="r8 rd" class="r8 r">len</span>)
+		{
+			<b>int</b> <span id="r9 rd" class="r9 r">free</span>;
+			<b>if</b> (<a href="#21e8f029a032ee36" class="i field">start</a> &lt;= <a href="#2dc2851f80280069" class="i field">end</a>) {
+				<span class="r9 r">free</span> = (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <a href="#2dc2851f80280069" class="i field">end</a>) + <a href="#21e8f029a032ee36" class="i field">start</a>;
+			} <b>else</b> {
+				<span class="r9 r">free</span> = <a href="#21e8f029a032ee36" class="i field">start</a> - <a href="#2dc2851f80280069" class="i field">end</a>;
+			}
+			<b>if</b> (<span class="r9 r">free</span> &lt;= <span class="r8 r">len</span>) {
+				<b>if</b> (!<a href="#1078ae57c3c0bc29" class="i field">allowGrow</a>)
+					<b>return</b> <span class="r9 r">free</span> &gt; 0 ? <span class="r9 r">free</span> - 1 : 0;
+				<b>int</b> <span id="r10 rd" class="r10 r">sizeInc</span> = (<span class="r8 r">len</span> - <span class="r9 r">free</span>) + 1;
+				<b>byte</b>[] <span id="r11 rd" class="r11 r">destinationArray</span> = <b>new</b> <b>byte</b>[<a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> + <span class="r10 r">sizeInc</span>];
+				<b>if</b> (<a href="#21e8f029a032ee36" class="i field">start</a> &lt;= <a href="#2dc2851f80280069" class="i field">end</a>) {
+					<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>, <a href="#21e8f029a032ee36" class="i field">start</a>, <span class="r11 r">destinationArray</span>, <a href="#21e8f029a032ee36" class="i field">start</a>, <a href="#2dc2851f80280069" class="i field">end</a> - <a href="#21e8f029a032ee36" class="i field">start</a>);
+				} <b>else</b> {
+					<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>, 0, <span class="r11 r">destinationArray</span>, 0, <a href="#2dc2851f80280069" class="i field">end</a>);
+					<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>, <a href="#21e8f029a032ee36" class="i field">start</a>, <span class="r11 r">destinationArray</span>, <a href="#21e8f029a032ee36" class="i field">start</a> + <span class="r10 r">sizeInc</span>, <a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <a href="#21e8f029a032ee36" class="i field">start</a>);
+					<a href="#21e8f029a032ee36" class="i field">start</a> += <span class="r10 r">sizeInc</span>;
+				}
+				<a href="#f3ac56d85ede1dae" class="i field">buffer</a> = <span class="r11 r">destinationArray</span>;
+			}
+			<b>return</b> <span class="r8 r">len</span>;
+		}
+		
+		<b>internal void</b> <a id="68b905b1b1c6d4d5" href="../R/68b905b1b1c6d4d5.html" target="n" data-glyph="74,1" class="i method">Write</a> (<b>int</b> <span id="r12 rd" class="r12 r">b</span>)
+		{
+			<b>lock</b> (<a href="#375c42f65904f92c" class="i field">thisLock</a>) {
+				<a href="#cc1b27d09f5e1c7b" class="i method">Allocate</a> (1);
+				<a href="#f3ac56d85ede1dae" class="i field">buffer</a>[<a href="#2dc2851f80280069" class="i field">end</a>] = (<b>byte</b>)<span class="r12 r">b</span>;
+				<a href="#2dc2851f80280069" class="i field">end</a> = (<a href="#2dc2851f80280069" class="i field">end</a> + 1) % <a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+				<a href="#a463d087993d9757" class="i field">dataEvent</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+			}
+		}
+		
+		<b>internal void</b> <a id="5993025ed9c9bb6e" href="../R/5993025ed9c9bb6e.html" target="n" data-glyph="74,1" class="i method">Write</a> (<b>byte</b>[] <span id="r13 rd" class="r13 r">b</span>, <b>int</b> <span id="r14 rd" class="r14 r">offset</span>, <b>int</b> <span id="r15 rd" class="r15 r">len</span>)
+		{
+			<b>do</b> {
+				<b>lock</b> (<a href="#375c42f65904f92c" class="i field">thisLock</a>) {
+					<b>int</b> <span id="r16 rd" class="r16 r">alen</span> = <a href="#cc1b27d09f5e1c7b" class="i method">Allocate</a> (<span class="r15 r">len</span>);
+					<b>int</b> <span id="r17 rd" class="r17 r">length</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a> (<a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <a href="#2dc2851f80280069" class="i field">end</a>, <span class="r16 r">alen</span>);
+					<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<span class="r13 r">b</span>, <span class="r14 r">offset</span>, <a href="#f3ac56d85ede1dae" class="i field">buffer</a>, <a href="#2dc2851f80280069" class="i field">end</a>, <span class="r17 r">length</span>);
+					<a href="#2dc2851f80280069" class="i field">end</a> = (<a href="#2dc2851f80280069" class="i field">end</a> + <span class="r17 r">length</span>) % <a href="#f3ac56d85ede1dae" class="i field">buffer</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+					<b>if</b> (<span class="r17 r">length</span> &lt; <span class="r16 r">alen</span>) {
+						<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a> (<span class="r13 r">b</span>, <span class="r14 r">offset</span> + <span class="r17 r">length</span>, <a href="#f3ac56d85ede1dae" class="i field">buffer</a>, 0, <span class="r16 r">alen</span> - <span class="r17 r">length</span>);
+						<a href="#2dc2851f80280069" class="i field">end</a> += <span class="r16 r">alen</span> - <span class="r17 r">length</span>;
+					}
+					<a href="#a463d087993d9757" class="i field">dataEvent</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+					<span class="r15 r">len</span> -= <span class="r16 r">alen</span>;
+					<span class="r14 r">offset</span> += <span class="r16 r">alen</span>;
+				}
+			} <b>while</b> (<span class="r15 r">len</span> &gt; 0);
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

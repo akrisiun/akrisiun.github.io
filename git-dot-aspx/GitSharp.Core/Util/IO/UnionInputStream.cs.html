@@ -1,0 +1,299 @@
+﻿<!DOCTYPE html>
+<html><head><title>UnionInputStream.cs</title><link rel="stylesheet" href="../../../styles.css"><script src="../../../scripts.js"></script></head>
+<body class="cB" onload="i(290);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/IO/UnionInputStream.cs" target="_top">Util\IO\UnionInputStream.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2009, Google Inc.
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Eclipse Foundation, Inc. nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> An InputStream which reads from one or more InputStreams.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This stream may enter into an EOF state, returning -1 from any of the read</span>
+    <span class="c">///</span><span class="c"> methods, and then later successfully read additional bytes if a new</span>
+    <span class="c">///</span><span class="c"> InputStream is added after reaching EOF.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> Currently this stream does not support the mark/reset APIs. If mark and later</span>
+    <span class="c">///</span><span class="c"> reset functionality is needed the caller should wrap this stream with a</span>
+    <span class="c">///</span><span class="c"> {@link java.io.BufferedInputStream}.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="2ad66f4715309fee" href="../../R/../../0000000000.html" target="n" data-glyph="0,0" class="t t">UnionInputStream</a> : <a href="#70e7b149858e35e5" class="t t">DumbStream</a>
+    {
+        <b>private static readonly</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="8d836d6c4cbb6830" href="../../R/8d836d6c4cbb6830.html" target="n" data-glyph="46,1" class="i field">Eof</a> = <b>new</b> <a href="#cc605a559aa4833c" class="t constructor">EofStream</a>();
+
+        <b>private class</b> <a id="cc605a559aa4833c" href="../../R/cc605a559aa4833c.html" target="n" data-glyph="4,1" class="t t"><span id="78d7d653787ae947">EofStream</span></a> : <a href="#70e7b149858e35e5" class="t t">DumbStream</a>
+        {
+            <b>public override int</b> <a id="179305a50ad08701" href="../../R/179305a50ad08701.html" target="n" data-glyph="72,2" class="i method">Read</a>(<b>byte</b>[] <span id="r0 rd" class="r0 r">buffer</span>, <b>int</b> <span id="r1 rd" class="r1 r">offset</span>, <b>int</b> <span id="r2 rd" class="r2 r">count</span>)
+            {
+                <b>return</b> 0;
+            }
+        };
+
+        <b>private readonly</b> <a href="@0@System/A.html#df5a6c7b6b60da4f" class="t t">LinkedList</a>&lt;<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>&gt; <a id="1cd905d090016e41" href="../../R/1cd905d090016e41.html" target="n" data-glyph="46,1" class="i field">_streams</a> = <b>new</b> <a href="@0@System/A.html#c882be11e9fb76b2" class="t constructor">LinkedList</a>&lt;<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>&gt;();
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an empty InputStream that is currently at EOF state.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a id="348cca7be4a70bb5" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">UnionInputStream</a>()
+        {
+            <span class="c">// Do nothing.</span>
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an InputStream that is a union of the individual streams.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> As each stream reaches EOF, it will be automatically closed before bytes</span>
+        <span class="c">///</span><span class="c"> from the next stream are read.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">inputStreams</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">streams to be pushed onto this stream.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="596a599b01d11236" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">UnionInputStream</a>(<b>params</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>[] <span id="r3 rd" class="r3 r">inputStreams</span>)
+        {
+            <b>foreach</b> (<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r4 rd" class="r4 r">i</span> <b>in</b> <span class="r3 r">inputStreams</span>)
+                <a href="#8d33efe374e064c8" class="i method">add</a>(<span class="r4 r">i</span>);
+        }
+
+        <b>private</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="5af3cbcb2a0b4aee" href="../../R/5af3cbcb2a0b4aee.html" target="n" data-glyph="76,1" class="i method">head</a>()
+        {
+            <b>return</b> <a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#dc93ffb6a4a268f2" class="i property">Count</a> == 0 ? <a href="#8d836d6c4cbb6830" class="i field">Eof</a> : <a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#5312341b3346de9e" class="i property">First</a>.<a href="@0@System/A.html#ab8931f084807c6d" class="i property">Value</a>;
+        }
+
+        <b>private void</b> <a id="2f12f7a5e77da751" href="../../R/2f12f7a5e77da751.html" target="n" data-glyph="76,1" class="i method">pop</a>()
+        {
+            <b>if</b> (<a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#dc93ffb6a4a268f2" class="i property">Count</a> != 0)
+            {
+                <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r5 rd" class="r5 r">stream</span> = <a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#5312341b3346de9e" class="i property">First</a>.<a href="@0@System/A.html#ab8931f084807c6d" class="i property">Value</a>;
+                <a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#61abb192d93e3d73" class="i method">RemoveFirst</a>();
+                <span class="r5 r">stream</span>.<a href="@0@mscorlib/A.html#f1b4285950a82354" class="i method">Dispose</a>();
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add the given InputStream onto the end of the stream queue.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> When the stream reaches EOF it will be automatically closed.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">in</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the stream to add; must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="8d33efe374e064c8" href="../../R/8d33efe374e064c8.html" target="n" data-glyph="72,1" class="i method">add</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r6 rd" class="r6 r">@in</span>)
+        {
+            <a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#b412763dde024f1d" class="i method">AddLast</a>(<span class="r6 r">@in</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Returns true if there are no more InputStreams in the stream queue.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If this method returns </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> then all read methods will signal EOF</span>
+        <span class="c">///</span><span class="c"> by returning -1, until another InputStream has been pushed into the queue</span>
+        <span class="c">///</span><span class="c"> with </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8d33efe374e064c8" class="i method">add</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if there are no more streams to read from.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="c6725fb032dacb19" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">isEmpty</a>()
+        {
+            <b>return</b> <a href="#1cd905d090016e41" class="i field">_streams</a>.<a href="@0@System/A.html#dc93ffb6a4a268f2" class="i property">Count</a> == 0;
+        }
+
+        <b>public int</b> <a id="e078bb4d214f743e" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">read</a>()
+        {
+            <b>return</b> <a href="#10fbc53cc3990ac2" class="i method">ReadByte</a>();
+        }
+
+        <b>public override int</b> <a id="10fbc53cc3990ac2" href="../../R/10fbc53cc3990ac2.html" target="n" data-glyph="72,1" class="i method">ReadByte</a>()
+        {
+            <b>for</b> (; ; )
+            {
+                <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r7 rd" class="r7 r">@in</span> = <a href="#5af3cbcb2a0b4aee" class="i method">head</a>();
+                <b>int</b> <span id="r8 rd" class="r8 r">r</span> = <span class="r7 r">@in</span>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>();
+                <b>if</b> (0 &lt;= <span class="r8 r">r</span>)
+                    <b>return</b> <span class="r8 r">r</span>;
+                <b>else if</b> (<span class="r7 r">@in</span> == <a href="#8d836d6c4cbb6830" class="i field">Eof</a>)
+                    <b>return</b> -1;
+                <b>else</b>
+                    <a href="#2f12f7a5e77da751" class="i method">pop</a>();
+            }
+        }
+
+        <b>public override int</b> <a id="189541f7a65a73d7" href="../../R/189541f7a65a73d7.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r9 rd" class="r9 r">b</span>, <b>int</b> <span id="r10 rd" class="r10 r">off</span>, <b>int</b> <span id="r11 rd" class="r11 r">len</span>)
+        {
+            <b>int</b> <span id="r12 rd" class="r12 r">cnt</span> = 0;
+            <b>while</b> (0 &lt; <span class="r11 r">len</span>)
+            {
+                <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r13 rd" class="r13 r">@in</span> = <a href="#5af3cbcb2a0b4aee" class="i method">head</a>();
+                <b>int</b> <span id="r14 rd" class="r14 r">n</span> = <span class="r13 r">@in</span>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r9 r">b</span>, <span class="r10 r">off</span>, <span class="r11 r">len</span>);
+                <b>if</b> (0 &lt; <span class="r14 r">n</span>)
+                {
+                    <span class="r12 r">cnt</span> += <span class="r14 r">n</span>;
+                    <span class="r10 r">off</span> += <span class="r14 r">n</span>;
+                    <span class="r11 r">len</span> -= <span class="r14 r">n</span>;
+                }
+                <b>else if</b> (<span class="r13 r">@in</span> == <a href="#8d836d6c4cbb6830" class="i field">Eof</a>)
+                    <b>return</b> 0 &lt; <span class="r12 r">cnt</span> ? <span class="r12 r">cnt</span> : -1;
+                <b>else</b>
+                    <a href="#2f12f7a5e77da751" class="i method">pop</a>();
+            }
+            <b>return</b> <span class="r12 r">cnt</span>;
+        }
+
+        <b>public int</b> <a id="741ad1cfeaa905a2" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">available</a>()
+        {
+            <b>return</b> (<b>int</b>)<a href="#5af3cbcb2a0b4aee" class="i method">head</a>().<a href="../Stream.cs.html#99b0e3dcf456b5b4" class="i method">available</a>();
+        }
+
+        <b>public long</b> <a id="d160a349564582a5" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">skip</a>(<b>long</b> <span id="r15 rd" class="r15 r">len</span>)
+        {
+            <b>long</b> <span id="r16 rd" class="r16 r">cnt</span> = 0;
+            <b>while</b> (0 &lt; <span class="r15 r">len</span>)
+            {
+                <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r17 rd" class="r17 r">@in</span> = <a href="#5af3cbcb2a0b4aee" class="i method">head</a>();
+                <b>long</b> <span id="r18 rd" class="r18 r">n</span> = <span class="r17 r">@in</span>.<a href="../Stream.cs.html#1be7f7fd25f414dd" class="i method">skip</a>(<span class="r15 r">len</span>);
+                <b>if</b> (0 &lt; <span class="r18 r">n</span>)
+                {
+                    <span class="r16 r">cnt</span> += <span class="r18 r">n</span>;
+                    <span class="r15 r">len</span> -= <span class="r18 r">n</span>;
+
+                }
+                <b>else if</b> (<span class="r17 r">@in</span> == <a href="#8d836d6c4cbb6830" class="i field">Eof</a>)
+                {
+                    <b>return</b> <span class="r16 r">cnt</span>;
+
+                }
+                <b>else</b>
+                {
+                    <span class="c">// Is this stream at EOF? We can&#39;t tell from skip alone.</span>
+                    <span class="c">// Read one byte to test for EOF, discard it if we aren&#39;t</span>
+                    <span class="c">// yet at EOF.</span>
+                    <span class="c">//</span>
+                    <b>int</b> <span id="r19 rd" class="r19 r">r</span> = <span class="r17 r">@in</span>.<a href="@0@mscorlib/A.html#8b5e336542fa849f" class="i method">ReadByte</a>();
+                    <b>if</b> (<span class="r19 r">r</span> &lt; 0)
+                    {
+                        <a href="#2f12f7a5e77da751" class="i method">pop</a>();
+                    }
+                    <b>else</b>
+                    {
+                        <span class="r16 r">cnt</span> += 1;
+                        <span class="r15 r">len</span> -= 1;
+                    }
+                }
+            }
+            <b>return</b> <span class="r16 r">cnt</span>;
+        }
+
+        <b>public override void</b> <a id="c129b3aecc08c6aa" href="../../R/c129b3aecc08c6aa.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+        {
+            <a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r20 rd" class="r20 r">err</span> = <b>null</b>;
+
+            <b>for</b> (<a href="../ListIterator.cs.html#e8d3f2ff27b080ad" class="k">var</a> <span id="r21 rd" class="r21 r">i</span> = <b>new</b> <a href="../ListIterator.cs.html#17c4c3ffdbd0d544" class="t constructor">LinkedListIterator</a>&lt;<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>&gt;(<a href="#1cd905d090016e41" class="i field">_streams</a>); <span class="r21 r">i</span>.<a href="../ListIterator.cs.html#79b4589ef27267b2" class="i method">hasNext</a>(); )
+            {
+                <b>try</b>
+                {
+                    <span class="r21 r">i</span>.<a href="../ListIterator.cs.html#428b9bd434520da7" class="i method">next</a>().<a href="@0@mscorlib/A.html#f1b4285950a82354" class="i method">Dispose</a>();
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r22 rd" class="r22 r">closeError</span>)
+                {
+                    <span class="r20 r">err</span> = <span class="r22 r">closeError</span>;
+                }
+                <span class="r21 r">i</span>.<a href="../ListIterator.cs.html#a65ef2990caa3761" class="i method">remove</a>();
+            }
+
+            <b>if</b> (<span class="r20 r">err</span> != <b>null</b>)
+                <b>throw</b> <span class="r20 r">err</span>;
+        }
+    
+        <b>public bool</b> <a id="77f6aec18777ca08" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">markSupported</a>()
+        {
+            <b>return false</b>; <span class="c">// TODO : CanSeek ?  </span>
+        }
+    }
+
+    <b>public abstract class</b> <a id="70e7b149858e35e5" href="../../R/70e7b149858e35e5.html" target="n" data-glyph="0,0" class="t t"><span id="a420f14477f70f2b">DumbStream</span></a> : <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>
+    {
+        <b>public override void</b> <a id="f11106736d76e109" href="../../R/f11106736d76e109.html" target="n" data-glyph="72,1" class="i method">Flush</a>()
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+        }
+
+        <b>public override long</b> <a id="e558dc4b8a0d1c30" href="../../R/e558dc4b8a0d1c30.html" target="n" data-glyph="72,1" class="i method">Seek</a>(<b>long</b> <span id="r23 rd" class="r23 r">offset</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a> <span id="r24 rd" class="r24 r">origin</span>)
+        {
+            <b>return</b> 0;
+        }
+
+        <b>public override void</b> <a id="4280dbb289a3e0f0" href="../../R/4280dbb289a3e0f0.html" target="n" data-glyph="72,1" class="i method">SetLength</a>(<b>long</b> <span id="r25 rd" class="r25 r">value</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+        }
+
+        <b>public override void</b> <a id="e26c9eb3484e0644" href="../../R/e26c9eb3484e0644.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>byte</b>[] <span id="r26 rd" class="r26 r">buffer</span>, <b>int</b> <span id="r27 rd" class="r27 r">offset</span>, <b>int</b> <span id="r28 rd" class="r28 r">count</span>)
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+        }
+
+        <b>public override bool</b> <a id="d516b1357ca93cbf" href="../../R/d516b1357ca93cbf.html" target="n" data-glyph="102,1" class="i property">CanRead</a>
+        {
+            <b>get</b> { <b>return true</b>; }
+        }
+
+        <b>public override bool</b> <a id="92a4d2a3ee70e161" href="../../R/92a4d2a3ee70e161.html" target="n" data-glyph="102,1" class="i property">CanSeek</a>
+        {
+            <b>get</b> { <b>return true</b>; }
+        }
+
+        <b>public override bool</b> <a id="d0433302361cb91a" href="../../R/d0433302361cb91a.html" target="n" data-glyph="102,1" class="i property">CanWrite</a>
+        {
+            <b>get</b> { <b>return false</b>; }
+        }
+
+        <b>public override long</b> <a id="55d86c3d4147d874" href="../../R/55d86c3d4147d874.html" target="n" data-glyph="102,1" class="i property">Length</a>
+        {
+            <b>get</b> { <b>return</b> 0; }
+        }
+
+        <b>public override long</b> <a id="b311d7362c48bcf7" href="../../R/b311d7362c48bcf7.html" target="n" data-glyph="102,1" class="i property">Position</a>
+        {
+            <b>get</b> { <b>return</b> 0; }
+            <b>set</b> { <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>(); }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

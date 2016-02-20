@@ -1,0 +1,210 @@
+﻿<!DOCTYPE html>
+<html><head><title>PackReverseIndex.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(201);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/PackReverseIndex.cs" target="_top">PackReverseIndex.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Marek Zawirski &lt;marek.zawirski@gmail.com&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Reverse index for forward pack index. Provides operations based on offset</span>
+	<span class="c">///</span><span class="c"> instead of object id. Such offset-based reverse lookups are performed in</span>
+	<span class="c">///</span><span class="c"> O(log n) time.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a><span class="c">&quot;</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> /// </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a><span class="c">&quot;</span><span class="c">/&gt;</span>
+	<b>public class</b> <a id="f99b8942feec3cd8" href="R/f99b8942feec3cd8.html" target="n" data-glyph="0,0" class="t t">PackReverseIndex</a>
+	{
+		<span class="c">// Index we were created from, and that has our ObjectId data.</span>
+		<b>private readonly</b> <a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a> <a id="c8f85ece18dc6d75" href="R/c8f85ece18dc6d75.html" target="n" data-glyph="46,1" class="i field">_index</a>;
+
+		<span class="c">// (offset31, truly) Offsets accommodating in 31 bits.</span>
+		<b>private readonly int</b>[] <a id="4c5319af993c75de" href="R/4c5319af993c75de.html" target="n" data-glyph="46,1" class="i field">_offsets32</a>;
+
+		<span class="c">// Offsets not accommodating in 31 bits.</span>
+		<b>private readonly long</b>[] <a id="fc74eeaa484de0ac" href="R/fc74eeaa484de0ac.html" target="n" data-glyph="46,1" class="i field">_offsets64</a>;
+
+		<span class="c">// Position of the corresponding offsets32 in index.</span>
+		<b>private readonly int</b>[] <a id="8b952ea215419dd6" href="R/8b952ea215419dd6.html" target="n" data-glyph="46,1" class="i field">_nth32</a>;
+
+		<span class="c">// Position of the corresponding offsets64 in index.</span>
+		<b>private readonly int</b>[] <a id="6138704787d92472" href="R/6138704787d92472.html" target="n" data-glyph="46,1" class="i field">_nth64</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create reverse index from straight/forward pack index, by indexing all</span>
+		<span class="c">///</span><span class="c"> its entries.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">packIndex</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Forward index - entries to (reverse) index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="fadf33c687f9c703" href="R/fadf33c687f9c703.html" target="n" data-glyph="72,1" class="i constructor">PackReverseIndex</a>(<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a> <span id="r0 rd" class="r0 r">packIndex</span>)
+		{
+			<a href="#c8f85ece18dc6d75" class="i field">_index</a> = <span class="r0 r">packIndex</span>;
+
+			<b>long</b> <span id="r1 rd" class="r1 r">cnt</span> = <a href="#c8f85ece18dc6d75" class="i field">_index</a>.<a href="PackIndex.cs.html#e962501d2a4f7cb9" class="i property">ObjectCount</a>;
+			<b>long</b> <span id="r2 rd" class="r2 r">n64</span> = <a href="#c8f85ece18dc6d75" class="i field">_index</a>.<a href="PackIndex.cs.html#e401f7838662584e" class="i property">Offset64Count</a>;
+			<b>long</b> <span id="r3 rd" class="r3 r">n32</span> = <span class="r1 r">cnt</span> - <span class="r2 r">n64</span>;
+			<b>if</b> (<span class="r3 r">n32</span> &gt; <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a> || <span class="r2 r">n64</span> &gt; <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a> || <span class="r1 r">cnt</span> &gt; 0xffffffffL)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Huge indexes are not supported, yet&quot;</span>);
+			}
+
+			<a href="#4c5319af993c75de" class="i field">_offsets32</a> = <b>new</b> <b>int</b>[(<b>int</b>)<span class="r3 r">n32</span>];
+			<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a> = <b>new</b> <b>long</b>[(<b>int</b>)<span class="r2 r">n64</span>];
+			<a href="#8b952ea215419dd6" class="i field">_nth32</a> = <b>new</b> <b>int</b>[<a href="#4c5319af993c75de" class="i field">_offsets32</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>];
+			<a href="#6138704787d92472" class="i field">_nth64</a> = <b>new</b> <b>int</b>[<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>];
+
+			<b>int</b> <span id="r4 rd" class="r4 r">i32</span> = 0;
+			<b>int</b> <span id="r5 rd" class="r5 r">i64</span> = 0;
+
+			<b>foreach</b> (<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>.<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a> <span id="r6 rd" class="r6 r">me</span> <b>in</b> <a href="#c8f85ece18dc6d75" class="i field">_index</a>)
+			{
+				<b>long</b> <span id="r7 rd" class="r7 r">o</span> = <span class="r6 r">me</span>.<a href="PackIndex.cs.html#204793711264a814" class="i property">Offset</a>;
+				<b>if</b> (<span class="r7 r">o</span> &lt; <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>)
+				{
+					<a href="#4c5319af993c75de" class="i field">_offsets32</a>[<span class="r4 r">i32</span>++] = (<b>int</b>)<span class="r7 r">o</span>;
+				}
+				<b>else</b>
+				{
+					<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>[<span class="r5 r">i64</span>++] = <span class="r7 r">o</span>;
+				}
+			}
+
+			<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#ec5718fae85b7640" class="i method">Sort</a>(<a href="#4c5319af993c75de" class="i field">_offsets32</a>);
+			<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#ec5718fae85b7640" class="i method">Sort</a>(<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>);
+
+			<b>int</b> <span id="r8 rd" class="r8 r">nth</span> = 0;
+			<b>foreach</b> (<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>.<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a> <span id="r9 rd" class="r9 r">me</span> <b>in</b> <a href="#c8f85ece18dc6d75" class="i field">_index</a>)
+			{
+				<b>long</b> <span id="r10 rd" class="r10 r">o</span> = <span class="r9 r">me</span>.<a href="PackIndex.cs.html#204793711264a814" class="i property">Offset</a>;
+				<b>if</b> (<span class="r10 r">o</span> &lt; <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>)
+				{
+					<a href="#8b952ea215419dd6" class="i field">_nth32</a>[<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#4c5319af993c75de" class="i field">_offsets32</a>, (<b>int</b>)<span class="r10 r">o</span>)] = <span class="r8 r">nth</span>++;
+				}
+				<b>else</b>
+				{
+					<a href="#6138704787d92472" class="i field">_nth64</a>[<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>, <span class="r10 r">o</span>)] = <span class="r8 r">nth</span>++;
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Search for object id with the specified start offset in this pack</span>
+		<span class="c">///</span><span class="c"> (reverse) index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">start offset of object to find.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for this offset, or null if no object was found.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="e63aa63a8dab8ef0" href="R/e63aa63a8dab8ef0.html" target="n" data-glyph="72,1" class="i method">FindObject</a>(<b>long</b> <span id="r11 rd" class="r11 r">offset</span>)
+		{
+			<b>if</b> (<span class="r11 r">offset</span> &lt;= <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>)
+			{
+				<b>int</b> <span id="r12 rd" class="r12 r">i32</span> = <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#4c5319af993c75de" class="i field">_offsets32</a>, (<b>int</b>)<span class="r11 r">offset</span>);
+				<b>if</b> (<span class="r12 r">i32</span> &lt; 0) <b>return null</b>;
+				<b>return</b> <a href="#c8f85ece18dc6d75" class="i field">_index</a>.<a href="PackIndex.cs.html#8111c88b4ec15804" class="i method">GetObjectId</a>(<a href="#8b952ea215419dd6" class="i field">_nth32</a>[<span class="r12 r">i32</span>]);
+			}
+
+			<b>int</b> <span id="r13 rd" class="r13 r">i64</span> = <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>, <span class="r11 r">offset</span>);
+			<b>if</b> (<span class="r13 r">i64</span> &lt; 0) <b>return null</b>;
+			<b>return</b> <a href="#c8f85ece18dc6d75" class="i field">_index</a>.<a href="PackIndex.cs.html#8111c88b4ec15804" class="i method">GetObjectId</a>(<a href="#6138704787d92472" class="i field">_nth64</a>[<span class="r13 r">i64</span>]);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Search for the next offset to the specified offset in this pack (reverse)</span>
+		<span class="c">///</span><span class="c"> index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> start offset of previous object (must be valid-existing offset).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">maxOffset</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> maximum offset in a pack (returned when there is no next offset).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> offset of the next object in a pack or maxOffset if provided</span>
+		<span class="c">///</span><span class="c"> offset was the last one.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> When there is no object with the provided offset.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public long</b> <a id="a6aa7b5c4621ca9e" href="R/a6aa7b5c4621ca9e.html" target="n" data-glyph="72,1" class="i method">FindNextOffset</a>(<b>long</b> <span id="r14 rd" class="r14 r">offset</span>, <b>long</b> <span id="r15 rd" class="r15 r">maxOffset</span>)
+		{
+			<b>if</b> (<span class="r14 r">offset</span> &lt;= <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>)
+			{
+				<b>int</b> <span id="r16 rd" class="r16 r">i32</span> = <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#4c5319af993c75de" class="i field">_offsets32</a>, (<b>int</b>)<span class="r14 r">offset</span>);
+				<b>if</b> (<span class="r16 r">i32</span> &lt; 0)
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;Can&#39;t find object in (reverse) pack index for the specified offset &quot;</span> + <span class="r14 r">offset</span>);
+				}
+
+				<b>if</b> (<span class="r16 r">i32</span> + 1 == <a href="#4c5319af993c75de" class="i field">_offsets32</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				{
+					<b>if</b> (<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &gt; 0)
+					{
+						<b>return</b> <a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>[0];
+					}
+					<b>return</b> <span class="r15 r">maxOffset</span>;
+				}
+				<b>return</b> <a href="#4c5319af993c75de" class="i field">_offsets32</a>[<span class="r16 r">i32</span> + 1];
+			}
+
+			<b>int</b> <span id="r17 rd" class="r17 r">i64</span> = <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>, <span class="r14 r">offset</span>);
+			<b>if</b> (<span class="r17 r">i64</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;Can&#39;t find object in (reverse) pack index for the specified offset &quot;</span> + <span class="r14 r">offset</span>);
+			}
+
+			<b>if</b> (<span class="r17 r">i64</span> + 1 == <a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>return</b> <span class="r15 r">maxOffset</span>;
+			}
+
+			<b>return</b> <a href="#fc74eeaa484de0ac" class="i field">_offsets64</a>[<span class="r17 r">i64</span> + 1];
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

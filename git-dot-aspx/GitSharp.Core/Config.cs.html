@@ -1,0 +1,1313 @@
+﻿<!DOCTYPE html>
+<html><head><title>Config.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(1304);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Config.cs" target="_top">Config.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Dave Watson &lt;dwatson@mimvista.com&gt;
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Thad Hughes &lt;thadh@thad.corp.google.com&gt;
+ * Copyright (C) 2009, JetBrains s.r.o.
+ * Copyright (C) 2009, Google, Inc.
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+<b>using</b> <span class="i n">Tamir</span>.<span class="i n">SharpSsh</span>.<span class="i n">java</span>.<span class="i n">lang</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Git style </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.config</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">, </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.gitconfig</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">, </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.gitmodules</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> file.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="14d5730154bea165" href="R/14d5730154bea165.html" target="n" data-glyph="0,0" class="t t">Config</a>
+    {
+        <b>private static readonly string</b>[] <a id="c9bf8efddfa3510a" href="R/c9bf8efddfa3510a.html" target="n" data-glyph="46,1" class="i field">EmptyStringArray</a> = <b>new</b> <b>string</b>[0];
+
+        <b>private const long</b> <a id="c623019372b04f82" href="R/c623019372b04f82.html" target="n" data-glyph="10,1" class="i field">GiB</a> = 1024 * <a href="#fe5374edacb46658" class="i field">MiB</a>;
+        <b>private const long</b> <a id="ef2f3d81786f7a59" href="R/ef2f3d81786f7a59.html" target="n" data-glyph="10,1" class="i field">KiB</a> = 1024;
+        <b>private const long</b> <a id="fe5374edacb46658" href="R/fe5374edacb46658.html" target="n" data-glyph="10,1" class="i field">MiB</a> = 1024 * <a href="#ef2f3d81786f7a59" class="i field">KiB</a>;
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Immutable current state of the configuration data.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This state is copy-on-write. It should always contain an immutable list</span>
+        <span class="c">///</span><span class="c"> of the configuration keys/values.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal</b> <a href="Util/JavaHelper/AtomicReference.cs.html#1e8ba7f5e3f67204" class="t t">AtomicReference</a>&lt;<a href="#06ba4b0cc61db27d" class="t t">State</a>&gt; <a id="e5b48da04e400330" href="R/e5b48da04e400330.html" target="n" data-glyph="44,1" class="i field">_state</a>;
+
+        <span class="c">///</span><span class="c"> Magic value indicating a missing entry.</span>
+        <span class="c">///</span><span class="c">	This value is tested for reference equality in some contexts, so we</span>
+        <span class="c">///</span><span class="c">	must ensure it is a special copy of the empty string.  It also must</span>
+        <span class="c">///</span><span class="c">	be treated like the empty string.</span>
+        <b>private static readonly string</b> <a id="d6caaf738d49c13c" href="R/d6caaf738d49c13c.html" target="n" data-glyph="46,1" class="i field">MagicEmptyValue</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+
+        <b>private readonly</b> <a href="#14d5730154bea165" class="t t">Config</a> <a id="c90c50aa0ece71ec" href="R/c90c50aa0ece71ec.html" target="n" data-glyph="46,1" class="i field">_baseConfig</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a configuration with no default fallback.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a id="5a0b8ed6f21899d0" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">Config</a>()
+            : <a href="#8ef1691952f6bd07" class="k">this</a>(<b>null</b>)
+        {
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create an empty configuration with a fallback for missing keys.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">defaultConfig</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	the base configuration to be consulted when a key is missing</span>
+        <span class="c">///</span><span class="c"> from this configuration instance.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="8ef1691952f6bd07" href="R/8ef1691952f6bd07.html" target="n" data-glyph="72,1" class="i constructor">Config</a>(<a href="#14d5730154bea165" class="t t">Config</a> <span id="r0 rd" class="r0 r">defaultConfig</span>)
+        {
+            <a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a> = <span class="r0 r">defaultConfig</span>;
+            <a href="#e5b48da04e400330" class="i field">_state</a> = <b>new</b> <a href="Util/JavaHelper/AtomicReference.cs.html#0b8f897610c760f5" class="t constructor">AtomicReference</a>&lt;<a href="#06ba4b0cc61db27d" class="t t">State</a>&gt;(<a href="#67752ea8feba5da8" class="i method">newState</a>());
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Escape the value before saving</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">x</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The value to escape.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The escaped value.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>private static string</b> <a id="ca507777cbaad0e5" href="R/ca507777cbaad0e5.html" target="n" data-glyph="76,1" class="i method">EscapeValue</a>(<b>string</b> <span id="r1 rd" class="r1 r">x</span>)
+        {
+            <b>bool</b> <span id="r2 rd" class="r2 r">inquote</span> = <b>false</b>;
+            <b>int</b> <span id="r3 rd" class="r3 r">lineStart</span> = 0;
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r4 rd" class="r4 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#ec674e2123a44860" class="t constructor">StringBuilder</a>(<span class="r1 r">x</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+
+            <b>for</b> (<b>int</b> <span id="r5 rd" class="r5 r">k</span> = 0; <span class="r5 r">k</span> &lt; <span class="r1 r">x</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; <span class="r5 r">k</span>++)
+            {
+                <b>char</b> <span id="r6 rd" class="r6 r">c</span> = <span class="r1 r">x</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r5 r">k</span>];
+                <b>switch</b> (<span class="r6 r">c</span>)
+                {
+                    <b>case</b> <span class="s">&#39;\n&#39;</span>:
+                        <b>if</b> (<span class="r2 r">inquote</span>)
+                        {
+                            <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;&quot;&#39;</span>);
+                            <span class="r2 r">inquote</span> = <b>false</b>;
+                        }
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;\\n\\\n&quot;</span>);
+                        <span class="r3 r">lineStart</span> = <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a>;
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;\t&#39;</span>:
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;\\t&quot;</span>);
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;\b&#39;</span>:
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;\\b&quot;</span>);
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;\\&#39;</span>:
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;\\\\&quot;</span>);
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;&quot;&#39;</span>:
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;\\\&quot;&quot;</span>);
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;;&#39;</span>:
+                    <b>case</b> <span class="s">&#39;#&#39;</span>:
+                        <b>if</b> (!<span class="r2 r">inquote</span>)
+                        {
+                            <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#0222160e99d598a5" class="i method">Insert</a>(<span class="r3 r">lineStart</span>, <span class="s">&#39;&quot;&#39;</span>);
+                            <span class="r2 r">inquote</span> = <b>true</b>;
+                        }
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="r6 r">c</span>);
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39; &#39;</span>:
+                        <b>if</b> (!<span class="r2 r">inquote</span> &amp;&amp; <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> &gt; 0 &amp;&amp; <span class="r4 r">r</span><a href="@0@mscorlib/A.html#fdc8eb61b5bf468a">[</a><span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> - 1] == <span class="s">&#39; &#39;</span>)
+                        {
+                            <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#0222160e99d598a5" class="i method">Insert</a>(<span class="r3 r">lineStart</span>, <span class="s">&#39;&quot;&#39;</span>);
+                            <span class="r2 r">inquote</span> = <b>true</b>;
+                        }
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+                        <b>break</b>;
+
+                    <b>default</b>:
+                        <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="r6 r">c</span>);
+                        <b>break</b>;
+                }
+            }
+
+            <b>if</b> (<span class="r2 r">inquote</span>)
+            {
+                <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;&quot;&#39;</span>);
+            }
+
+            <b>return</b> <span class="r4 r">r</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain an integer value from the configuration.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section the key is grouped within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of the key to get.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">defaultValue</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	Default value to return if no value was present.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An integer value from the configuration, or </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">defaultValue</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="023bbd27919bb1fd" href="R/023bbd27919bb1fd.html" target="n" data-glyph="72,1" class="i method">getInt</a>(<b>string</b> <span id="r7 rd" class="r7 r">section</span>, <b>string</b> <span id="r8 rd" class="r8 r">name</span>, <b>int</b> <span id="r9 rd" class="r9 r">defaultValue</span>)
+        {
+            <b>return</b> <a href="#587014c6a93b0bd1" class="i method">getInt</a>(<span class="r7 r">section</span>, <b>null</b>, <span class="r8 r">name</span>, <span class="r9 r">defaultValue</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain an integer value from the configuration.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section the key is grouped within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Subsection name, such a remote or branch name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of the key to get.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">defaultValue</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Default value to return if no value was present. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An integer value from the configuration, or </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">defaultValue</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public int</b> <a id="587014c6a93b0bd1" href="R/587014c6a93b0bd1.html" target="n" data-glyph="72,1" class="i method">getInt</a>(<b>string</b> <span id="r10 rd" class="r10 r">section</span>, <b>string</b> <span id="r11 rd" class="r11 r">subsection</span>, <b>string</b> <span id="r12 rd" class="r12 r">name</span>, <b>int</b> <span id="r13 rd" class="r13 r">defaultValue</span>)
+        {
+            <b>long</b> <span id="r14 rd" class="r14 r">val</span> = <a href="#46dc2a8896652154" class="i method">getLong</a>(<span class="r10 r">section</span>, <span class="r11 r">subsection</span>, <span class="r12 r">name</span>, <span class="r13 r">defaultValue</span>);
+            <b>if</b> (<b>int</b>.<a href="@0@mscorlib/A.html#e3cfc4661f06e948" class="i field">MinValue</a> &lt;= <span class="r14 r">val</span> &amp;&amp; <span class="r14 r">val</span> &lt;= <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>)
+                <b>return</b> (<b>int</b>)<span class="r14 r">val</span>;
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Integer value &quot;</span> + <span class="r10 r">section</span> + <span class="s">&quot;.&quot;</span> + <span class="r12 r">name</span> + <span class="s">&quot; out of range&quot;</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain an integer value from the configuration.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section the key is grouped within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Subsection name, such a remote or branch name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of the key to get.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">defaultValue</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Default value to return if no value was present.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An integer value from the configuration, or </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">defaultValue</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public long</b> <a id="46dc2a8896652154" href="R/46dc2a8896652154.html" target="n" data-glyph="72,1" class="i method">getLong</a>(<b>string</b> <span id="r15 rd" class="r15 r">section</span>, <b>string</b> <span id="r16 rd" class="r16 r">subsection</span>, <b>string</b> <span id="r17 rd" class="r17 r">name</span>, <b>long</b> <span id="r18 rd" class="r18 r">defaultValue</span>)
+        {
+            <b>string</b> <span id="r19 rd" class="r19 r">str</span> = <a href="#d215890433ed9633" class="i method">getString</a>(<span class="r15 r">section</span>, <span class="r16 r">subsection</span>, <span class="r17 r">name</span>);
+            <b>if</b> (<span class="r19 r">str</span> == <b>null</b>)
+                <b>return</b> <span class="r18 r">defaultValue</span>;
+
+            <b>string</b> <span id="r20 rd" class="r20 r">n</span> = <span class="r19 r">str</span>.<a href="@0@mscorlib/A.html#06a5f7c688e69307" class="i method">Trim</a>();
+            <b>if</b> (<span class="r20 r">n</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 0)
+                <b>return</b> <span class="r18 r">defaultValue</span>;
+
+            <b>long</b> <span id="r21 rd" class="r21 r">mul</span> = 1;
+            <b>switch</b> (<a href="Util/StringUtils.cs.html#e32b9dc7a2f51fc1" class="t t">StringUtils</a>.<a href="Util/StringUtils.cs.html#7a5d6eef3267fcd8" class="i method">toLowerCase</a>(<span class="r20 r">n</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r20 r">n</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1]))
+            {
+                <b>case</b> <span class="s">&#39;g&#39;</span>:
+                    <span class="r21 r">mul</span> = <a href="#c623019372b04f82" class="i field">GiB</a>;
+                    <b>break</b>;
+
+                <b>case</b> <span class="s">&#39;m&#39;</span>:
+                    <span class="r21 r">mul</span> = <a href="#fe5374edacb46658" class="i field">MiB</a>;
+                    <b>break</b>;
+
+                <b>case</b> <span class="s">&#39;k&#39;</span>:
+                    <span class="r21 r">mul</span> = <a href="#ef2f3d81786f7a59" class="i field">KiB</a>;
+                    <b>break</b>;
+            }
+
+            <b>if</b> (<span class="r21 r">mul</span> &gt; 1)
+                <span class="r20 r">n</span> = <span class="r20 r">n</span>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, <span class="r20 r">n</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1).<a href="@0@mscorlib/A.html#06a5f7c688e69307" class="i method">Trim</a>();
+
+            <b>if</b> (<span class="r20 r">n</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> == 0)
+                <b>return</b> <span class="r18 r">defaultValue</span>;
+
+            <b>try</b>
+            {
+                <b>return</b> <span class="r21 r">mul</span> * <b>long</b>.<a href="@0@mscorlib/A.html#7967a886c106fcce" class="i method">Parse</a>(<span class="r20 r">n</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#80a470d64a9b80ef" class="t t">FormatException</a> <span id="r22 rd" class="r22 r">nfe</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#faac7c530516eefc" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid long value: &quot;</span> + <span class="r15 r">section</span> + <span class="s">&quot;.&quot;</span> + <span class="r17 r">name</span> + <span class="s">&quot;=&quot;</span> + <span class="r19 r">str</span>, <span class="r22 r">nfe</span>);
+            }
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get a boolean value from the git config.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section the key is grouped within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of the key to get.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">defaultValue</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Default value to return if no value was present.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if any value or </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">defaultValue</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> is true, false </span>
+        <span class="c">///</span><span class="c"> for missing or explicit false.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="744292f9d0ad1799" href="R/744292f9d0ad1799.html" target="n" data-glyph="72,1" class="i method">getBoolean</a>(<b>string</b> <span id="r23 rd" class="r23 r">section</span>, <b>string</b> <span id="r24 rd" class="r24 r">name</span>, <b>bool</b> <span id="r25 rd" class="r25 r">defaultValue</span>)
+        {
+            <b>return</b> <a href="#837ad873a3e9358a" class="i method">getBoolean</a>(<span class="r23 r">section</span>, <b>null</b>, <span class="r24 r">name</span>, <span class="r25 r">defaultValue</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get a boolean value from the git config.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r26 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section the key is grouped within.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Subsection name, such a remote or branch name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of the key to get.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">defaultValue</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Default value to return if no value was present.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if any value or defaultValue is true, false for missing or</span>
+        <span class="c">///</span><span class="c"> explicit false.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="837ad873a3e9358a" href="R/837ad873a3e9358a.html" target="n" data-glyph="72,1" class="i method">getBoolean</a>(<b>string</b> <span id="r26 rd" class="r26 r">section</span>, <b>string</b> <span id="r27 rd" class="r27 r">subsection</span>, <b>string</b> <span id="r28 rd" class="r28 r">name</span>, <b>bool</b> <span id="r29 rd" class="r29 r">defaultValue</span>)
+        {
+            <b>string</b> <span id="r30 rd" class="r30 r">n</span> = <a href="#5f8b4e4a9f90e10b" class="i method">getRawString</a>(<span class="r26 r">section</span>, <span class="r27 r">subsection</span>, <span class="r28 r">name</span>);
+            <b>if</b> (<span class="r30 r">n</span> == <b>null</b>)
+                <b>return</b> <span class="r29 r">defaultValue</span>;
+
+            <b>if</b> (<a href="#d6caaf738d49c13c" class="i field">MagicEmptyValue</a> == <span class="r30 r">n</span>)
+            {
+                <b>return true</b>;
+            }
+
+            <b>try</b>
+            {
+                <b>return</b> <a href="Util/StringUtils.cs.html#e32b9dc7a2f51fc1" class="t t">StringUtils</a>.<a href="Util/StringUtils.cs.html#5bfe2f5ca3e926b3" class="i method">toBoolean</a>(<span class="r30 r">n</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#109b3ef6299ef9df" class="t t">ArgumentException</a> <span id="r31 rd" class="r31 r">e</span>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#faac7c530516eefc" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid boolean value: &quot;</span> + <span class="r26 r">section</span> + <span class="s">&quot;.&quot;</span> + <span class="r28 r">name</span> + <span class="s">&quot;=&quot;</span> + <span class="r30 r">n</span>, <span class="r31 r">e</span>);
+            }
+
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get string value.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The section.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The subsection for the value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The key name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> value from git config.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="d215890433ed9633" href="R/d215890433ed9633.html" target="n" data-glyph="72,1" class="i method">getString</a>(<b>string</b> <span id="r32 rd" class="r32 r">section</span>, <b>string</b> <span id="r33 rd" class="r33 r">subsection</span>, <b>string</b> <span id="r34 rd" class="r34 r">name</span>)
+        {
+            <b>return</b> <a href="#5f8b4e4a9f90e10b" class="i method">getRawString</a>(<span class="r32 r">section</span>, <span class="r33 r">subsection</span>, <span class="r34 r">name</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get a list of string values</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If this instance was created with a base, the base&#39;s values are returned</span>
+        <span class="c">///</span><span class="c"> first (if any).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The section.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The subsection for the value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The key name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Array of zero or more values from the configuration.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b>[] <a id="54d4457a8f271a2e" href="R/54d4457a8f271a2e.html" target="n" data-glyph="72,1" class="i method">getStringList</a>(<b>string</b> <span id="r35 rd" class="r35 r">section</span>, <b>string</b> <span id="r36 rd" class="r36 r">subsection</span>, <b>string</b> <span id="r37 rd" class="r37 r">name</span>)
+        {
+            <b>string</b>[] <span id="r38 rd" class="r38 r">baseList</span> = <a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a> != <b>null</b> ? <a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a>.<a href="#54d4457a8f271a2e" class="i method">getStringList</a>(<span class="r35 r">section</span>, <span class="r36 r">subsection</span>, <span class="r37 r">name</span>) : <a href="#c9bf8efddfa3510a" class="i field">EmptyStringArray</a>;
+
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r39 rd" class="r39 r">lst</span> = <a href="#26b7ddd8f6271ac9" class="i method">getRawStringList</a>(<span class="r35 r">section</span>, <span class="r36 r">subsection</span>, <span class="r37 r">name</span>);
+            <b>if</b> (<span class="r39 r">lst</span> != <b>null</b>)
+            {
+                <b>var</b> <span id="r40 rd" class="r40 r">res</span> = <b>new</b> <b>string</b>[<span class="r38 r">baseList</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> + <span class="r39 r">lst</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>];
+                <b>int</b> <span id="r41 rd" class="r41 r">idx</span> = <span class="r38 r">baseList</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r38 r">baseList</span>, 0, <span class="r40 r">res</span>, 0, <span class="r41 r">idx</span>);
+
+                <b>foreach</b> (<b>string</b> <span id="r42 rd" class="r42 r">val</span> <b>in</b> <span class="r39 r">lst</span>)
+                {
+                    <span class="r40 r">res</span>[<span class="r41 r">idx</span>++] = <span class="r42 r">val</span>;
+                }
+
+                <b>return</b> <span class="r40 r">res</span>;
+            }
+
+            <b>return</b> <span class="r38 r">baseList</span>;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section to search for. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> set of all subsections of specified section within this</span>
+        <span class="c">///</span><span class="c"> configuration and its base configuration; may be empty if no</span>
+        <span class="c">///</span><span class="c"> subsection exists.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <a id="8263c47c5d03cc41" href="R/8263c47c5d03cc41.html" target="n" data-glyph="72,1" class="i method">getSubsections</a>(<b>string</b> <span id="r43 rd" class="r43 r">section</span>)
+        {
+            <b>return</b> <a href="#f19a54a6a2970a05" class="i method">get</a>(<b>new</b> <a href="#f68d1922a241cca8" class="t constructor">SubsectionNames</a>(<span class="r43 r">section</span>));
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain a handle to a parsed set of configuration values.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">parser</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Parser which can create the model if it is not already</span>
+        <span class="c">///</span><span class="c"> available in this configuration file. The parser is also used</span>
+        <span class="c">///</span><span class="c"> as the key into a cache and must obey the hashCode and equals</span>
+        <span class="c">///</span><span class="c"> contract in order to reuse a parsed model.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The parsed object instance, which is cached inside this config.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r45 r t">T</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Type of configuration model to return.</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+        <b>public</b> <span class="r45 r t">T</span> <a id="f19a54a6a2970a05" href="R/f19a54a6a2970a05.html" target="n" data-glyph="72,1" class="i method">get</a>&lt;<span id="r45 rd t" class="r45 r t">T</span>&gt;(<a href="#c759ea511b958d64" class="t t">SectionParser</a>&lt;<span class="r45 r t">T</span>&gt; <span id="r44 rd" class="r44 r">parser</span>)
+        {
+            <a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r46 rd" class="r46 r">myState</span> = <a href="#fe3014bcfda9fa29" class="i method">getState</a>();
+            <span class="r45 r t">T</span> <span id="r47 rd" class="r47 r">obj</span> = (<span class="r45 r t">T</span>)<span class="r46 r">myState</span>.<a href="#17b0cce670b7349e" class="i field">Cache</a>.<a href="Util/Extensions.cs.html#fb55986b31af72cd" class="i method">get</a>&lt;<b>object</b>, <b>object</b>&gt;(<span class="r44 r">parser</span>);
+            <b>if</b> (<a href="@0@mscorlib/A.html#f2a579c50b414717" class="i method">Equals</a>(<span class="r47 r">obj</span>, <b>default</b>(<span class="r45 r t">T</span>)))
+            {
+                <span class="r47 r">obj</span> = (<span class="r45 r t">T</span>)<span class="r44 r">parser</span>.<a href="#0b7d07c154ed2127" class="i method">parse</a>(<a href="#14d5730154bea165" class="k">this</a>);
+                <span class="r46 r">myState</span>.<a href="#17b0cce670b7349e" class="i field">Cache</a>.<a href="Util/Extensions.cs.html#7210ca1e7c9f62dc" class="i method">put</a>&lt;<b>object</b>, <b>object</b>&gt;(<span class="r44 r">parser</span>, <span class="r47 r">obj</span>);
+            }
+            <b>return</b> <span class="r47 r">obj</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Remove a cached configuration object.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> If the associated configuration object has not yet been cached, this</span>
+        <span class="c">///</span><span class="c"> method has no effect.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r48 r">parser</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parser used to obtain the configuration object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">seealso</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f19a54a6a2970a05" class="i method">get</a>{<span class="r49 r t">T</span>}<span class="c">&quot;</span><span class="c">/&gt;</span>
+        <b>public void</b> <a id="de3570e2e0491bb1" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">uncache</a>&lt;<span id="r50 rd t" class="r50 r t">T</span>&gt;(<a href="#c759ea511b958d64" class="t t">SectionParser</a>&lt;<span class="r50 r t">T</span>&gt; <span id="r48 rd" class="r48 r">parser</span>)
+        {
+            <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>().<a href="#17b0cce670b7349e" class="i field">Cache</a>.<a href="@0@mscorlib/A.html#a6db5ffdec557169" class="i method">Remove</a>(<span class="r48 r">parser</span>);
+        }
+
+        <b>private string</b> <a id="5f8b4e4a9f90e10b" href="R/5f8b4e4a9f90e10b.html" target="n" data-glyph="76,1" class="i method">getRawString</a>(<b>string</b> <span id="r51 rd" class="r51 r">section</span>, <b>string</b> <span id="r52 rd" class="r52 r">subsection</span>, <b>string</b> <span id="r53 rd" class="r53 r">name</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r54 rd" class="r54 r">lst</span> = <a href="#26b7ddd8f6271ac9" class="i method">getRawStringList</a>(<span class="r51 r">section</span>, <span class="r52 r">subsection</span>, <span class="r53 r">name</span>);
+
+            <b>if</b> (<span class="r54 r">lst</span> != <b>null</b> &amp;&amp; <span class="r54 r">lst</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> &gt; 0)
+                <b>return</b> <span class="r54 r">lst</span>[0];
+
+            <b>if</b> (<a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a> != <b>null</b>)
+                <b>return</b> <a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a>.<a href="#5f8b4e4a9f90e10b" class="i method">getRawString</a>(<span class="r51 r">section</span>, <span class="r52 r">subsection</span>, <span class="r53 r">name</span>);
+
+            <b>return null</b>;
+        }
+
+        <b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="26b7ddd8f6271ac9" href="R/26b7ddd8f6271ac9.html" target="n" data-glyph="76,1" class="i method">getRawStringList</a>(<b>string</b> <span id="r55 rd" class="r55 r">section</span>, <b>string</b> <span id="r56 rd" class="r56 r">subsection</span>, <b>string</b> <span id="r57 rd" class="r57 r">name</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r58 rd" class="r58 r">r</span> = <b>null</b>;
+            <b>foreach</b> (<a href="#10091787f11bf008" class="t t">Entry</a> <span id="r59 rd" class="r59 r">e</span> <b>in</b> <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>().<a href="#2ae53b17f519fc02" class="i field">EntryList</a>)
+            {
+                <b>if</b> (<span class="r59 r">e</span>.<a href="#d9fe4cd548147269" class="i method">match</a>(<span class="r55 r">section</span>, <span class="r56 r">subsection</span>, <span class="r57 r">name</span>))
+                    <span class="r58 r">r</span> = <a href="#8d82a70aaa484db1" class="i method">add</a>(<span class="r58 r">r</span>, <span class="r59 r">e</span>.<a href="#9b1ce829b706f8bb" class="i field">value</a>);
+            }
+
+            <b>return</b> <span class="r58 r">r</span>;
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <a id="8d82a70aaa484db1" href="R/8d82a70aaa484db1.html" target="n" data-glyph="76,1" class="i method">add</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r60 rd" class="r60 r">curr</span>, <b>string</b> <span id="r61 rd" class="r61 r">value</span>)
+        {
+            <b>if</b> (<span class="r60 r">curr</span> == <b>null</b>)
+                <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt; { <span class="r61 r">value</span> };
+
+            <span class="r60 r">curr</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r61 r">value</span>);
+            <b>return</b> <span class="r60 r">curr</span>;
+        }
+
+        <b>internal</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="fe3014bcfda9fa29" href="R/fe3014bcfda9fa29.html" target="n" data-glyph="74,1" class="i method">getState</a>()
+        {
+            <a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r62 rd" class="r62 r">cur</span>, <span id="r63 rd" class="r63 r">upd</span>;
+            <b>do</b>
+            {
+                <span class="r62 r">cur</span> = <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r64 rd" class="r64 r">@base</span> = <a href="#a620eeb6b43fed5e" class="i method">getBaseState</a>();
+                <b>if</b> (<span class="r62 r">cur</span>.<a href="#62e083206bbc0e8e" class="i field">baseState</a> == <span class="r64 r">@base</span>)
+                    <b>return</b> <span class="r62 r">cur</span>;
+                <span class="r63 r">upd</span> = <b>new</b> <a href="#10f375558bc754bd" class="t constructor">State</a>(<span class="r62 r">cur</span>.<a href="#2ae53b17f519fc02" class="i field">EntryList</a>, <span class="r64 r">@base</span>);
+            } <b>while</b> (!<a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r62 r">cur</span>, <span class="r63 r">upd</span>));
+            <b>return</b> <span class="r63 r">upd</span>;
+        }
+
+        <b>private</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="a620eeb6b43fed5e" href="R/a620eeb6b43fed5e.html" target="n" data-glyph="76,1" class="i method">getBaseState</a>()
+        {
+            <b>return</b> <a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a> != <b>null</b> ? <a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a>.<a href="#fe3014bcfda9fa29" class="i method">getState</a>() : <b>null</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add or modify a configuration value. The parameters will result in a</span>
+        <span class="c">///</span><span class="c"> configuration entry like this.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> [section </span><span class="c">&amp;quot;</span><span class="c">subsection</span><span class="c">&amp;quot;</span><span class="c">]</span>
+        <span class="c">///</span><span class="c"> name = value</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r65 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section name, e.g &quot;branch&quot;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r66 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Optional subsection value, e.g. a branch name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r67 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter name, e.g. &quot;filemode&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r68 r">value</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="a8265e627e22e1fe" href="R/a8265e627e22e1fe.html" target="n" data-glyph="72,1" class="i method">setInt</a>(<b>string</b> <span id="r65 rd" class="r65 r">section</span>, <b>string</b> <span id="r66 rd" class="r66 r">subsection</span>, <b>string</b> <span id="r67 rd" class="r67 r">name</span>, <b>int</b> <span id="r68 rd" class="r68 r">value</span>)
+        {
+            <a href="#df55201fd08be0a9" class="i method">setLong</a>(<span class="r65 r">section</span>, <span class="r66 r">subsection</span>, <span class="r67 r">name</span>, <span class="r68 r">value</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add or modify a configuration value. The parameters will result in a</span>
+        <span class="c">///</span><span class="c">	configuration entry like this.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> [section </span><span class="c">&amp;quot;</span><span class="c">subsection</span><span class="c">&amp;quot;</span><span class="c">]</span>
+        <span class="c">///</span><span class="c"> name = value</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r69 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section name, e.g &quot;branch&quot;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r70 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Optional subsection value, e.g. a branch name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r71 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter name, e.g. &quot;filemode&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r72 r">value</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="df55201fd08be0a9" href="R/df55201fd08be0a9.html" target="n" data-glyph="72,1" class="i method">setLong</a>(<b>string</b> <span id="r69 rd" class="r69 r">section</span>, <b>string</b> <span id="r70 rd" class="r70 r">subsection</span>, <b>string</b> <span id="r71 rd" class="r71 r">name</span>, <b>long</b> <span id="r72 rd" class="r72 r">value</span>)
+        {
+            <b>string</b> <span id="r73 rd" class="r73 r">s</span>;
+            <b>if</b> (<span class="r72 r">value</span> &gt;= <a href="#c623019372b04f82" class="i field">GiB</a> &amp;&amp; (<span class="r72 r">value</span> % <a href="#c623019372b04f82" class="i field">GiB</a>) == 0)
+                <span class="r73 r">s</span> = (<span class="r72 r">value</span> / <a href="#c623019372b04f82" class="i field">GiB</a>) + <span class="s">&quot; g&quot;</span>;
+            <b>else if</b> (<span class="r72 r">value</span> &gt;= <a href="#fe5374edacb46658" class="i field">MiB</a> &amp;&amp; (<span class="r72 r">value</span> % <a href="#fe5374edacb46658" class="i field">MiB</a>) == 0)
+                <span class="r73 r">s</span> = (<span class="r72 r">value</span> / <a href="#fe5374edacb46658" class="i field">MiB</a>) + <span class="s">&quot; m&quot;</span>;
+            <b>else if</b> (<span class="r72 r">value</span> &gt;= <a href="#ef2f3d81786f7a59" class="i field">KiB</a> &amp;&amp; (<span class="r72 r">value</span> % <a href="#ef2f3d81786f7a59" class="i field">KiB</a>) == 0)
+                <span class="r73 r">s</span> = (<span class="r72 r">value</span> / <a href="#ef2f3d81786f7a59" class="i field">KiB</a>) + <span class="s">&quot; k&quot;</span>;
+            <b>else</b>
+                <span class="r73 r">s</span> = <span class="r72 r">value</span>.<a href="@0@mscorlib/A.html#76873dfc1b95c712" class="i method">ToString</a>();
+
+            <a href="#e98e171c2612801f" class="i method">setString</a>(<span class="r69 r">section</span>, <span class="r70 r">subsection</span>, <span class="r71 r">name</span>, <span class="r73 r">s</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add or modify a configuration value. The parameters will result in a</span>
+        <span class="c">///</span><span class="c">	configuration entry like this.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> [section </span><span class="c">&amp;quot;</span><span class="c">subsection</span><span class="c">&amp;quot;</span><span class="c">]</span>
+        <span class="c">///</span><span class="c"> name = value</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r74 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section name, e.g &quot;branch&quot;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r75 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Optional subsection value, e.g. a branch name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r76 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter name, e.g. &quot;filemode&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r77 r">value</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="6d53f794eead37b2" href="R/6d53f794eead37b2.html" target="n" data-glyph="72,1" class="i method">setBoolean</a>(<b>string</b> <span id="r74 rd" class="r74 r">section</span>, <b>string</b> <span id="r75 rd" class="r75 r">subsection</span>, <b>string</b> <span id="r76 rd" class="r76 r">name</span>, <b>bool</b> <span id="r77 rd" class="r77 r">value</span>)
+        {
+            <a href="#e98e171c2612801f" class="i method">setString</a>(<span class="r74 r">section</span>, <span class="r75 r">subsection</span>, <span class="r76 r">name</span>, <span class="r77 r">value</span> ? <span class="s">&quot;true&quot;</span> : <span class="s">&quot;false&quot;</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Add or modify a configuration value. The parameters will result in a</span>
+        <span class="c">///</span><span class="c">	configuration entry like this.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> [section </span><span class="c">&amp;quot;</span><span class="c">subsection</span><span class="c">&amp;quot;</span><span class="c">]</span>
+        <span class="c">///</span><span class="c"> name = value</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r78 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section name, e.g &quot;branch&quot;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r79 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Optional subsection value, e.g. a branch name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r80 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter name, e.g. &quot;filemode&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r81 r">value</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="e98e171c2612801f" href="R/e98e171c2612801f.html" target="n" data-glyph="72,1" class="i method">setString</a>(<b>string</b> <span id="r78 rd" class="r78 r">section</span>, <b>string</b> <span id="r79 rd" class="r79 r">subsection</span>, <b>string</b> <span id="r80 rd" class="r80 r">name</span>, <b>string</b> <span id="r81 rd" class="r81 r">value</span>)
+        {
+            <a href="#b95493188d5fdd50" class="i method">setStringList</a>(<span class="r78 r">section</span>, <span class="r79 r">subsection</span>, <span class="r80 r">name</span>, <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt; { <span class="r81 r">value</span> });
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Remove a configuration value.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r82 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section name, e.g &quot;branch&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r83 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Optional subsection value, e.g. a branch name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r84 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter name, e.g. &quot;filemode&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="9b73f59a2c34d053" href="R/9b73f59a2c34d053.html" target="n" data-glyph="72,1" class="i method">unset</a>(<b>string</b> <span id="r82 rd" class="r82 r">section</span>, <b>string</b> <span id="r83 rd" class="r83 r">subsection</span>, <b>string</b> <span id="r84 rd" class="r84 r">name</span>)
+        {
+            <a href="#b95493188d5fdd50" class="i method">setStringList</a>(<span class="r82 r">section</span>, <span class="r83 r">subsection</span>, <span class="r84 r">name</span>, <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;());
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Remove all configuration values under a single section.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r85 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">section name, e.g &quot;branch&quot;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r86 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">optional subsection value, e.g. a branch name</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="9057f7b6e2cf9661" href="R/9057f7b6e2cf9661.html" target="n" data-glyph="72,1" class="i method">unsetSection</a>(<b>string</b> <span id="r85 rd" class="r85 r">section</span>, <b>string</b> <span id="r86 rd" class="r86 r">subsection</span>)
+        {
+            <a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r87 rd" class="r87 r">src</span>, <span id="r88 rd" class="r88 r">res</span>;
+            <b>do</b>
+            {
+                <span class="r87 r">src</span> = <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <span class="r88 r">res</span> = <a href="#2422cd3808a92042" class="i method">unsetSection</a>(<span class="r87 r">src</span>, <span class="r85 r">section</span>, <span class="r86 r">subsection</span>);
+            } <b>while</b> (!<a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r87 r">src</span>, <span class="r88 r">res</span>));
+        }
+
+        <b>private</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="2422cd3808a92042" href="R/2422cd3808a92042.html" target="n" data-glyph="76,1" class="i method">unsetSection</a>(<a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r89 rd" class="r89 r">srcState</span>, <b>string</b> <span id="r90 rd" class="r90 r">section</span>,
+                <b>string</b> <span id="r91 rd" class="r91 r">subsection</span>)
+        {
+            <b>int</b> <span id="r92 rd" class="r92 r">max</span> = <span class="r89 r">srcState</span>.<a href="#2ae53b17f519fc02" class="i field">EntryList</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>;
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r93 rd" class="r93 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt;(<span class="r92 r">max</span>);
+
+            <b>bool</b> <span id="r94 rd" class="r94 r">lastWasMatch</span> = <b>false</b>;
+            <b>foreach</b> (<a href="#10091787f11bf008" class="t t">Entry</a> <span id="r95 rd" class="r95 r">e</span> <b>in</b> <span class="r89 r">srcState</span>.<a href="#2ae53b17f519fc02" class="i field">EntryList</a>)
+            {
+                <b>if</b> (<span class="r95 r">e</span>.<a href="#c8b625227639fd50" class="i method">match</a>(<span class="r90 r">section</span>, <span class="r91 r">subsection</span>))
+                {
+                    <span class="c">// Skip this record, it&#39;s for the section we are removing.</span>
+                    <span class="r94 r">lastWasMatch</span> = <b>true</b>;
+                    <b>continue</b>;
+                }
+
+                <b>if</b> (<span class="r94 r">lastWasMatch</span> &amp;&amp; <span class="r95 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> == <b>null</b> &amp;&amp; <span class="r95 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a> == <b>null</b>)
+                    <b>continue</b>; <span class="c">// skip this padding line in the section.</span>
+                <span class="r93 r">r</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r95 r">e</span>);
+            }
+
+            <b>return</b> <a href="#d4ae958d56aef454" class="i method">newState</a>(<span class="r93 r">r</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Set a configuration value.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> [section </span><span class="c">&amp;quot;</span><span class="c">subsection</span><span class="c">&amp;quot;</span><span class="c">]</span>
+        <span class="c">///</span><span class="c"> name = value</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">pre</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r96 r">section</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Section name, e.g &quot;branch&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r97 r">subsection</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Optional subsection value, e.g. a branch name.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r98 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Parameter name, e.g. &quot;filemode&quot;.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r99 r">values</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">List of zero or more values for this key.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="b95493188d5fdd50" href="R/b95493188d5fdd50.html" target="n" data-glyph="72,1" class="i method">setStringList</a>(<b>string</b> <span id="r96 rd" class="r96 r">section</span>, <b>string</b> <span id="r97 rd" class="r97 r">subsection</span>, <b>string</b> <span id="r98 rd" class="r98 r">name</span>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<b>string</b>&gt; <span id="r99 rd" class="r99 r">values</span>)
+        {
+            <a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r100 rd" class="r100 r">src</span>, <span id="r101 rd" class="r101 r">res</span>;
+            <b>do</b>
+            {
+                <span class="r100 r">src</span> = <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+                <span class="r101 r">res</span> = <a href="#c857d767e67a99d6" class="i method">replaceStringList</a>(<span class="r100 r">src</span>, <span class="r96 r">section</span>, <span class="r97 r">subsection</span>, <span class="r98 r">name</span>, <span class="r99 r">values</span>);
+            } <b>while</b> (!<a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r100 r">src</span>, <span class="r101 r">res</span>));
+        }
+
+        <b>private</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="c857d767e67a99d6" href="R/c857d767e67a99d6.html" target="n" data-glyph="76,1" class="i method">replaceStringList</a>(<a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r102 rd" class="r102 r">srcState</span>, <b>string</b> <span id="r103 rd" class="r103 r">section</span>, <b>string</b> <span id="r104 rd" class="r104 r">subsection</span>, <b>string</b> <span id="r105 rd" class="r105 r">name</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <span id="r106 rd" class="r106 r">values</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt; <span id="r107 rd" class="r107 r">entries</span> = <a href="#d556c7c74f96a37f" class="i method">copy</a>(<span class="r102 r">srcState</span>, <span class="r106 r">values</span>);
+            <b>int</b> <span id="r108 rd" class="r108 r">entryIndex</span> = 0;
+            <b>int</b> <span id="r109 rd" class="r109 r">valueIndex</span> = 0;
+            <b>int</b> <span id="r110 rd" class="r110 r">insertPosition</span> = -1;
+
+            <span class="c">// Reset the first n Entry objects that match this input name.</span>
+            <span class="c">//</span>
+            <b>while</b> (<span class="r108 r">entryIndex</span> &lt; <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> &amp;&amp; <span class="r109 r">valueIndex</span> &lt; <span class="r106 r">values</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>)
+            {
+                <a href="#10091787f11bf008" class="t t">Entry</a> <span id="r111 rd" class="r111 r">e</span> = <span class="r107 r">entries</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r108 r">entryIndex</span>];
+                <b>if</b> (<span class="r111 r">e</span>.<a href="#d9fe4cd548147269" class="i method">match</a>(<span class="r103 r">section</span>, <span class="r104 r">subsection</span>, <span class="r105 r">name</span>))
+                {
+                    <span class="r107 r">entries</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r108 r">entryIndex</span>] = <span class="r111 r">e</span>.<a href="#659c037c8f4f64e3" class="i method">forValue</a>(<span class="r106 r">values</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r109 r">valueIndex</span>++]);
+                    <span class="r110 r">insertPosition</span> = <span class="r108 r">entryIndex</span> + 1;
+                }
+                <span class="r108 r">entryIndex</span>++;
+            }
+
+            <span class="c">// Remove any extra Entry objects that we no longer need.</span>
+            <span class="c">//</span>
+            <b>if</b> (<span class="r109 r">valueIndex</span> == <span class="r106 r">values</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &amp;&amp; <span class="r108 r">entryIndex</span> &lt; <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+            {
+                <b>while</b> (<span class="r108 r">entryIndex</span> &lt; <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+                {
+                    <a href="#10091787f11bf008" class="t t">Entry</a> <span id="r112 rd" class="r112 r">e</span> = <span class="r107 r">entries</span><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r108 r">entryIndex</span>++];
+                    <b>if</b> (<span class="r112 r">e</span>.<a href="#d9fe4cd548147269" class="i method">match</a>(<span class="r103 r">section</span>, <span class="r104 r">subsection</span>, <span class="r105 r">name</span>))
+                    {
+                        <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#3d46113cc199059a" class="i method">RemoveAt</a>(--<span class="r108 r">entryIndex</span>);
+                    }
+                }
+            }
+
+            <span class="c">// Insert new Entry objects for additional/new values.</span>
+            <span class="c">//</span>
+            <b>if</b> (<span class="r109 r">valueIndex</span> &lt; <span class="r106 r">values</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> &amp;&amp; <span class="r108 r">entryIndex</span> == <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+            {
+                <b>if</b> (<span class="r110 r">insertPosition</span> &lt; 0)
+                {
+                    <span class="c">// We didn&#39;t find a matching key above, but maybe there</span>
+                    <span class="c">// is already a section available that matches. Insert</span>
+                    <span class="c">// after the last key of that section.</span>
+                    <span class="c">//</span>
+                    <span class="r110 r">insertPosition</span> = <a href="#7647d22201a57ce8" class="i method">findSectionEnd</a>(<span class="r107 r">entries</span>, <span class="r103 r">section</span>, <span class="r104 r">subsection</span>);
+                }
+
+                <b>if</b> (<span class="r110 r">insertPosition</span> &lt; 0)
+                {
+                    <span class="c">// We didn&#39;t find any matching section header for this key,</span>
+                    <span class="c">// so we must create a new section header at the end.</span>
+                    <span class="c">//</span>
+                    <a href="#10091787f11bf008" class="k">var</a> <span id="r113 rd" class="r113 r">e</span> = <b>new</b> <a href="#10091787f11bf008" class="t constructor">Entry</a> { <a href="#1ae2cb584223312c" class="i field">section</a> = <span class="r103 r">section</span>, <a href="#810c6bae8f8b901d" class="i field">subsection</a> = <span class="r104 r">subsection</span> };
+                    <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r113 r">e</span>);
+                    <span class="r110 r">insertPosition</span> = <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>;
+                }
+
+                <b>while</b> (<span class="r109 r">valueIndex</span> &lt; <span class="r106 r">values</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>)
+                {
+                    <a href="#10091787f11bf008" class="k">var</a> <span id="r114 rd" class="r114 r">e</span> = <b>new</b> <a href="#10091787f11bf008" class="t constructor">Entry</a>
+                                {
+                                    <a href="#1ae2cb584223312c" class="i field">section</a> = <span class="r103 r">section</span>,
+                                    <a href="#810c6bae8f8b901d" class="i field">subsection</a> = <span class="r104 r">subsection</span>,
+                                    <a href="#1ca9fde4ca910403" class="i field">name</a> = <span class="r105 r">name</span>,
+                                    <a href="#9b1ce829b706f8bb" class="i field">value</a> = <span class="r106 r">values</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r109 r">valueIndex</span>++]
+                                };
+
+                    <span class="r107 r">entries</span>.<a href="@0@mscorlib/A.html#49c519bce0cdbd82" class="i method">Insert</a>(<span class="r110 r">insertPosition</span>++, <span class="r114 r">e</span>);
+                }
+            }
+
+            <b>return</b> <a href="#d4ae958d56aef454" class="i method">newState</a>(<span class="r107 r">entries</span>);
+        }
+
+        <b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt; <a id="d556c7c74f96a37f" href="R/d556c7c74f96a37f.html" target="n" data-glyph="76,1" class="i method">copy</a>(<a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r115 rd" class="r115 r">src</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<b>string</b>&gt; <span id="r116 rd" class="r116 r">values</span>)
+        {
+            <span class="c">// At worst we need to insert 1 line for each value, plus 1 line</span>
+            <span class="c">// for a new section header. Assume that and allocate the space.</span>
+            <span class="c">//</span>
+            <b>int</b> <span id="r117 rd" class="r117 r">max</span> = <span class="r115 r">src</span>.<a href="#2ae53b17f519fc02" class="i field">EntryList</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> + <span class="r116 r">values</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> + 1;
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r118 rd" class="r118 r">r</span> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt;(<span class="r117 r">max</span>);
+            <span class="r118 r">r</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<span class="r115 r">src</span>.<a href="#2ae53b17f519fc02" class="i field">EntryList</a>);
+            <b>return</b> <span class="r118 r">r</span>;
+        }
+
+        <b>private static int</b> <a id="7647d22201a57ce8" href="R/7647d22201a57ce8.html" target="n" data-glyph="76,1" class="i method">findSectionEnd</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt; <span id="r119 rd" class="r119 r">entries</span>, <b>string</b> <span id="r120 rd" class="r120 r">section</span>, <b>string</b> <span id="r121 rd" class="r121 r">subsection</span>)
+        {
+            <b>for</b> (<b>int</b> <span id="r122 rd" class="r122 r">i</span> = 0; <span class="r122 r">i</span> &lt; <span class="r119 r">entries</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>; <span class="r122 r">i</span>++)
+            {
+                <a href="#10091787f11bf008" class="t t">Entry</a> <span id="r123 rd" class="r123 r">e</span> = <span class="r119 r">entries</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r122 r">i</span>];
+                <b>if</b> (<span class="r123 r">e</span>.<a href="#d9fe4cd548147269" class="i method">match</a>(<span class="r120 r">section</span>, <span class="r121 r">subsection</span>, <b>null</b>))
+                {
+                    <span class="r122 r">i</span>++;
+                    <b>while</b> (<span class="r122 r">i</span> &lt; <span class="r119 r">entries</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>)
+                    {
+                        <span class="r123 r">e</span> = <span class="r119 r">entries</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r122 r">i</span>];
+                        <b>if</b> (<span class="r123 r">e</span>.<a href="#d9fe4cd548147269" class="i method">match</a>(<span class="r120 r">section</span>, <span class="r121 r">subsection</span>, <span class="r123 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a>))
+                            <span class="r122 r">i</span>++;
+                        <b>else
+                            break</b>;
+                    }
+                    <b>return</b> <span class="r122 r">i</span>;
+                }
+            }
+            <b>return</b> -1;
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> This configuration, formatted as a Git style text file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="03ec1cbbf80dc946" href="R/03ec1cbbf80dc946.html" target="n" data-glyph="72,1" class="i method">toText</a>()
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r124 rd" class="r124 r">o</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <b>foreach</b> (<a href="#10091787f11bf008" class="t t">Entry</a> <span id="r125 rd" class="r125 r">e</span> <b>in</b> <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>().<a href="#2ae53b17f519fc02" class="i field">EntryList</a>)
+            {
+                <b>if</b> (<span class="r125 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a> != <b>null</b>)
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r125 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a>);
+                <b>if</b> (<span class="r125 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> != <b>null</b> &amp;&amp; <span class="r125 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a> == <b>null</b>)
+                {
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;[&#39;</span>);
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r125 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a>);
+
+                    <b>if</b> (<span class="r125 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a> != <b>null</b>)
+                    {
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;&quot;&#39;</span>);
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#ca507777cbaad0e5" class="i method">EscapeValue</a>(<span class="r125 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a>));
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;&quot;&#39;</span>);
+                    }
+
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;]&#39;</span>);
+                }
+                <b>else if</b> (<span class="r125 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> != <b>null</b> &amp;&amp; <span class="r125 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a> != <b>null</b>)
+                {
+                    <b>if</b> (<span class="r125 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a> == <b>null</b> || <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r125 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a>))
+                    {
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\t&#39;</span>);
+                    }
+
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r125 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a>);
+
+                    <b>if</b> (<a href="#d6caaf738d49c13c" class="i field">MagicEmptyValue</a> != <span class="r125 r">e</span>.<a href="#9b1ce829b706f8bb" class="i field">value</a>)
+                    {
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot; =&quot;</span>);
+                        <b>if</b> (<span class="r125 r">e</span>.<a href="#9b1ce829b706f8bb" class="i field">value</a> != <b>null</b>)
+                        {
+                            <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot; &quot;</span>);
+                            <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#ca507777cbaad0e5" class="i method">EscapeValue</a>(<span class="r125 r">e</span>.<a href="#9b1ce829b706f8bb" class="i field">value</a>));
+                        }
+                    }
+
+                    <b>if</b> (<span class="r125 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a> != <b>null</b>)
+                    {
+                        <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+                    }
+                }
+
+                <b>if</b> (<span class="r125 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a> != <b>null</b>)
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="r125 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a>);
+                {
+                    <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\n&#39;</span>);
+                }
+            }
+            <b>return</b> <span class="r124 r">o</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Clear this configuration and reset to the contents of the parsed string.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r126 r">text</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Git style text file listing configuration properties.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Exceptions/ConfigInvalidException.cs.html#bdcda0745f6a996d" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The text supplied is not formatted correctly. No changes were</span>
+        <span class="c">///</span><span class="c"> made to this.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="10817fa98b49f638" href="R/10817fa98b49f638.html" target="n" data-glyph="72,1" class="i method">fromText</a>(<b>string</b> <span id="r126 rd" class="r126 r">text</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r127 rd" class="r127 r">newEntries</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt;();
+            <a href="#4c63fb6b6c1cb87c" class="k">var</a> <span id="r128 rd" class="r128 r">i</span> = <b>new</b> <a href="#5a94870bca8449c2" class="t constructor">ConfigReader</a>(<span class="r126 r">text</span>);
+            <a href="#10091787f11bf008" class="t t">Entry</a> <span id="r129 rd" class="r129 r">last</span> = <b>null</b>;
+            <a href="#10091787f11bf008" class="k">var</a> <span id="r130 rd" class="r130 r">e</span> = <b>new</b> <a href="#10091787f11bf008" class="t constructor">Entry</a>();
+
+            <b>while</b> (<b>true</b>)
+            {
+                <b>int</b> <span id="r131 rd" class="r131 r">input</span> = <span class="r128 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                <b>if</b> (-1 == <span class="r131 r">input</span>)
+                {
+                    <b>break</b>;
+                }
+
+                <a href="@0@mscorlib/A.html#02f2b1a33b09362d" class="k">var</a> <span id="r132 rd" class="r132 r">c</span> = (<b>char</b>)<span class="r131 r">input</span>;
+                <b>if</b> (<span class="s">&#39;\n&#39;</span> == <span class="r132 r">c</span>)
+                {
+                    <span class="r127 r">newEntries</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r130 r">e</span>);
+                    <b>if</b> (<span class="r130 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> != <b>null</b>)
+                        <span class="r129 r">last</span> = <span class="r130 r">e</span>;
+                    <span class="r130 r">e</span> = <b>new</b> <a href="#10091787f11bf008" class="t constructor">Entry</a>();
+                }
+                <b>else if</b> (<span class="r130 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a> != <b>null</b>)
+                {
+                    <span class="c">// Everything up until the end-of-line is in the suffix.</span>
+                    <span class="r130 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a> += <span class="r132 r">c</span>;
+                }
+                <b>else if</b> (<span class="s">&#39;;&#39;</span> == <span class="r132 r">c</span> || <span class="s">&#39;#&#39;</span> == <span class="r132 r">c</span>)
+                {
+                    <span class="c">// The rest of this line is a comment; put into suffix.</span>
+                    <span class="r130 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a> = <b>new</b> <b>string</b>(<span class="r132 r">c</span>, 1);
+                }
+                <b>else if</b> (<span class="r130 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> == <b>null</b> &amp;&amp; <b>char</b>.<a href="@0@mscorlib/A.html#cda2cc9b76535970" class="i method">IsWhiteSpace</a>(<span class="r132 r">c</span>))
+                {
+                    <span class="c">// Save the leading whitespace (if any).</span>
+                    <b>if</b> (<span class="r130 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a> == <b>null</b>)
+                    {
+                        <span class="r130 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+                    }
+                    <span class="r130 r">e</span>.<a href="#97af4ba94d2b2ee1" class="i field">prefix</a> += <span class="r132 r">c</span>;
+                }
+                <b>else if</b> (<span class="s">&#39;[&#39;</span> == <span class="r132 r">c</span>)
+                {
+                    <span class="c">// This is a section header.</span>
+                    <span class="r130 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> = <a href="#48a95fc09c7f9df6" class="i method">readSectionName</a>(<span class="r128 r">i</span>);
+                    <span class="r131 r">input</span> = <span class="r128 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                    <b>if</b> (<span class="s">&#39;&quot;&#39;</span> == <span class="r131 r">input</span>)
+                    {
+                        <span class="r130 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a> = <a href="#e6fc9d93ab7344d3" class="i method">ReadValue</a>(<span class="r128 r">i</span>, <b>true</b>, <span class="s">&#39;&quot;&#39;</span>);
+                        <span class="r131 r">input</span> = <span class="r128 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                    }
+
+                    <b>if</b> (<span class="s">&#39;]&#39;</span> != <span class="r131 r">input</span>)
+                    {
+                        <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Bad group header&quot;</span>);
+                    }
+
+                    <span class="r130 r">e</span>.<a href="#57b0fe0c175de0bb" class="i field">suffix</a> = <b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+                }
+                <b>else if</b> (<span class="r129 r">last</span> != <b>null</b>)
+                {
+                    <span class="c">// Read a value.</span>
+                    <span class="r130 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a> = <span class="r129 r">last</span>.<a href="#1ae2cb584223312c" class="i field">section</a>;
+                    <span class="r130 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a> = <span class="r129 r">last</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a>;
+                    <span class="r128 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                    <span class="r130 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a> = <a href="#b96286f8e609c603" class="i method">readKeyName</a>(<span class="r128 r">i</span>);
+                    <b>if</b> (<span class="r130 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<span class="s">&quot;\n&quot;</span>))
+                    {
+                        <span class="r130 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a> = <span class="r130 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a>.<a href="Util/StringExtension.cs.html#e3176126a9adc168" class="i method">Slice</a>(0, <span class="r130 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1);
+                        <span class="r130 r">e</span>.<a href="#9b1ce829b706f8bb" class="i field">value</a> = <a href="#d6caaf738d49c13c" class="i field">MagicEmptyValue</a>;
+                    }
+                    <b>else</b>
+                    {
+                        <span class="r130 r">e</span>.<a href="#9b1ce829b706f8bb" class="i field">value</a> = <a href="#e6fc9d93ab7344d3" class="i method">ReadValue</a>(<span class="r128 r">i</span>, <b>false</b>, -1);
+                    }
+                }
+                <b>else</b>
+                {
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Invalid line in config file&quot;</span>);
+                }
+            }
+
+            <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="#d4ae958d56aef454" class="i method">newState</a>(<span class="r127 r">newEntries</span>));
+        }
+
+        <b>private static string</b> <a id="e6fc9d93ab7344d3" href="R/e6fc9d93ab7344d3.html" target="n" data-glyph="76,1" class="i method">ReadValue</a>(<a href="#4c63fb6b6c1cb87c" class="t t">ConfigReader</a> <span id="r133 rd" class="r133 r">i</span>, <b>bool</b> <span id="r134 rd" class="r134 r">quote</span>, <b>int</b> <span id="r135 rd" class="r135 r">eol</span>)
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r136 rd" class="r136 r">value</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <b>bool</b> <span id="r137 rd" class="r137 r">space</span> = <b>false</b>;
+            <b>for</b> (; ; )
+            {
+                <b>int</b> <span id="r138 rd" class="r138 r">c</span> = <span class="r133 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                <b>if</b> (<span class="r138 r">c</span> &lt; 0)
+                {
+                    <b>if</b> (<span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> == 0)
+                        <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Unexpected end of config file&quot;</span>);
+                    <b>break</b>;
+                }
+
+                <b>if</b> (<span class="s">&#39;\n&#39;</span> == <span class="r138 r">c</span>)
+                {
+                    <b>if</b> (<span class="r134 r">quote</span>)
+                        <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Newline in quotes not allowed&quot;</span>);
+                    <span class="r133 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                    <b>break</b>;
+                }
+
+                <b>if</b> (<span class="r135 r">eol</span> == <span class="r138 r">c</span>)
+                    <b>break</b>;
+
+                <b>if</b> (!<span class="r134 r">quote</span>)
+                {
+                    <b>if</b> (<b>char</b>.<a href="@0@mscorlib/A.html#cda2cc9b76535970" class="i method">IsWhiteSpace</a>((<b>char</b>)<span class="r138 r">c</span>))
+                    {
+                        <span class="r137 r">space</span> = <b>true</b>;
+                        <b>continue</b>;
+                    }
+
+                    <b>if</b> (<span class="s">&#39;;&#39;</span> == <span class="r138 r">c</span> || <span class="s">&#39;#&#39;</span> == <span class="r138 r">c</span>)
+                    {
+                        <span class="r133 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                        <b>break</b>;
+                    }
+                }
+
+                <b>if</b> (<span class="r137 r">space</span>)
+                {
+                    <b>if</b> (<span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> &gt; 0)
+                        <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39; &#39;</span>);
+                    <span class="r137 r">space</span> = <b>false</b>;
+                }
+
+                <b>if</b> (<span class="s">&#39;\\&#39;</span> == <span class="r138 r">c</span>)
+                {
+                    <span class="r138 r">c</span> = <span class="r133 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                    <b>switch</b> (<span class="r138 r">c</span>)
+                    {
+                        <b>case</b> -1:
+                            <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;End of file in escape&quot;</span>);
+
+                        <b>case</b> <span class="s">&#39;\n&#39;</span>:
+                            <b>continue</b>;
+
+                        <b>case</b> <span class="s">&#39;t&#39;</span>:
+                            <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\t&#39;</span>);
+                            <b>continue</b>;
+
+                        <b>case</b> <span class="s">&#39;b&#39;</span>:
+                            <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\b&#39;</span>);
+                            <b>continue</b>;
+
+                        <b>case</b> <span class="s">&#39;n&#39;</span>:
+                            <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\n&#39;</span>);
+                            <b>continue</b>;
+
+                        <b>case</b> <span class="s">&#39;\\&#39;</span>:
+                            <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;\\&#39;</span>);
+                            <b>continue</b>;
+
+                        <b>case</b> <span class="s">&#39;&quot;&#39;</span>:
+                            <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>(<span class="s">&#39;&quot;&#39;</span>);
+                            <b>continue</b>;
+
+                        <b>default</b>:
+                            <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Bad escape: &quot;</span> + ((<b>char</b>)<span class="r138 r">c</span>));
+                    }
+                }
+
+                <b>if</b> (<span class="s">&#39;&quot;&#39;</span> == <span class="r138 r">c</span>)
+                {
+                    <span class="r134 r">quote</span> = !<span class="r134 r">quote</span>;
+                    <b>continue</b>;
+                }
+
+                <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>((<b>char</b>)<span class="r138 r">c</span>);
+            }
+
+            <b>return</b> <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#7d7729bd88adac53" class="i property">Length</a> &gt; 0 ? <span class="r136 r">value</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>() : <b>null</b>;
+        }
+
+        <b>private</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="67752ea8feba5da8" href="R/67752ea8feba5da8.html" target="n" data-glyph="76,1" class="i method">newState</a>()
+        {
+            <b>return</b> <b>new</b> <a href="#10f375558bc754bd" class="t constructor">State</a>(<b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt;(), <a href="#a620eeb6b43fed5e" class="i method">getBaseState</a>());
+        }
+
+        <b>private</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="d4ae958d56aef454" href="R/d4ae958d56aef454.html" target="n" data-glyph="76,1" class="i method">newState</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt; <span id="r139 rd" class="r139 r">entries</span>)
+        {
+            <b>return</b> <b>new</b> <a href="#10f375558bc754bd" class="t constructor">State</a>(<span class="r139 r">entries</span>, <a href="#a620eeb6b43fed5e" class="i method">getBaseState</a>());
+        }
+
+        <b>protected void</b> <a id="64fd56cdb1d6f4c4" href="R/64fd56cdb1d6f4c4.html" target="n" data-glyph="75,1" class="i method">clear</a>()
+        {
+            <a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#1c52a5b3c4afed44" class="i method">set</a>(<a href="#67752ea8feba5da8" class="i method">newState</a>());
+        }
+
+        <b>private static string</b> <a id="48a95fc09c7f9df6" href="R/48a95fc09c7f9df6.html" target="n" data-glyph="76,1" class="i method">readSectionName</a>(<a href="#4c63fb6b6c1cb87c" class="t t">ConfigReader</a> <span id="r140 rd" class="r140 r">i</span>)
+        {
+            <a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="k">var</a> <span id="r141 rd" class="r141 r">name</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+            <b>for</b> (; ; )
+            {
+                <b>int</b> <span id="r142 rd" class="r142 r">c</span> = <span class="r140 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                <b>if</b> (<span class="r142 r">c</span> &lt; 0)
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Unexpected end of config file&quot;</span>);
+
+                <b>if</b> (<span class="s">&#39;]&#39;</span> == <span class="r142 r">c</span>)
+                {
+                    <span class="r140 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                    <b>break</b>;
+                }
+
+                <b>if</b> (<span class="s">&#39; &#39;</span> == <span class="r142 r">c</span> || <span class="s">&#39;\t&#39;</span> == <span class="r142 r">c</span>)
+                {
+                    <b>for</b> (; ; )
+                    {
+                        <span class="r142 r">c</span> = <span class="r140 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                        <b>if</b> (<span class="r142 r">c</span> &lt; 0)
+                            <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Unexpected end of config file&quot;</span>);
+
+                        <b>if</b> (<span class="s">&#39;&quot;&#39;</span> == <span class="r142 r">c</span>)
+                        {
+                            <span class="r140 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                            <b>break</b>;
+                        }
+
+                        <b>if</b> (<span class="s">&#39; &#39;</span> == <span class="r142 r">c</span> || <span class="s">&#39;\t&#39;</span> == <span class="r142 r">c</span>)
+                        {
+                            <b>continue</b>;
+                        }
+                        <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Bad section entry: &quot;</span> + <span class="r141 r">name</span>);
+                    }
+                    <b>break</b>;
+                }
+
+                <b>if</b> (<b>char</b>.<a href="@0@mscorlib/A.html#73e61bf2c5d6ecd4" class="i method">IsLetterOrDigit</a>((<b>char</b>)<span class="r142 r">c</span>) || <span class="s">&#39;.&#39;</span> == <span class="r142 r">c</span> || <span class="s">&#39;-&#39;</span> == <span class="r142 r">c</span>)
+                    <span class="r141 r">name</span>.<a href="@0@mscorlib/A.html#a2e7c78d85807da5" class="i method">Append</a>((<b>char</b>)<span class="r142 r">c</span>);
+                <b>else
+                    throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Bad section entry: &quot;</span> + <span class="r141 r">name</span>);
+            }
+            <b>return</b> <span class="r141 r">name</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+        }
+
+        <b>private static string</b> <a id="b96286f8e609c603" href="R/b96286f8e609c603.html" target="n" data-glyph="76,1" class="i method">readKeyName</a>(<a href="#4c63fb6b6c1cb87c" class="t t">ConfigReader</a> <span id="r143 rd" class="r143 r">i</span>)
+        {
+            <b>var</b> <span id="r144 rd" class="r144 r">name</span> = <b>new</b> <span class="t constructor">StringBuffer</span>();
+            <b>for</b> (; ; )
+            {
+                <b>int</b> <span id="r145 rd" class="r145 r">c</span> = <span class="r143 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                <b>if</b> (<span class="r145 r">c</span> &lt; 0)
+                    <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Unexpected end of config file&quot;</span>);
+
+                <b>if</b> (<span class="s">&#39;=&#39;</span> == <span class="r145 r">c</span>)
+                    <b>break</b>;
+
+                <b>if</b> (<span class="s">&#39; &#39;</span> == <span class="r145 r">c</span> || <span class="s">&#39;\t&#39;</span> == <span class="r145 r">c</span>)
+                {
+                    <b>for</b> (; ; )
+                    {
+                        <span class="r145 r">c</span> = <span class="r143 r">i</span>.<a href="#6d022ac6463f8508" class="i method">Read</a>();
+                        <b>if</b> (<span class="r145 r">c</span> &lt; 0)
+                            <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Unexpected end of config file&quot;</span>);
+
+                        <b>if</b> (<span class="s">&#39;=&#39;</span> == <span class="r145 r">c</span>)
+                            <b>break</b>;
+
+                        <b>if</b> (<span class="s">&#39;;&#39;</span> == <span class="r145 r">c</span> || <span class="s">&#39;#&#39;</span> == <span class="r145 r">c</span> || <span class="s">&#39;\n&#39;</span> == <span class="r145 r">c</span>)
+                        {
+                            <span class="r143 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                            <b>break</b>;
+                        }
+
+                        <b>if</b> (<span class="s">&#39; &#39;</span> == <span class="r145 r">c</span> || <span class="s">&#39;\t&#39;</span> == <span class="r145 r">c</span>)
+                            <b>continue</b>;
+                        <b>throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Bad entry delimiter&quot;</span>);
+                    }
+                    <b>break</b>;
+                }
+
+                <b>if</b> (<b>char</b>.<a href="@0@mscorlib/A.html#73e61bf2c5d6ecd4" class="i method">IsLetterOrDigit</a>((<b>char</b>)<span class="r145 r">c</span>) || <span class="r145 r">c</span> == <span class="s">&#39;-&#39;</span>)
+                {
+                    <span class="r144 r">name</span>.<span class="i method">append</span>((<b>char</b>)<span class="r145 r">c</span>);
+                }
+                <b>else if</b> (<span class="s">&#39;\n&#39;</span> == <span class="r145 r">c</span>)
+                {
+                    <span class="r143 r">i</span>.<a href="#1cb7dd63171d7c2a" class="i method">Reset</a>();
+                    <span class="r144 r">name</span>.<span class="i method">append</span>((<b>char</b>)<span class="r145 r">c</span>);
+                    <b>break</b>;
+                }
+                <b>else
+                    throw</b> <b>new</b> <a href="Exceptions/ConfigInvalidException.cs.html#26c1f5d69f527f79" class="t constructor">ConfigInvalidException</a>(<span class="s">&quot;Bad entry name: &quot;</span> + <span class="r144 r">name</span>);
+            }
+
+            <b>return</b> <span class="r144 r">name</span>.<span class="i method">ToString</span>();
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: ConfigReader
+
+        <b>private class</b> <a id="4c63fb6b6c1cb87c" href="R/4c63fb6b6c1cb87c.html" target="n" data-glyph="4,1" class="t t">ConfigReader</a>
+        {
+            <b>private readonly string</b> <a id="651d5bceeb3ef10a" href="R/651d5bceeb3ef10a.html" target="n" data-glyph="46,2" class="i field">data</a>;
+            <b>private readonly int</b> <a id="85ca986f0cd338ef" href="R/85ca986f0cd338ef.html" target="n" data-glyph="46,2" class="i field">len</a>;
+            <b>private int</b> <a id="41c9e67e6adef3ff" href="R/41c9e67e6adef3ff.html" target="n" data-glyph="46,2" class="i field">position</a>;
+
+            <b>public</b> <a id="5a94870bca8449c2" href="R/5a94870bca8449c2.html" target="n" data-glyph="72,2" class="i constructor">ConfigReader</a>(<b>string</b> <span id="r146 rd" class="r146 r">text</span>)
+            {
+                <a href="#651d5bceeb3ef10a" class="i field">data</a> = <span class="r146 r">text</span>;
+                <a href="#85ca986f0cd338ef" class="i field">len</a> = <a href="#651d5bceeb3ef10a" class="i field">data</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>;
+            }
+
+            <b>public int</b> <a id="6d022ac6463f8508" href="R/6d022ac6463f8508.html" target="n" data-glyph="72,2" class="i method">Read</a>()
+            {
+                <b>int</b> <span id="r147 rd" class="r147 r">ret</span> = -1;
+                <b>if</b> (<a href="#41c9e67e6adef3ff" class="i field">position</a> &lt; <a href="#85ca986f0cd338ef" class="i field">len</a>)
+                {
+                    <span class="r147 r">ret</span> = <a href="#651d5bceeb3ef10a" class="i field">data</a><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><a href="#41c9e67e6adef3ff" class="i field">position</a>];
+                    <a href="#41c9e67e6adef3ff" class="i field">position</a>++;
+                }
+                <b>return</b> <span class="r147 r">ret</span>;
+            }
+
+            <b>public void</b> <a id="1cb7dd63171d7c2a" href="R/1cb7dd63171d7c2a.html" target="n" data-glyph="72,2" class="i method">Reset</a>()
+            {
+                <span class="c">// no idea what the java pendant actually does..</span>
+                <span class="c">//position = 0;</span>
+                --<a href="#41c9e67e6adef3ff" class="i field">position</a>;
+            }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: Entry
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The configuration file entry.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal class</b> <a id="10091787f11bf008" href="R/10091787f11bf008.html" target="n" data-glyph="2,1" class="t t"><span id="4a2db41c7ed6ad88">Entry</span></a>
+        {
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> The key name.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public string</b> <a id="1ca9fde4ca910403" href="R/1ca9fde4ca910403.html" target="n" data-glyph="42,2" class="i field">name</a>;
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> The text content before entry.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public string</b> <a id="97af4ba94d2b2ee1" href="R/97af4ba94d2b2ee1.html" target="n" data-glyph="42,2" class="i field">prefix</a>;
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> The section name for the entry.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public string</b> <a id="1ae2cb584223312c" href="R/1ae2cb584223312c.html" target="n" data-glyph="42,2" class="i field">section</a>;
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> Subsection name.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public string</b> <a id="810c6bae8f8b901d" href="R/810c6bae8f8b901d.html" target="n" data-glyph="42,2" class="i field">subsection</a>;
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> The text content after entry.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public string</b> <a id="57b0fe0c175de0bb" href="R/57b0fe0c175de0bb.html" target="n" data-glyph="42,2" class="i field">suffix</a>;
+
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> The value</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <b>public string</b> <a id="9b1ce829b706f8bb" href="R/9b1ce829b706f8bb.html" target="n" data-glyph="42,2" class="i field">value</a>;
+
+            <b>public</b> <a href="#10091787f11bf008" class="t t">Entry</a> <a id="659c037c8f4f64e3" href="R/659c037c8f4f64e3.html" target="n" data-glyph="72,2" class="i method">forValue</a>(<b>string</b> <span id="r148 rd" class="r148 r">newValue</span>)
+            {
+                <a href="#10091787f11bf008" class="k">var</a> <span id="r149 rd" class="r149 r">e</span> = <b>new</b> <a href="#10091787f11bf008" class="t constructor">Entry</a>
+                            {
+                                <a href="#97af4ba94d2b2ee1" class="i field">prefix</a> = <a href="#97af4ba94d2b2ee1" class="i field">prefix</a>,
+                                <a href="#1ae2cb584223312c" class="i field">section</a> = <a href="#1ae2cb584223312c" class="i field">section</a>,
+                                <a href="#810c6bae8f8b901d" class="i field">subsection</a> = <a href="#810c6bae8f8b901d" class="i field">subsection</a>,
+                                <a href="#1ca9fde4ca910403" class="i field">name</a> = <a href="#1ca9fde4ca910403" class="i field">name</a>,
+                                <a href="#9b1ce829b706f8bb" class="i field">value</a> = <span class="r148 r">newValue</span>,
+                                <a href="#57b0fe0c175de0bb" class="i field">suffix</a> = <a href="#57b0fe0c175de0bb" class="i field">suffix</a>
+                            };
+                <b>return</b> <span class="r149 r">e</span>;
+            }
+
+            <b>public bool</b> <a id="d9fe4cd548147269" href="R/d9fe4cd548147269.html" target="n" data-glyph="72,2" class="i method">match</a>(<b>string</b> <span id="r150 rd" class="r150 r">aSection</span>, <b>string</b> <span id="r151 rd" class="r151 r">aSubsection</span>, <b>string</b> <span id="r152 rd" class="r152 r">aKey</span>)
+            {
+                <b>return</b> <a href="#a71af7515f77e337" class="i method">eqIgnoreCase</a>(<a href="#1ae2cb584223312c" class="i field">section</a>, <span class="r150 r">aSection</span>)
+                       &amp;&amp; <a href="#c446c48eb9f3369a" class="i method">eqSameCase</a>(<a href="#810c6bae8f8b901d" class="i field">subsection</a>, <span class="r151 r">aSubsection</span>)
+                       &amp;&amp; <a href="#a71af7515f77e337" class="i method">eqIgnoreCase</a>(<a href="#1ca9fde4ca910403" class="i field">name</a>, <span class="r152 r">aKey</span>);
+            }
+
+            <b>public bool</b> <a id="c8b625227639fd50" href="R/c8b625227639fd50.html" target="n" data-glyph="72,2" class="i method">match</a>(<b>string</b> <span id="r153 rd" class="r153 r">aSection</span>, <b>string</b> <span id="r154 rd" class="r154 r">aSubsection</span>)
+            {
+                <b>return</b> <a href="#a71af7515f77e337" class="i method">eqIgnoreCase</a>(<a href="#1ae2cb584223312c" class="i field">section</a>, <span class="r153 r">aSection</span>)
+                        &amp;&amp; <a href="#c446c48eb9f3369a" class="i method">eqSameCase</a>(<a href="#810c6bae8f8b901d" class="i field">subsection</a>, <span class="r154 r">aSubsection</span>);
+            }
+            <b>private static bool</b> <a id="a71af7515f77e337" href="R/a71af7515f77e337.html" target="n" data-glyph="76,2" class="i method">eqIgnoreCase</a>(<b>string</b> <span id="r155 rd" class="r155 r">a</span>, <b>string</b> <span id="r156 rd" class="r156 r">b</span>)
+            {
+                <b>if</b> (<span class="r155 r">a</span> == <b>null</b> &amp;&amp; <span class="r156 r">b</span> == <b>null</b>)
+                    <b>return true</b>;
+                <b>if</b> (<span class="r155 r">a</span> == <b>null</b> || <span class="r156 r">b</span> == <b>null</b>)
+                    <b>return false</b>;
+                <b>return</b> <a href="Util/StringUtils.cs.html#e32b9dc7a2f51fc1" class="t t">StringUtils</a>.<a href="Util/StringUtils.cs.html#0d164a84d4b1da7d" class="i method">equalsIgnoreCase</a>(<span class="r155 r">a</span>, <span class="r156 r">b</span>);
+            }
+
+            <b>private static bool</b> <a id="c446c48eb9f3369a" href="R/c446c48eb9f3369a.html" target="n" data-glyph="76,2" class="i method">eqSameCase</a>(<b>string</b> <span id="r157 rd" class="r157 r">a</span>, <b>string</b> <span id="r158 rd" class="r158 r">b</span>)
+            {
+                <b>if</b> (<span class="r157 r">a</span> == <b>null</b> &amp;&amp; <span class="r158 r">b</span> == <b>null</b>)
+                    <b>return true</b>;
+                <b>if</b> (<span class="r157 r">a</span> == <b>null</b> || <span class="r158 r">b</span> == <b>null</b>)
+                    <b>return false</b>;
+                <b>return</b> <span class="r157 r">a</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r158 r">b</span>);
+            }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: SectionParser
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Parses a section of the configuration into an application model object.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	Instances must implement hashCode and equals such that model objects can</span>
+        <span class="c">///</span><span class="c">	be cached by using the </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c759ea511b958d64" class="t t">SectionParser</a>{<span class="r159 r t">T</span>}<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> as a key of a</span>
+        <span class="c">///</span><span class="c"> Dictionary.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	As the </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c759ea511b958d64" class="t t">SectionParser</a>{<span class="r160 r t">T</span>}<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> itself is used as the key of the internal</span>
+        <span class="c">///</span><span class="c">	Dictionary applications should be careful to ensure the SectionParser key</span>
+        <span class="c">///</span><span class="c">	does not retain unnecessary application state which may cause memory to</span>
+        <span class="c">///</span><span class="c">	be held longer than expected.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r161 r t">T</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">type of the application model created by the parser.</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+        <b>public interface</b> <a id="c759ea511b958d64" href="R/c759ea511b958d64.html" target="n" data-glyph="48,1" class="t t">SectionParser</a>&lt;<span id="r161 rd t" class="r161 r t">T</span>&gt;
+        {
+            <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c"> Create a model object from a configuration.</span>
+            <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r162 r">cfg</span><span class="c">&quot;</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c">	The configuration to read values from.</span>
+            <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+            <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The application model instance.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+            <span class="r161 r t">T</span> <a id="0b7d07c154ed2127" href="R/0b7d07c154ed2127.html" target="n" data-glyph="72,2" class="i method">parse</a>(<a href="#14d5730154bea165" class="t t">Config</a> <span id="r162 rd" class="r162 r">cfg</span>);
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: State
+
+        <b>internal class</b> <a id="06ba4b0cc61db27d" href="R/06ba4b0cc61db27d.html" target="n" data-glyph="2,1" class="t t">State</a>
+        {
+            <b>public readonly</b> <a href="#06ba4b0cc61db27d" class="t t">State</a> <a id="62e083206bbc0e8e" href="R/62e083206bbc0e8e.html" target="n" data-glyph="42,2" class="i field">baseState</a>;
+            <b>public readonly</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <a id="17b0cce670b7349e" href="R/17b0cce670b7349e.html" target="n" data-glyph="42,2" class="i field">Cache</a>;
+            <b>public readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt; <a id="2ae53b17f519fc02" href="R/2ae53b17f519fc02.html" target="n" data-glyph="42,2" class="i field">EntryList</a>;
+
+            <b>public</b> <a id="10f375558bc754bd" href="R/10f375558bc754bd.html" target="n" data-glyph="72,2" class="i constructor">State</a>(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#10091787f11bf008" class="t t">Entry</a>&gt; <span id="r163 rd" class="r163 r">entries</span>, <a href="#06ba4b0cc61db27d" class="t t">State</a> <span id="r164 rd" class="r164 r">@base</span>)
+            {
+                <a href="#2ae53b17f519fc02" class="i field">EntryList</a> = <span class="r163 r">entries</span>;
+                <a href="#17b0cce670b7349e" class="i field">Cache</a> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>object</b>, <b>object</b>&gt;();
+                <a href="#62e083206bbc0e8e" class="i field">baseState</a> = <span class="r164 r">@base</span>;
+            }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested type: SubsectionNames
+
+        <b>private class</b> <a id="44b0b20b14ea7069" href="R/44b0b20b14ea7069.html" target="n" data-glyph="4,1" class="t t">SubsectionNames</a> : <a href="#c759ea511b958d64" class="t t">SectionParser</a>&lt;<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt;&gt;
+        {
+            <b>private readonly string</b> <a id="9089ab2394c6b1a4" href="R/9089ab2394c6b1a4.html" target="n" data-glyph="46,2" class="i field">section</a>;
+
+            <b>public</b> <a id="f68d1922a241cca8" href="R/f68d1922a241cca8.html" target="n" data-glyph="72,2" class="i constructor">SubsectionNames</a>(<b>string</b> <span id="r165 rd" class="r165 r">sectionName</span>)
+            {
+                <a href="#9089ab2394c6b1a4" class="i field">section</a> = <span class="r165 r">sectionName</span>;
+            }
+
+            <span class="k preprocess">#</span><span class="k preprocess">region</span> SectionParser&lt;List&lt;string&gt;&gt; Members
+
+            <b>public</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <a id="069110ce21869ce1" href="R/069110ce21869ce1.html" target="n" data-glyph="72,2" class="i method">parse</a>(<a href="#14d5730154bea165" class="t t">Config</a> <span id="r166 rd" class="r166 r">cfg</span>)
+            {
+                <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r167 rd" class="r167 r">result</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+                <b>while</b> (<span class="r166 r">cfg</span> != <b>null</b>)
+                {
+                    <b>foreach</b> (<a href="#10091787f11bf008" class="t t">Entry</a> <span id="r168 rd" class="r168 r">e</span> <b>in</b> <span class="r166 r">cfg</span>.<a href="#e5b48da04e400330" class="i field">_state</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>().<a href="#2ae53b17f519fc02" class="i field">EntryList</a>)
+                    {
+                        <b>if</b> (<span class="r168 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a> != <b>null</b> &amp;&amp; <span class="r168 r">e</span>.<a href="#1ca9fde4ca910403" class="i field">name</a> == <b>null</b> &amp;&amp; <a href="Util/StringUtils.cs.html#e32b9dc7a2f51fc1" class="t t">StringUtils</a>.<a href="Util/StringUtils.cs.html#0d164a84d4b1da7d" class="i method">equalsIgnoreCase</a>(<a href="#9089ab2394c6b1a4" class="i field">section</a>, <span class="r168 r">e</span>.<a href="#1ae2cb584223312c" class="i field">section</a>))
+                            <span class="r167 r">result</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r168 r">e</span>.<a href="#810c6bae8f8b901d" class="i field">subsection</a>);
+                    }
+                    <span class="r166 r">cfg</span> = <span class="r166 r">cfg</span>.<a href="#c90c50aa0ece71ec" class="i field">_baseConfig</a>;
+                }
+                <b>return</b> <span class="r167 r">result</span>.<a href="@0@mscorlib/A.html#2b710ab0bc8866ad" class="i method">AsReadOnly</a>();
+            }
+
+            <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+            <b>public override int</b> <a id="3f1f783526d9469d" href="R/3f1f783526d9469d.html" target="n" data-glyph="72,2" class="i method">GetHashCode</a>()
+            {
+                <b>return</b> <a href="#9089ab2394c6b1a4" class="i field">section</a>.<a href="@0@mscorlib/A.html#0a17bbac4851d0d4" class="i method">GetHashCode</a>();
+            }
+
+            <b>public override bool</b> <a id="0393e88c6edf115b" href="R/0393e88c6edf115b.html" target="n" data-glyph="72,2" class="i method">Equals</a>(<b>object</b> <span id="r169 rd" class="r169 r">obj</span>)
+            {
+                <a href="#44b0b20b14ea7069" class="t t">SubsectionNames</a> <span id="r170 rd" class="r170 r">oSub</span> = (<span class="r169 r">obj</span> <b>as</b> <a href="#44b0b20b14ea7069" class="t t">SubsectionNames</a>);
+                <b>if</b> (<span class="r170 r">oSub</span> != <b>null</b>)
+                    <b>return</b> <a href="#9089ab2394c6b1a4" class="i field">section</a>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r170 r">oSub</span>.<a href="#9089ab2394c6b1a4" class="i field">section</a>);
+                <b>return false</b>;
+            }
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+    }
+}</pre></td></tr></table></div></body></html>

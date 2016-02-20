@@ -1,0 +1,620 @@
+﻿<!DOCTYPE html>
+<html><head><title>PackFile.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(611);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/PackFile.cs" target="_top">PackFile.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * Copyrigth (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ * Copyright (C) 2009, Gil Ran &lt;gilrun@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A Git version 2 pack file representation. A pack file contains Git objects in</span>
+	<span class="c">///</span><span class="c"> delta packed format yielding high compression of lots of object where some</span>
+	<span class="c">///</span><span class="c"> objects are similar.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="0c479d44fa7c3e9d" href="R/0c479d44fa7c3e9d.html" target="n" data-glyph="0,0" class="t t">PackFile</a> : <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>.<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a>&gt;, <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sorts PackFiles to be most recently created to least recently created.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>internal static readonly</b> <a href="@0@mscorlib/A.html#e55872249056ac0e" class="t t">Comparison</a>&lt;<a href="#0c479d44fa7c3e9d" class="t t">PackFile</a>&gt; <a id="e8cd29fa7c563bef" href="R/e8cd29fa7c563bef.html" target="n" data-glyph="44,1" class="i field">PackFileSortComparison</a> = (<span id="r0 rd" class="r0 r">a</span>, <span id="r1 rd" class="r1 r">b</span>) =&gt; <span class="r1 r">b</span>.<a href="#2f179eb14aa2f4df" class="i field">_packLastModified</a> - <span class="r0 r">a</span>.<a href="#2f179eb14aa2f4df" class="i field">_packLastModified</a>;
+
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="0207fb8bd0948c43" href="R/0207fb8bd0948c43.html" target="n" data-glyph="46,1" class="i field">_idxFile</a>;
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="993a638f6ce1779a" href="R/993a638f6ce1779a.html" target="n" data-glyph="46,1" class="i field">_packFile</a>;
+		<b>private readonly int</b> <a id="ed7859088986ce2a" href="R/ed7859088986ce2a.html" target="n" data-glyph="46,1" class="i field">_hash</a>;
+		<b>private readonly int</b> <a id="2f179eb14aa2f4df" href="R/2f179eb14aa2f4df.html" target="n" data-glyph="46,1" class="i field">_packLastModified</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <a id="920df13c6c0ebe11" href="R/920df13c6c0ebe11.html" target="n" data-glyph="46,1" class="i field">_fd</a>;
+		<b>private int</b> <a id="868b1ecb56f14f24" href="R/868b1ecb56f14f24.html" target="n" data-glyph="46,1" class="i field">_activeWindows</a>;
+		<b>private int</b> <a id="5d75e945f9a4baa1" href="R/5d75e945f9a4baa1.html" target="n" data-glyph="46,1" class="i field">_activeCopyRawData</a>;
+		
+		<b>private volatile bool</b> <a id="73ee91421fc535e3" href="R/73ee91421fc535e3.html" target="n" data-glyph="46,1" class="i field">_invalid</a>;
+		<b>private byte</b>[] <a id="d8004226d2423815" href="R/d8004226d2423815.html" target="n" data-glyph="46,1" class="i field">_packChecksum</a>;
+		<b>private</b> <a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a> <a id="17626553de23a92f" href="R/17626553de23a92f.html" target="n" data-glyph="46,1" class="i field">_loadedIdx</a>;
+		<b>private</b> <a href="PackReverseIndex.cs.html#f99b8942feec3cd8" class="t t">PackReverseIndex</a> <a id="561d536d4d8f3ae3" href="R/561d536d4d8f3ae3.html" target="n" data-glyph="46,1" class="i field">_reverseIdx</a>;
+		
+		<b>private</b> <a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="t t">Object</a> <a id="6c9579afca6707a4" href="R/6c9579afca6707a4.html" target="n" data-glyph="46,1" class="i field">locker</a> = <b>new</b> <a href="@0@mscorlib/A.html#38a0f6ea217e6f67" class="t constructor">Object</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a Reader for an existing, pre-indexed packfile.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">idxFile</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">path of the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.idx</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> file listing the contents.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">packFile</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">path of the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.pack</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> file holding the data.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="0beb26714c9e40f5" href="R/0beb26714c9e40f5.html" target="n" data-glyph="72,1" class="i constructor">PackFile</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r2 rd" class="r2 r">idxFile</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r3 rd" class="r3 r">packFile</span>)
+		{
+			<a href="#0207fb8bd0948c43" class="i field">_idxFile</a> = <span class="r2 r">idxFile</span>;
+			<a href="#993a638f6ce1779a" class="i field">_packFile</a> = <span class="r3 r">packFile</span>;
+
+			<span class="c">// [henon] why the heck right shift by 10 ?? ... seems to have to do with the SORT comparison</span>
+			<a href="#2f179eb14aa2f4df" class="i field">_packLastModified</a> = (<b>int</b>)(<span class="r3 r">packFile</span>.<a href="Util/Extensions.cs.html#96357dbc535a6727" class="i method">lastModified</a>() &gt;&gt; 10);
+
+			<span class="c">// Multiply by 31 here so we can more directly combine with another</span>
+			<span class="c">// value in WindowCache.hash(), without doing the multiply there.</span>
+			<span class="c">//</span>
+			<a href="#ed7859088986ce2a" class="i field">_hash</a> = <a href="@0@mscorlib/A.html#4de9cf234d0d8b16" class="i method">GetHashCode</a>() * 31;
+
+			<a href="#e91f8509a9270ba7" class="i property">Length</a> = <b>long</b>.<a href="@0@mscorlib/A.html#52a2718fdacedb8b" class="i field">MaxValue</a>;
+		}
+
+		<b>private</b> <a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a> <a id="652df50ba95c9530" href="R/652df50ba95c9530.html" target="n" data-glyph="76,1" class="i method">LoadPackIndex</a>()
+		{
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<b>if</b> (<a href="#17626553de23a92f" class="i field">_loadedIdx</a> == <b>null</b>)
+				{
+					<b>if</b> (<a href="#73ee91421fc535e3" class="i field">_invalid</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="Exceptions/InvalidPackException.cs.html#e55d97cfe0280196" class="t constructor">PackInvalidException</a>(<a href="#993a638f6ce1779a" class="i field">_packFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+					}
+
+					<b>try</b>
+					{
+						<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a> <span id="r4 rd" class="r4 r">idx</span> = <a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>.<a href="PackIndex.cs.html#04f3b7682dd687b1" class="i method">Open</a>(<a href="#0207fb8bd0948c43" class="i field">_idxFile</a>);
+
+						<b>if</b> (<a href="#d8004226d2423815" class="i field">_packChecksum</a> == <b>null</b>)
+						{
+							<a href="#d8004226d2423815" class="i field">_packChecksum</a> = <span class="r4 r">idx</span>.<a href="PackIndex.cs.html#68da71ad2b3f6f65" class="i property">PackChecksum</a>;
+						}
+						<b>else if</b> (<a href="#d8004226d2423815" class="i field">_packChecksum</a>.<a href="@0@System.Core/A.html#9bdd6ef7ba6a5615" class="i method">SequenceEqual</a>(<span class="r4 r">idx</span>.<a href="PackIndex.cs.html#68da71ad2b3f6f65" class="i property">PackChecksum</a>))
+						{
+							<b>throw</b> <b>new</b> <a href="Exceptions/PackMismatchException.cs.html#f482154c7f321399" class="t constructor">PackMismatchException</a>(<span class="s">&quot;Pack checksum mismatch&quot;</span>);
+						}
+
+						<a href="#17626553de23a92f" class="i field">_loadedIdx</a> = <span class="r4 r">idx</span>;
+					}
+					<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+					{
+						<a href="#73ee91421fc535e3" class="i field">_invalid</a> = <b>true</b>;
+						<b>throw</b>;
+					}
+				}
+			}
+
+			<b>return</b> <a href="#17626553de23a92f" class="i field">_loadedIdx</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">windowCursor</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The file object which locates this pack on disk.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>internal</b> <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <a id="27f17aaf9df70055" href="R/27f17aaf9df70055.html" target="n" data-glyph="74,1" class="i method">ResolveBase</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r5 rd" class="r5 r">windowCursor</span>, <b>long</b> <span id="r6 rd" class="r6 r">offset</span>)
+		{
+			<b>return</b> <a href="#453fa1e446717180" class="i method">Reader</a>(<span class="r5 r">windowCursor</span>, <span class="r6 r">offset</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> object which locates this pack on disk.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="53afebc30efe494b" href="R/53afebc30efe494b.html" target="n" data-glyph="102,1" class="i property">File</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#993a638f6ce1779a" class="i field">_packFile</a>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> * Determine if an object is contained within the pack file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> For performance reasons only the index file is searched; the main pack</span>
+		<span class="c">///</span><span class="c"> content is ignored entirely.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">para</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The object to look for. Must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">True if the object is in this pack; false otherwise.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="d48e6de66860335f" href="R/d48e6de66860335f.html" target="n" data-glyph="72,1" class="i method">HasObject</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r7 rd" class="r7 r">id</span>)
+		{
+			<b>return</b> <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#732333a505fe4b9f" class="i method">HasObject</a>(<span class="r7 r">id</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get an object from this pack.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">curs</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">temporary working space associated with the calling thread.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the object to obtain from the pack. Must not be null.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The object loader for the requested object if it is contained in</span>
+		<span class="c">///</span><span class="c"> this pack; null if the object was not found.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <a id="809898b3729e38b4" href="R/809898b3729e38b4.html" target="n" data-glyph="72,1" class="i method">Get</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r8 rd" class="r8 r">curs</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r9 rd" class="r9 r">id</span>)
+		{
+			<b>long</b> <span id="r10 rd" class="r10 r">offset</span> = <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#a5a25eac6040ae12" class="i method">FindOffset</a>(<span class="r9 r">id</span>);
+			<b>return</b> 0 &lt; <span class="r10 r">offset</span> ? <a href="#453fa1e446717180" class="i method">Reader</a>(<span class="r8 r">curs</span>, <span class="r10 r">offset</span>) : <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Close the resources utilized by this repository.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="7de83ea9bc1b508a" href="R/7de83ea9bc1b508a.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+		{
+			<a href="UnpackedObjectCache.cs.html#3625a455bac5bbf6" class="t t">UnpackedObjectCache</a>.<a href="UnpackedObjectCache.cs.html#c699ed9db64649a6" class="i method">purge</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>);
+			<a href="WindowCache.cs.html#d914cae44569e9e3" class="t t">WindowCache</a>.<a href="WindowCache.cs.html#8c3eb0ff786f80cc" class="i method">Purge</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>);
+
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<a href="#17626553de23a92f" class="i field">_loadedIdx</a> = <b>null</b>;
+				<a href="#561d536d4d8f3ae3" class="i field">_reverseIdx</a> = <b>null</b>;
+			}
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+            <a href="@0@mscorlib/A.html#25d9c1e022317a99" class="t t">GC</a>.<a href="@0@mscorlib/A.html#2673f5220a565bf2" class="i method">SuppressFinalize</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>); <span class="c">// Disarm lock-release checker</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+		}
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+        <span class="c">// A debug mode warning if the type has not been disposed properly</span>
+        ~<a id="662e81c9e183e8dd" href="R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">PackFile</a>()
+        {
+            <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a> + <span class="s">&quot; has not been properly disposed: {&quot;</span> + <a href="#993a638f6ce1779a" class="i field">_packFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;}/{&quot;</span> + <a href="#0207fb8bd0948c43" class="i field">_idxFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot;}&quot;</span>);
+        }
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> IEnumerable Implementation
+
+		<b>public</b> <a href="@0@mscorlib/A.html#893e8cdebffde2da" class="t t">IEnumerator</a>&lt;<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>.<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a>&gt; <a id="ce1602af8526e07f" href="R/ce1602af8526e07f.html" target="n" data-glyph="72,1" class="i method">GetEnumerator</a>()
+		{
+			<b>try</b>
+			{
+				<b>return</b> <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#d3185cd5be1413f3" class="i method">GetEnumerator</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+			{
+				<b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>.<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a>&gt;().<a href="@0@mscorlib/A.html#5d3accf5b217bdbf" class="i method">GetEnumerator</a>();
+			}
+		}
+
+		<a href="@0@mscorlib/A.html#6624f38cb955bfe0" class="t t">IEnumerator</a> <a href="@0@mscorlib/A.html#9be451ac13d86a97" class="t t">IEnumerable</a>.<a href="@0@mscorlib/A.html#02a44b09e26b964f" class="i method">GetEnumerator</a>()
+		{
+			<b>return</b> <a href="#ce1602af8526e07f" class="i method">GetEnumerator</a>();
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain the total number of objects available in this pack. This method</span>
+		<span class="c">///</span><span class="c">	relies on pack index, giving number of effectively available objects.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of objects in index of this pack, likewise in this pack.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	The index file cannot be loaded into memory.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public long</b> <a id="8e8ec20c558833f2" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">ObjectCount</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#e962501d2a4f7cb9" class="i property">ObjectCount</a>; }
+		}
+
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Search for object id with the specified start offset in associated pack</span>
+		<span class="c">///</span><span class="c"> (reverse) index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">start offset of object to find</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Object id for this offset, or null if no object was found</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="4f83042292a64860" href="R/4f83042292a64860.html" target="n" data-glyph="72,1" class="i method">FindObjectForOffset</a>(<b>long</b> <span id="r11 rd" class="r11 r">offset</span>)
+		{
+			<b>return</b> <a href="#b9a2aa6343208cb5" class="i method">GetReverseIdx</a>().<a href="PackReverseIndex.cs.html#e63aa63a8dab8ef0" class="i method">FindObject</a>(<span class="r11 r">offset</span>);
+		}
+
+		<b>public</b> <a href="UnpackedObjectCache.cs.html#3625a455bac5bbf6" class="t t">UnpackedObjectCache</a>.<a href="UnpackedObjectCache.cs.html#a7dd2ecbe69a9acd" class="t t">Entry</a> <a id="1fe945a8f3f07196" href="R/1fe945a8f3f07196.html" target="n" data-glyph="72,1" class="i method">readCache</a>(<b>long</b> <span id="r12 rd" class="r12 r">position</span>)
+		{
+			<b>return</b> <a href="UnpackedObjectCache.cs.html#3625a455bac5bbf6" class="t t">UnpackedObjectCache</a>.<a href="UnpackedObjectCache.cs.html#453bc79e29439c81" class="i method">get</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r12 r">position</span>);
+		}
+
+		<b>public void</b> <a id="5cd9241b2aa6e1ae" href="R/5cd9241b2aa6e1ae.html" target="n" data-glyph="72,1" class="i method">saveCache</a>(<b>long</b> <span id="r13 rd" class="r13 r">position</span>, <b>byte</b>[] <span id="r14 rd" class="r14 r">data</span>, <b>int</b> <span id="r15 rd" class="r15 r">type</span>)
+		{
+			<a href="UnpackedObjectCache.cs.html#3625a455bac5bbf6" class="t t">UnpackedObjectCache</a>.<a href="UnpackedObjectCache.cs.html#566bfbc85c0b7742" class="i method">store</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r13 r">position</span>, <span class="r14 r">data</span>, <span class="r15 r">type</span>);
+		}
+
+		<b>public byte</b>[] <a id="72324dc8997f1a6e" href="R/72324dc8997f1a6e.html" target="n" data-glyph="72,1" class="i method">decompress</a>(<b>long</b> <span id="r16 rd" class="r16 r">position</span>, <b>long</b> <span id="r17 rd" class="r17 r">totalSize</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r18 rd" class="r18 r">curs</span>)
+		{
+			<b>var</b> <span id="r19 rd" class="r19 r">dstbuf</span> = <b>new</b> <b>byte</b>[<span class="r17 r">totalSize</span>];
+
+			<b>if</b> (<span class="r18 r">curs</span>.<a href="WindowCursor.cs.html#aaceb4050dbf362a" class="i method">Inflate</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r16 r">position</span>, <span class="r19 r">dstbuf</span>, 0) != <span class="r17 r">totalSize</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#da81e2a33d64e827" class="t constructor">EndOfStreamException</a>(<span class="s">&quot;Short compressed stream at &quot;</span> + <span class="r16 r">position</span>);
+			}
+
+			<b>return</b> <span class="r19 r">dstbuf</span>;
+		}
+
+		<b>internal void</b> <a id="90e5295f9f9b05f7" href="R/90e5295f9f9b05f7.html" target="n" data-glyph="74,1" class="i method">CopyRawData</a>&lt;<span id="r20 rd t" class="r20 r t">T</span>&gt;(<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r21 rd" class="r21 r">loader</span>, <span class="r20 r t">T</span> <span id="r22 rd" class="r22 r">@out</span>, <b>byte</b>[] <span id="r23 rd" class="r23 r">buf</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r24 rd" class="r24 r">cursor</span>)
+			<b>where</b> <span class="r20 r t">T</span> : <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>
+		{
+			<b>long</b> <span id="r25 rd" class="r25 r">objectOffset</span> = <span class="r21 r">loader</span>.<a href="PackedObjectLoader.cs.html#9f002984a0224ad9" class="i property">ObjectOffset</a>;
+			<b>long</b> <span id="r26 rd" class="r26 r">dataOffset</span> = <span class="r21 r">loader</span>.<a href="PackedObjectLoader.cs.html#eb5f301e9c2d3b6d" class="i property">DataOffset</a>;
+			<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r27 rd" class="r27 r">cnt</span> = (<b>int</b>)(<a href="#42c860cfebdab453" class="i method">FindEndOffset</a>(<span class="r25 r">objectOffset</span>) - <span class="r26 r">dataOffset</span>);
+
+			<b>if</b> (<a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#a13dab93a4517fe1" class="i property">HasCRC32Support</a>)
+			{
+				<a href="Util/CRC32.cs.html#9131c0bdbaf7c401" class="k">var</a> <span id="r28 rd" class="r28 r">crc</span> = <b>new</b> <a href="Util/CRC32.cs.html#37cf3131ffe7ecea" class="t constructor">Crc32</a>();
+				<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r29 rd" class="r29 r">headerCnt</span> = (<b>int</b>)(<span class="r26 r">dataOffset</span> - <span class="r25 r">objectOffset</span>);
+				<b>while</b> (<span class="r29 r">headerCnt</span> &gt; 0)
+				{
+					<b>int</b> <span id="r30 rd" class="r30 r">toRead</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<span class="r29 r">headerCnt</span>, <span class="r23 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+					<a href="#a2580e9cb6bd2813" class="i method">ReadFully</a>(<span class="r25 r">objectOffset</span>, <span class="r23 r">buf</span>, 0, <span class="r30 r">toRead</span>, <span class="r24 r">cursor</span>);
+					<span class="r28 r">crc</span>.<a href="Util/CRC32.cs.html#5ea9940446399c46" class="i method">Update</a>(<span class="r23 r">buf</span>, 0, <span class="r30 r">toRead</span>);
+					<span class="r29 r">headerCnt</span> -= <span class="r30 r">toRead</span>;
+				}
+				<a href="Util/CheckedOutputStream.cs.html#9092730d6eb651cf" class="k">var</a> <span id="r31 rd" class="r31 r">crcOut</span> = <b>new</b> <a href="Util/CheckedOutputStream.cs.html#e244d25746a1296e" class="t constructor">CheckedOutputStream</a>(<span class="r22 r">@out</span>, <span class="r28 r">crc</span>);
+				<a href="#37f4c4c10c4268b5" class="i method">CopyToStream</a>(<span class="r26 r">dataOffset</span>, <span class="r23 r">buf</span>, <span class="r27 r">cnt</span>, <span class="r31 r">crcOut</span>, <span class="r24 r">cursor</span>);
+				<b>long</b> <span id="r32 rd" class="r32 r">computed</span> = <span class="r28 r">crc</span>.<a href="Util/CRC32.cs.html#a922c4b0faa75474" class="i property">Value</a>;
+				<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r33 rd" class="r33 r">id</span> = <a href="#4f83042292a64860" class="i method">FindObjectForOffset</a>(<span class="r25 r">objectOffset</span>);
+				<b>long</b> <span id="r34 rd" class="r34 r">expected</span> = <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#67c30cb42ac7f238" class="i method">FindCRC32</a>(<span class="r33 r">id</span>);
+				<b>if</b> (<span class="r32 r">computed</span> != <span class="r34 r">expected</span>)
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#7a5c0195581d7c39" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;object at &quot;</span> + <span class="r26 r">dataOffset</span> + <span class="s">&quot; in &quot;</span> + <a href="#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot; has bad zlib stream&quot;</span>);
+				}
+			}
+			<b>else</b>
+			{
+				<b>try</b>
+				{
+					<span class="r24 r">cursor</span>.<a href="WindowCursor.cs.html#f7bc9d9f7878cd1f" class="i method">InflateVerify</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r26 r">dataOffset</span>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r35 rd" class="r35 r">fe</span>) <span class="c">// [henon] was DataFormatException</span>
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#f1b4c3a9c09bd9ef" class="t constructor">CorruptObjectException</a>(<span class="s">&quot;object at &quot;</span> + <span class="r26 r">dataOffset</span> + <span class="s">&quot; in &quot;</span> + <a href="#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot; has bad zlib stream&quot;</span>, <span class="r35 r">fe</span>);
+				}
+
+				<a href="#37f4c4c10c4268b5" class="i method">CopyToStream</a>(<span class="r26 r">dataOffset</span>, <span class="r23 r">buf</span>, <span class="r27 r">cnt</span>, <span class="r22 r">@out</span>, <span class="r24 r">cursor</span>);
+			}
+		}
+
+		<b>public bool</b> <a id="a2d1167b01f14f6b" href="R/a2d1167b01f14f6b.html" target="n" data-glyph="102,1" class="i property">SupportsFastCopyRawData</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>().<a href="PackIndex.cs.html#a13dab93a4517fe1" class="i property">HasCRC32Support</a>; }
+		}
+
+
+		<b>internal bool</b> <a id="e008e6356feaf16a" href="R/e008e6356feaf16a.html" target="n" data-glyph="104,1" class="i property">IsInvalid</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#73ee91421fc535e3" class="i field">_invalid</a>; }
+		}
+
+		<b>private void</b> <a id="a2580e9cb6bd2813" href="R/a2580e9cb6bd2813.html" target="n" data-glyph="76,1" class="i method">ReadFully</a>(<b>long</b> <span id="r36 rd" class="r36 r">position</span>, <b>byte</b>[] <span id="r37 rd" class="r37 r">dstbuf</span>, <b>int</b> <span id="r38 rd" class="r38 r">dstoff</span>, <b>int</b> <span id="r39 rd" class="r39 r">cnt</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r40 rd" class="r40 r">curs</span>)
+		{
+			<b>if</b> (<span class="r40 r">curs</span>.<a href="WindowCursor.cs.html#dee6313c2d573f4d" class="i method">Copy</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r36 r">position</span>, <span class="r37 r">dstbuf</span>, <span class="r38 r">dstoff</span>, <span class="r39 r">cnt</span>) != <span class="r39 r">cnt</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#7756c0c56c3035a1" class="t constructor">EndOfStreamException</a>();
+			}
+		}
+
+		<b>private void</b> <a id="37f4c4c10c4268b5" href="R/37f4c4c10c4268b5.html" target="n" data-glyph="76,1" class="i method">CopyToStream</a>(<b>long</b> <span id="r41 rd" class="r41 r">position</span>, <b>byte</b>[] <span id="r42 rd" class="r42 r">buffer</span>, <b>long</b> <span id="r43 rd" class="r43 r">count</span>, <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r44 rd" class="r44 r">stream</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r45 rd" class="r45 r">windowCursor</span>)
+		{
+			<b>while</b> (<span class="r43 r">count</span> &gt; 0)
+			{
+				<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r46 rd" class="r46 r">toRead</span> = (<b>int</b>)<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<span class="r43 r">count</span>, <span class="r42 r">buffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<a href="#a2580e9cb6bd2813" class="i method">ReadFully</a>(<span class="r41 r">position</span>, <span class="r42 r">buffer</span>, 0, <span class="r46 r">toRead</span>, <span class="r45 r">windowCursor</span>);
+				<span class="r41 r">position</span> += <span class="r46 r">toRead</span>;
+				<span class="r43 r">count</span> -= <span class="r46 r">toRead</span>;
+				<span class="r44 r">stream</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r42 r">buffer</span>, 0, <span class="r46 r">toRead</span>);
+			}
+		}
+
+		<b>public void</b> <a id="526fa022156aae96" href="R/526fa022156aae96.html" target="n" data-glyph="72,1" class="i method">beginCopyRawData</a>()
+		{
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<b>if</b> (++<a href="#5d75e945f9a4baa1" class="i field">_activeCopyRawData</a> == 1 &amp;&amp; <a href="#868b1ecb56f14f24" class="i field">_activeWindows</a> == 0)
+				{
+					<a href="#6a0bcd138fd1cfa4" class="i method">DoOpen</a>();
+				}
+			}
+		}
+
+		<b>public void</b> <a id="cf05c50781f6947d" href="R/cf05c50781f6947d.html" target="n" data-glyph="72,1" class="i method">endCopyRawData</a>()
+		{
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<b>if</b> (--<a href="#5d75e945f9a4baa1" class="i field">_activeCopyRawData</a> == 0 &amp;&amp; <a href="#868b1ecb56f14f24" class="i field">_activeWindows</a> == 0)
+				{
+					<a href="#58a4e310a6327870" class="i method">DoClose</a>();
+				}
+			}
+		}
+
+		<b>public bool</b> <a id="2f4ede0c3f74e52b" href="R/2f4ede0c3f74e52b.html" target="n" data-glyph="72,1" class="i method">beginWindowCache</a>()
+		{
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<b>if</b> (++<a href="#868b1ecb56f14f24" class="i field">_activeWindows</a> == 1)
+				{
+					<b>if</b> (<a href="#5d75e945f9a4baa1" class="i field">_activeCopyRawData</a> == 0)
+					{
+						<a href="#6a0bcd138fd1cfa4" class="i method">DoOpen</a>();
+					}
+
+					<b>return true</b>;
+				}
+			}
+
+			<b>return false</b>;
+		}
+
+		<b>public bool</b> <a id="e2981dbe2c2b42c0" href="R/e2981dbe2c2b42c0.html" target="n" data-glyph="72,1" class="i method">endWindowCache</a>()
+		{
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<b>bool</b> <span id="r47 rd" class="r47 r">r</span> = --<a href="#868b1ecb56f14f24" class="i field">_activeWindows</a> == 0;
+
+				<b>if</b> (<span class="r47 r">r</span> &amp;&amp; <a href="#5d75e945f9a4baa1" class="i field">_activeCopyRawData</a> == 0)
+				{
+					<a href="#58a4e310a6327870" class="i method">DoClose</a>();
+				}
+
+				<b>return</b> <span class="r47 r">r</span>;
+			}
+		}
+
+		<b>private void</b> <a id="6a0bcd138fd1cfa4" href="R/6a0bcd138fd1cfa4.html" target="n" data-glyph="76,1" class="i method">DoOpen</a>()
+		{
+			<b>try</b>
+			{
+				<b>if</b> (<a href="#73ee91421fc535e3" class="i field">_invalid</a>)
+				{
+					<b>throw</b> <b>new</b> <a href="Exceptions/InvalidPackException.cs.html#e55d97cfe0280196" class="t constructor">PackInvalidException</a>(<a href="#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+				}
+
+				<a href="#920df13c6c0ebe11" class="i field">_fd</a> = <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<a href="#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#0f1c68c756d0636b" class="i field">Read</a>);
+				<a href="#e91f8509a9270ba7" class="i property">Length</a> = <a href="#920df13c6c0ebe11" class="i field">_fd</a>.<a href="@0@mscorlib/A.html#fa88edfdb51ed91c" class="i property">Length</a>;
+				<a href="#edf5565e5cd60968" class="i method">OnOpenPack</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>)
+			{
+				<a href="#31e84d6c32f7d4e8" class="i method">OpenFail</a>();
+				<b>throw</b>;
+			}
+		}
+
+		<b>private void</b> <a id="31e84d6c32f7d4e8" href="R/31e84d6c32f7d4e8.html" target="n" data-glyph="76,1" class="i method">OpenFail</a>()
+		{
+			<a href="#868b1ecb56f14f24" class="i field">_activeWindows</a> = 0;
+			<a href="#5d75e945f9a4baa1" class="i field">_activeCopyRawData</a> = 0;
+			<a href="#73ee91421fc535e3" class="i field">_invalid</a> = <b>true</b>;
+			<a href="#58a4e310a6327870" class="i method">DoClose</a>();
+		}
+
+		<b>private void</b> <a id="58a4e310a6327870" href="R/58a4e310a6327870.html" target="n" data-glyph="76,1" class="i method">DoClose</a>()
+		{
+			<b>if</b> (<a href="#920df13c6c0ebe11" class="i field">_fd</a> == <b>null</b>) <b>return</b>;
+
+			<b>try</b>
+			{
+				<a href="#920df13c6c0ebe11" class="i field">_fd</a>.<a href="@0@mscorlib/A.html#f1b4285950a82354" class="i method">Dispose</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+			{
+				<span class="c">// Ignore a close event. We had it open only for reading.</span>
+				<span class="c">// There should not be errors related to network buffers</span>
+				<span class="c">// not flushed, etc.</span>
+			}
+
+			<a href="#920df13c6c0ebe11" class="i field">_fd</a> = <b>null</b>;
+		}
+
+		<b>internal</b> <a href="ByteArrayWindow.cs.html#2aa529c9ce01d96f" class="t t">ByteArrayWindow</a> <a id="d3c78e1fa17ccc36" href="R/d3c78e1fa17ccc36.html" target="n" data-glyph="74,1" class="i method">Read</a>(<b>long</b> <span id="r48 rd" class="r48 r">pos</span>, <b>int</b> <span id="r49 rd" class="r49 r">size</span>)
+		{
+			<b>if</b> (<a href="#e91f8509a9270ba7" class="i property">Length</a> &lt; <span class="r48 r">pos</span> + <span class="r49 r">size</span>)
+			{
+				<span class="r49 r">size</span> = (<b>int</b>)(<a href="#e91f8509a9270ba7" class="i property">Length</a> - <span class="r48 r">pos</span>);
+			}
+
+			<b>var</b> <span id="r50 rd" class="r50 r">buf</span> = <b>new</b> <b>byte</b>[<span class="r49 r">size</span>];
+			<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#bc442c87c7f9f82d" class="i method">ReadFully</a>(<a href="#920df13c6c0ebe11" class="i field">_fd</a>, <span class="r48 r">pos</span>, <span class="r50 r">buf</span>, 0, <span class="r49 r">size</span>);
+			<b>return</b> <b>new</b> <a href="ByteArrayWindow.cs.html#f1c4772f56c80eba" class="t constructor">ByteArrayWindow</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r48 r">pos</span>, <span class="r50 r">buf</span>);
+		}
+		
+		<span class="c">// Note: For now we are going to remove the dependency on Winterdom.IO.FileMap, </span>
+		<span class="c">// since this isn&#39;t our default way of packing a file and there isn&#39;t any </span>
+		<span class="c">// reason to invest in developing a cross-platform replacement.  We&#39;re leaving </span>
+		<span class="c">// the rest of the logic in place in case we decide to invest in </span>
+		<span class="c">// this in the future.  This was never tested thoroughly and caused </span>
+		<span class="c">// tests to fail when it did run.</span>
+		<b>internal</b> <a href="ByteWindow.cs.html#a3d1436e943589e3" class="t t">ByteWindow</a> <a id="f60e0e94688a3960" href="R/f60e0e94688a3960.html" target="n" data-glyph="74,1" class="i method">MemoryMappedByteWindow</a>(<b>long</b> <span id="r51 rd" class="r51 r">pos</span>, <b>int</b> <span id="r52 rd" class="r52 r">size</span>)
+		{
+		    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+		}
+
+		<b>private void</b> <a id="edf5565e5cd60968" href="R/edf5565e5cd60968.html" target="n" data-glyph="76,1" class="i method">OnOpenPack</a>()
+		{
+			<a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a> <span id="r53 rd" class="r53 r">idx</span> = <a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>();
+			<b>var</b> <span id="r54 rd" class="r54 r">buf</span> = <b>new</b> <b>byte</b>[20];
+
+			<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#bc442c87c7f9f82d" class="i method">ReadFully</a>(<a href="#920df13c6c0ebe11" class="i field">_fd</a>, 0, <span class="r54 r">buf</span>, 0, 12);
+			<b>if</b> (<a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#8d5e78f7413720c3" class="i method">match</a>(<span class="r54 r">buf</span>, 0, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#ee41808fd43d4e74" class="i field">PACK_SIGNATURE</a>) != 4)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Not a PACK file.&quot;</span>);
+			}
+
+			<b>long</b> <span id="r55 rd" class="r55 r">vers</span> = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#2227b95120eb08e5" class="i method">decodeUInt32</a>(<span class="r54 r">buf</span>, 4);
+			<b>long</b> <span id="r56 rd" class="r56 r">packCnt</span> = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#2227b95120eb08e5" class="i method">decodeUInt32</a>(<span class="r54 r">buf</span>, 8);
+			<b>if</b> (<span class="r55 r">vers</span> != 2 &amp;&amp; <span class="r55 r">vers</span> != 3)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Unsupported pack version &quot;</span> + <span class="r55 r">vers</span> + <span class="s">&quot;.&quot;</span>);
+			}
+
+			<b>if</b> (<span class="r56 r">packCnt</span> != <span class="r53 r">idx</span>.<a href="PackIndex.cs.html#e962501d2a4f7cb9" class="i property">ObjectCount</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/PackMismatchException.cs.html#f482154c7f321399" class="t constructor">PackMismatchException</a>(<span class="s">&quot;Pack object count mismatch:&quot;</span>
+					+ <span class="s">&quot; pack &quot;</span> + <span class="r56 r">packCnt</span>
+					+ <span class="s">&quot; index &quot;</span> + <span class="r53 r">idx</span>.<a href="PackIndex.cs.html#e962501d2a4f7cb9" class="i property">ObjectCount</a>
+					+ <span class="s">&quot;: &quot;</span> + <a href="#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+			}
+
+			<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#bc442c87c7f9f82d" class="i method">ReadFully</a>(<a href="#920df13c6c0ebe11" class="i field">_fd</a>, <a href="#e91f8509a9270ba7" class="i property">Length</a> - 20, <span class="r54 r">buf</span>, 0, 20);
+
+			<b>if</b> (!<span class="r54 r">buf</span>.<a href="@0@System.Core/A.html#9bdd6ef7ba6a5615" class="i method">SequenceEqual</a>(<a href="#d8004226d2423815" class="i field">_packChecksum</a>))
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/PackMismatchException.cs.html#f482154c7f321399" class="t constructor">PackMismatchException</a>(<span class="s">&quot;Pack checksum mismatch:&quot;</span>
+					+ <span class="s">&quot; pack &quot;</span> + <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a84de848edbd5661" class="i method">FromRaw</a>(<span class="r54 r">buf</span>)
+					+ <span class="s">&quot; index &quot;</span> + <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a84de848edbd5661" class="i method">FromRaw</a>(<span class="r53 r">idx</span>.<a href="PackIndex.cs.html#68da71ad2b3f6f65" class="i property">PackChecksum</a>)
+					+ <span class="s">&quot;: &quot;</span> + <a href="#53afebc30efe494b" class="i property">File</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+			}
+		}
+
+		<b>private</b> <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <a id="453fa1e446717180" href="R/453fa1e446717180.html" target="n" data-glyph="76,1" class="i method">Reader</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r57 rd" class="r57 r">curs</span>, <b>long</b> <span id="r58 rd" class="r58 r">objOffset</span>)
+		{
+			<b>long</b> <span id="r59 rd" class="r59 r">pos</span> = <span class="r58 r">objOffset</span>;
+			<b>int</b> <span id="r60 rd" class="r60 r">p</span> = 0;
+			<b>byte</b>[] <span id="r61 rd" class="r61 r">ib</span> = <span class="r57 r">curs</span>.<a href="WindowCursor.cs.html#ebcaee92dd598545" class="i property">TempId</a>; <span class="c">// Reader.ReadBytes(ObjectId.ObjectIdLength);</span>
+			<a href="#a2580e9cb6bd2813" class="i method">ReadFully</a>(<span class="r59 r">pos</span>, <span class="r61 r">ib</span>, 0, 20, <span class="r57 r">curs</span>);
+			<b>int</b> <span id="r62 rd" class="r62 r">c</span> = <span class="r61 r">ib</span>[<span class="r60 r">p</span>++] &amp; 0xff;
+			<b>int</b> <span id="r63 rd" class="r63 r">typeCode</span> = (<span class="r62 r">c</span> &gt;&gt; 4) &amp; 7;
+			<b>long</b> <span id="r64 rd" class="r64 r">dataSize</span> = <span class="r62 r">c</span> &amp; 15;
+			<b>int</b> <span id="r65 rd" class="r65 r">shift</span> = 4;
+			<b>while</b> ((<span class="r62 r">c</span> &amp; 0x80) != 0)
+			{
+				<span class="r62 r">c</span> = <span class="r61 r">ib</span>[<span class="r60 r">p</span>++] &amp; 0xff;
+				<span class="r64 r">dataSize</span> += (<span class="r62 r">c</span> &amp; 0x7f) &lt;&lt; <span class="r65 r">shift</span>;
+				<span class="r65 r">shift</span> += 7;
+			}
+			<span class="r59 r">pos</span> += <span class="r60 r">p</span>;
+
+			<b>switch</b> (<span class="r63 r">typeCode</span>)
+			{
+				<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#5dc47817ed87c51e" class="i field">OBJ_COMMIT</a>:
+				<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#301cc4bea7313e0f" class="i field">OBJ_TREE</a>:
+				<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#ead52388c5739865" class="i field">OBJ_BLOB</a>:
+				<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#026685641201f5d3" class="i field">OBJ_TAG</a>:
+					<b>return</b> <b>new</b> <a href="WholePackedObjectLoader.cs.html#f4dd4afd8fee3cf6" class="t constructor">WholePackedObjectLoader</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r59 r">pos</span>, <span class="r58 r">objOffset</span>, <span class="r63 r">typeCode</span>, (<b>int</b>)<span class="r64 r">dataSize</span>);
+
+				<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#d06b272457af2ba5" class="i field">OBJ_OFS_DELTA</a>:
+					<a href="#a2580e9cb6bd2813" class="i method">ReadFully</a>(<span class="r59 r">pos</span>, <span class="r61 r">ib</span>, 0, 20, <span class="r57 r">curs</span>);
+					<span class="r60 r">p</span> = 0;
+					<span class="r62 r">c</span> = <span class="r61 r">ib</span>[<span class="r60 r">p</span>++] &amp; 0xff;
+					<b>long</b> <span id="r66 rd" class="r66 r">ofs</span> = <span class="r62 r">c</span> &amp; 127;
+
+					<b>while</b> ((<span class="r62 r">c</span> &amp; 128) != 0)
+					{
+						<span class="r66 r">ofs</span> += 1;
+						<span class="r62 r">c</span> = <span class="r61 r">ib</span>[<span class="r60 r">p</span>++] &amp; 0xff;
+						<span class="r66 r">ofs</span> &lt;&lt;= 7;
+						<span class="r66 r">ofs</span> += (<span class="r62 r">c</span> &amp; 127);
+					}
+
+					<b>return</b> <b>new</b> <a href="DeltaOfsPackedObjectLoader.cs.html#778d0abd35e9ec2d" class="t constructor">DeltaOfsPackedObjectLoader</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r59 r">pos</span> + <span class="r60 r">p</span>, <span class="r58 r">objOffset</span>, (<b>int</b>)<span class="r64 r">dataSize</span>, <span class="r58 r">objOffset</span> - <span class="r66 r">ofs</span>);
+
+				<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#5fbd8eb84cff6850" class="i field">OBJ_REF_DELTA</a>:
+					<a href="#a2580e9cb6bd2813" class="i method">ReadFully</a>(<span class="r59 r">pos</span>, <span class="r61 r">ib</span>, 0, 20, <span class="r57 r">curs</span>);
+					<b>return</b> <b>new</b> <a href="DeltaRefPackedObjectLoader.cs.html#112b6ae8e1744d01" class="t constructor">DeltaRefPackedObjectLoader</a>(<a href="#0c479d44fa7c3e9d" class="k">this</a>, <span class="r59 r">pos</span> + <span class="r61 r">ib</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r58 r">objOffset</span>, (<b>int</b>)<span class="r64 r">dataSize</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a84de848edbd5661" class="i method">FromRaw</a>(<span class="r61 r">ib</span>));
+
+				<b>default</b>:
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Unknown object type &quot;</span> + <span class="r63 r">typeCode</span> + <span class="s">&quot;.&quot;</span>);
+			}
+		}
+
+		<b>private long</b> <a id="42c860cfebdab453" href="R/42c860cfebdab453.html" target="n" data-glyph="76,1" class="i method">FindEndOffset</a>(<b>long</b> <span id="r67 rd" class="r67 r">startOffset</span>)
+		{
+			<b>long</b> <span id="r68 rd" class="r68 r">maxOffset</span> = <a href="#e91f8509a9270ba7" class="i property">Length</a> - 20;
+			<b>return</b> <a href="#b9a2aa6343208cb5" class="i method">GetReverseIdx</a>().<a href="PackReverseIndex.cs.html#a6aa7b5c4621ca9e" class="i method">FindNextOffset</a>(<span class="r67 r">startOffset</span>, <span class="r68 r">maxOffset</span>);
+		}
+
+		<b>private</b> <a href="PackReverseIndex.cs.html#f99b8942feec3cd8" class="t t">PackReverseIndex</a> <a id="b9a2aa6343208cb5" href="R/b9a2aa6343208cb5.html" target="n" data-glyph="76,1" class="i method">GetReverseIdx</a>()
+		{
+			<b>lock</b> (<a href="#6c9579afca6707a4" class="i field">locker</a>)
+			{
+				<b>if</b> (<a href="#561d536d4d8f3ae3" class="i field">_reverseIdx</a> == <b>null</b>)
+				{
+					<a href="#561d536d4d8f3ae3" class="i field">_reverseIdx</a> = <b>new</b> <a href="PackReverseIndex.cs.html#fadf33c687f9c703" class="t constructor">PackReverseIndex</a>(<a href="#652df50ba95c9530" class="i method">LoadPackIndex</a>());
+				}
+			}
+
+			<b>return</b> <a href="#561d536d4d8f3ae3" class="i field">_reverseIdx</a>;
+		}
+
+		<b>public long</b> <a id="e91f8509a9270ba7" href="R/e91f8509a9270ba7.html" target="n" data-glyph="102,1" class="i property">Length</a> { <b>get</b>; <b>private set</b>; }
+
+		<b>internal int</b> <a id="d1b2e8ec10b52181" href="R/d1b2e8ec10b52181.html" target="n" data-glyph="104,1" class="i property">Hash</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#ed7859088986ce2a" class="i field">_hash</a>; }
+		}
+		
+		<b>public void</b> <a id="87545eb7a27a34b8" href="R/87545eb7a27a34b8.html" target="n" data-glyph="72,1" class="i method">Dispose</a> ()
+		{
+            <a href="#7de83ea9bc1b508a" class="i method">Close</a>();
+
+            <b>if</b> (<a href="#920df13c6c0ebe11" class="i field">_fd</a> == <b>null</b>)
+            {
+                <b>return</b>;
+            }
+
+		    <a href="#920df13c6c0ebe11" class="i field">_fd</a>.<a href="@0@mscorlib/A.html#f1b4285950a82354" class="i method">Dispose</a>();}
+		}
+		
+	}
+</pre></td></tr></table></div></body></html>

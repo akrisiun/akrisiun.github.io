@@ -1,0 +1,287 @@
+﻿<!DOCTYPE html>
+<html><head><title>PackIndexWriter.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(278);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/PackIndexWriter.cs" target="_top">PackIndexWriter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Cryptography</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Transport</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <b>public abstract class</b> <a id="6afaa2ef08158b4a" href="R/6afaa2ef08158b4a.html" target="n" data-glyph="0,0" class="t t">PackIndexWriter</a>
+    {
+        <b>internal static byte</b>[] <a id="603087c62f5a676d" href="R/603087c62f5a676d.html" target="n" data-glyph="44,1" class="i field">TOC</a> = { 255, (<b>byte</b>)<span class="s">&#39;t&#39;</span>, (<b>byte</b>)<span class="s">&#39;O&#39;</span>, (<b>byte</b>)<span class="s">&#39;c&#39;</span> };
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a new writer for the oldest (most widely understood) format.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> This method selects an index format that can accurate describe the</span>
+		<span class="c">///</span><span class="c"> supplied objects and that will be the most compatible format with older</span>
+		<span class="c">///</span><span class="c"> Git implementations.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Index version 1 is widely recognized by all Git implementations, but</span>
+		<span class="c">///</span><span class="c"> index version 2 (and later) is not as well recognized as it was</span>
+		<span class="c">///</span><span class="c"> introduced more than a year later. Index version 1 can only be used if</span>
+		<span class="c">///</span><span class="c"> the resulting pack file is under 4 gigabytes in size; packs larger than</span>
+		<span class="c">///</span><span class="c"> that limit must use index version 2.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r t">T</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">dst</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The stream the index data will be written to. If not already</span>
+		<span class="c">///</span><span class="c"> buffered it will be automatically wrapped in a buffered</span>
+		<span class="c">///</span><span class="c"> stream. Callers are always responsible for closing the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">objs</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The objects the caller needs to store in the index. Entries</span>
+		<span class="c">///</span><span class="c"> will be examined until a format can be conclusively selected.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A new writer to output an index file of the requested format to</span>
+		<span class="c">///</span><span class="c"> the supplied stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#109b3ef6299ef9df" class="t t">ArgumentException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> No recognized pack index version can support the supplied</span>
+		<span class="c">///</span><span class="c"> objects. This is likely a bug in the implementation.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#6afaa2ef08158b4a" class="t t">PackIndexWriter</a> <a id="272b1070032f9575" href="R/272b1070032f9575.html" target="n" data-glyph="72,1" class="i method">CreateOldestPossible</a>&lt;<span id="r0 rd t" class="r0 r t">T</span>&gt;(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r1 rd" class="r1 r">dst</span>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<span class="r0 r t">T</span>&gt; <span id="r2 rd" class="r2 r">objs</span>) 
+			<b>where</b> <span class="r0 r t">T</span> : <a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a>
+        {
+            <b>int</b> <span id="r3 rd" class="r3 r">version</span> = 1;
+        	<b>bool</b> <span id="r4 rd" class="r4 r">breakLoop</span> = <b>false</b>;
+
+            <b>foreach</b> (<span class="r0 r t">T</span> <span id="r5 rd" class="r5 r">oe</span> <b>in</b> <span class="r2 r">objs</span>)
+            {
+                <b>switch</b> (<span class="r3 r">version</span>)
+                {
+                    <b>case</b> 1:
+                        <b>if</b> (<a href="PackIndexWriterV1.cs.html#16bf8748e091cae8" class="t t">PackIndexWriterV1</a>.<a href="PackIndexWriterV1.cs.html#61e6e7857d9a0659" class="i method">CanStore</a>(<span class="r5 r">oe</span>)) <b>continue</b>;
+                        <span class="r3 r">version</span> = 2;
+                		<b>break</b>;
+
+                    <b>case</b> 2:
+                		<span class="r4 r">breakLoop</span> = <b>true</b>;
+                		<b>break</b>;
+				}
+
+				<b>if</b> (<span class="r4 r">breakLoop</span>)
+				{
+					<b>break</b>;
+				}
+            }
+
+            <b>return</b> <a href="#4315bc29786f8e88" class="i method">CreateVersion</a>(<span class="r1 r">dst</span>, <span class="r3 r">version</span>);
+        }
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a new writer instance for a specific index format version.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">dst</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The stream the index data will be written to. If not already</span>
+		<span class="c">///</span><span class="c"> buffered it will be automatically wrapped in a buffered</span>
+		<span class="c">///</span><span class="c"> stream. Callers are always responsible for closing the stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">version</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Index format version number required by the caller. Exactly</span>
+		<span class="c">///</span><span class="c"> this formatted version will be written.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A new writer to output an index file of the requested format to</span>
+		<span class="c">///</span><span class="c"> the supplied stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#109b3ef6299ef9df" class="t t">ArgumentException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The version requested is not supported by this</span>
+		<span class="c">///</span><span class="c"> implementation.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public static</b> <a href="#6afaa2ef08158b4a" class="t t">PackIndexWriter</a> <a id="4315bc29786f8e88" href="R/4315bc29786f8e88.html" target="n" data-glyph="72,1" class="i method">CreateVersion</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r6 rd" class="r6 r">dst</span>, <b>int</b> <span id="r7 rd" class="r7 r">version</span>)
+        {
+            <b>switch</b> (<span class="r7 r">version</span>)
+            {
+                <b>case</b> 1:
+                    <b>return</b> <b>new</b> <a href="PackIndexWriterV1.cs.html#42694a474d490b74" class="t constructor">PackIndexWriterV1</a>(<span class="r6 r">dst</span>);
+                <b>case</b> 2:
+                    <b>return</b> <b>new</b> <a href="PackIndexWriterV2.cs.html#72b4d24e33775775" class="t constructor">PackIndexWriterV2</a>(<span class="r6 r">dst</span>);
+                <b>default</b>:
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Unsupported pack index version &quot;</span> + <span class="r7 r">version</span>);
+            }
+        }
+
+		<span class="c">// The index data stream we are responsible for creating.</span>
+        <b>internal readonly</b> <a href="@0@mscorlib/A.html#cf806b417abe1a35" class="t t">BinaryWriter</a> <a id="6248653402a6d4ee" href="R/6248653402a6d4ee.html" target="n" data-glyph="44,1" class="i field">_stream</a>;
+
+		<span class="c">// A temporary buffer for use during IO to out.</span>
+        <b>internal byte</b>[] <a id="773219bddd79dd36" href="R/773219bddd79dd36.html" target="n" data-glyph="44,1" class="i field">tmp</a> = <b>new</b> <b>byte</b>[4 + <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>];
+
+		<span class="c">// The entries this writer must pack.</span>
+        <b>internal</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a>&gt; <a id="9942cb86a9943700" href="R/9942cb86a9943700.html" target="n" data-glyph="44,1" class="i field">entries</a>;
+
+		<span class="c">// SHA-1 checksum for the entire pack data.</span>
+        <b>internal byte</b>[] <a id="6a7d4f34d5171913" href="R/6a7d4f34d5171913.html" target="n" data-glyph="44,1" class="i field">packChecksum</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a new writer instance.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">stream</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The stream this instance outputs to. If not already buffered</span>
+		<span class="c">///</span><span class="c"> it will be automatically wrapped in a buffered stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>internal</b> <a id="272d369f593eca22" href="R/272d369f593eca22.html" target="n" data-glyph="74,1" class="i constructor">PackIndexWriter</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r8 rd" class="r8 r">stream</span>)
+        {
+            <a href="#6248653402a6d4ee" class="i field">_stream</a> = <b>new</b> <a href="@0@mscorlib/A.html#93163b0edbac85a5" class="t constructor">BinaryWriter</a>(<span class="r8 r">stream</span>);
+        }
+        
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">  Write all object entries to the index stream.</span>
+		<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c">  After writing the stream passed to the factory is flushed but remains</span>
+		<span class="c">///</span><span class="c">  open. Callers are always responsible for closing the output stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r t">T</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">toStore</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sorted list of objects to store in the index. The caller must</span>
+		<span class="c">///</span><span class="c"> have previously sorted the list using </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">&#39;s</span>
+		<span class="c">///</span><span class="c"> native {@link Comparable} implementation.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">packDataChecksum</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Checksum signature of the entire pack data content. This is</span>
+		<span class="c">///</span><span class="c"> traditionally the last 20 bytes of the pack file&#39;s own stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="f95eb831362eeb77" href="R/f95eb831362eeb77.html" target="n" data-glyph="72,1" class="i method">Write</a>&lt;<span id="r9 rd t" class="r9 r t">T</span>&gt;(<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<span class="r9 r t">T</span>&gt; <span id="r10 rd" class="r10 r">toStore</span>, <b>byte</b>[] <span id="r11 rd" class="r11 r">packDataChecksum</span>) 
+			<b>where</b> <span class="r9 r t">T</span> : <a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a>
+        {
+            <a href="#9942cb86a9943700" class="i field">entries</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a>&gt;();
+            <b>foreach</b> (<span class="r9 r t">T</span> <span id="r12 rd" class="r12 r">e</span> <b>in</b> <span class="r10 r">toStore</span>) <a href="#9942cb86a9943700" class="i field">entries</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r12 r">e</span>);
+            <a href="#6a7d4f34d5171913" class="i field">packChecksum</a> = <span class="r11 r">packDataChecksum</span>;
+            <a href="#d4a7d584b8b5e6e4" class="i method">WriteInternal</a>();
+            <a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#38f4e6c6f7e28bbb" class="i method">Flush</a>();
+        }
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">  Writes the index file to out.</span>
+		<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c">  Implementations should go something like:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">example</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> WriteFanOutTable();</span>
+		<span class="c">///</span><span class="c"> foreach (PackedObjectInfo po in entries)</span>
+		<span class="c">///</span><span class="c"> {</span>
+		<span class="c">///</span><span class="c">		WriteOneEntry(po);</span>
+		<span class="c">///</span><span class="c"> }</span>
+		<span class="c">///</span><span class="c"> WriteChecksumFooter();</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">example</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Where the logic for </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">writeOneEntry</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> is specific to the index</span>
+		<span class="c">///</span><span class="c"> format in use. Additional headers/footers may be used if necessary and</span>
+		<span class="c">///</span><span class="c"> the entries collection may be iterated over more than once if</span>
+		<span class="c">///</span><span class="c"> necessary. Implementors therefore have complete control over the data.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal abstract void</b> <a id="d4a7d584b8b5e6e4" href="R/d4a7d584b8b5e6e4.html" target="n" data-glyph="74,1" class="i method">WriteInternal</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Output the version 2 (and later) TOC header, with version number.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Post version 1 all index files start with a TOC header that makes the</span>
+		<span class="c">///</span><span class="c"> file an invalid version 1 file, and then includes the version number.</span>
+		<span class="c">///</span><span class="c"> This header is necessary to recognize a version 1 from a version 2</span>
+		<span class="c">///</span><span class="c"> formatted index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">version</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Version number of this index format being written.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>internal void</b> <a id="adae2eaee9c676f5" href="R/adae2eaee9c676f5.html" target="n" data-glyph="74,1" class="i method">WriteTOC</a>(<b>int</b> <span id="r13 rd" class="r13 r">version</span>)
+        {
+            <a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#603087c62f5a676d" class="i field">TOC</a>);
+            <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#773219bddd79dd36" class="i field">tmp</a>, 0, <span class="r13 r">version</span>);
+            <a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#fae34c4f5667c7a2" class="i method">Write</a>(<a href="#773219bddd79dd36" class="i field">tmp</a>, 0 , 4);
+        }
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> utput the standard 256 entry first-level fan-out table.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> The fan-out table is 4 KB in size, holding 256 32-bit unsigned integer</span>
+		<span class="c">///</span><span class="c"> counts. Each count represents the number of objects within this index</span>
+		<span class="c">///</span><span class="c"> whose </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a>.<a href="AnyObjectId.cs.html#11cfb10994568bbe" class="i method">GetFirstByte</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> matches the count&#39;s position in the</span>
+		<span class="c">///</span><span class="c"> fan-out table.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	    <b>internal void</b> <a id="fcb6b4c418ad7ecb" href="R/fcb6b4c418ad7ecb.html" target="n" data-glyph="74,1" class="i method">WriteFanOutTable</a>() 
+        {
+		    <b>int</b>[] <span id="r14 rd" class="r14 r">fanout</span> = <b>new</b> <b>int</b>[256];
+		    <b>foreach</b> (<a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a> <span id="r15 rd" class="r15 r">po</span> <b>in</b> <a href="#9942cb86a9943700" class="i field">entries</a>)
+			    <span class="r14 r">fanout</span>[<span class="r15 r">po</span>.<a href="AnyObjectId.cs.html#11cfb10994568bbe" class="i method">GetFirstByte</a>() &amp; 0xff]++;
+		    
+            <b>for</b> (<b>int</b> <span id="r16 rd" class="r16 r">i</span> = 1; <span class="r16 r">i</span> &lt; 256; <span class="r16 r">i</span>++)
+			    <span class="r14 r">fanout</span>[<span class="r16 r">i</span>] += <span class="r14 r">fanout</span>[<span class="r16 r">i</span> - 1];
+
+            <b>foreach</b> (<b>int</b> <span id="r17 rd" class="r17 r">n</span> <b>in</b> <span class="r14 r">fanout</span>)
+            {
+                <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#773219bddd79dd36" class="i field">tmp</a>, 0, <span class="r17 r">n</span>);
+                <a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#fae34c4f5667c7a2" class="i method">Write</a>(<a href="#773219bddd79dd36" class="i field">tmp</a>, 0, 4);
+            }
+
+        }
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Output the standard two-checksum index footer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> The standard footer contains two checksums (20 byte SHA-1 values):</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ol</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">Pack data checksum - taken from the last 20 bytes of the pack file.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">Index data checksum - checksum of all index bytes written, including</span>
+		<span class="c">///</span><span class="c"> the pack data checksum above.</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ol</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	    <b>internal void</b> <a id="fa1c299f6e9b7189" href="R/fa1c299f6e9b7189.html" target="n" data-glyph="74,1" class="i method">WriteChecksumFooter</a>() {
+		    <a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<a href="#6a7d4f34d5171913" class="i field">packChecksum</a>);
+            <b>using</b> (<a href="@0@mscorlib/A.html#4ce45830f97fd9b8" class="k">var</a> <span id="r18 rd" class="r18 r">sha</span> = <b>new</b> <a href="@0@mscorlib/A.html#92ea48f050b5f804" class="t constructor">SHA1CryptoServiceProvider</a>())
+			{
+			<b>var</b> <span id="r19 rd" class="r19 r">hash</span> = <span class="r18 r">sha</span>.<a href="@0@mscorlib/A.html#5b02a2a217146fcf" class="i method">ComputeHash</a>(<a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#ed0614ed6d1aff5d" class="i property">BaseStream</a>);
+<span class="k preprocess">#</span><span class="k preprocess">warning</span> this should be tested better
+				<a href="#6248653402a6d4ee" class="i field">_stream</a>.<a href="@0@mscorlib/A.html#3b784e1877648aef" class="i method">Write</a>(<span class="r19 r">hash</span>);
+			}
+	    }
+    }
+}
+</pre></td></tr></table></div></body></html>

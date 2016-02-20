@@ -1,0 +1,237 @@
+﻿<!DOCTYPE html>
+<html><head><title>ThreadSafeProgressMonitor.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(228);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/ThreadSafeProgressMonitor.cs" target="_top">NGit\ThreadSafeProgressMonitor.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Wrapper around the general</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ProgressMonitor</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> to make it thread safe.</span>
+	<span class="c">///</span><span class="c"> Updates to the underlying ProgressMonitor are made only from the thread that</span>
+	<span class="c">///</span><span class="c"> allocated this wrapper. Callers are responsible for ensuring the allocating</span>
+	<span class="c">///</span><span class="c"> thread uses</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#4841d96c35e6587d" class="i method">PollForUpdates</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">PollForUpdates()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> or</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c3571f8ebde19735" class="i method">WaitForCompletion</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">WaitForCompletion()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> to</span>
+	<span class="c">///</span><span class="c"> update the underlying ProgressMonitor.</span>
+	<span class="c">///</span><span class="c"> Only</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f8808a04e62ad039" class="i method">Update</a>(<b>int</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Update(int)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> ,</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#2fe6d3a4050e3f11" class="i method">IsCancelled</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">IsCancelled()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> , and</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#2fd7e006469e82b4" class="i method">EndWorker</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">EndWorker()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> may be invoked from a worker thread. All other methods of the ProgressMonitor</span>
+	<span class="c">///</span><span class="c"> interface can only be called from the thread that allocates this wrapper.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="9c7a1db5823f384f" href="../R/9c7a1db5823f384f.html" target="n" data-glyph="0,0" class="t t">ThreadSafeProgressMonitor</a> : <a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a>
+	{
+		<b>private readonly</b> <a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <a id="39aba1f7a30c5714" href="../R/39aba1f7a30c5714.html" target="n" data-glyph="46,1" class="i field">pm</a>;
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#62c8d905701caaa2" class="t t">ReentrantLock</a> <a id="d92eb796e401b65f" href="../R/d92eb796e401b65f.html" target="n" data-glyph="46,1" class="i field">Lock</a>;
+
+		<b>private readonly</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a> <a id="3db4ccbb4c152c1b" href="../R/3db4ccbb4c152c1b.html" target="n" data-glyph="46,1" class="i field">mainThread</a>;
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#3c3ddcd16426376a" class="t t">AtomicInteger</a> <a id="6574a5cac9d3c23f" href="../R/6574a5cac9d3c23f.html" target="n" data-glyph="46,1" class="i field">workers</a>;
+
+		<b>private readonly</b> <a href="/Sharpen/A.html#3c3ddcd16426376a" class="t t">AtomicInteger</a> <a id="7c546716204583e3" href="../R/7c546716204583e3.html" target="n" data-glyph="46,1" class="i field">pendingUpdates</a>;
+
+		<b>private readonly</b> <a href="@0@System/A.html#9329ec73e0564070" class="t t">Semaphore</a> <a id="d99287d5bd0e1312" href="../R/d99287d5bd0e1312.html" target="n" data-glyph="46,1" class="i field">process</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Wrap a ProgressMonitor to be thread safe.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Wrap a ProgressMonitor to be thread safe.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">pm</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the underlying monitor to receive events.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="942c1baf01123fd4" href="../R/942c1baf01123fd4.html" target="n" data-glyph="72,1" class="i constructor">ThreadSafeProgressMonitor</a>(<a href="ProgressMonitor.cs.html#bf250c8b606cd5b7" class="t t">ProgressMonitor</a> <span id="r0 rd" class="r0 r">pm</span>)
+		{
+			<a href="#9c7a1db5823f384f" class="k">this</a>.<a href="#39aba1f7a30c5714" class="i field">pm</a> = <span class="r0 r">pm</span>;
+			<a href="#9c7a1db5823f384f" class="k">this</a>.<a href="#d92eb796e401b65f" class="i field">Lock</a> = <b>new</b> <a href="/Sharpen/A.html#62c8d905701caaa2" class="t constructor">ReentrantLock</a>();
+			<a href="#9c7a1db5823f384f" class="k">this</a>.<a href="#3db4ccbb4c152c1b" class="i field">mainThread</a> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#9c18f268284a4c54" class="i method">CurrentThread</a>();
+			<a href="#9c7a1db5823f384f" class="k">this</a>.<a href="#6574a5cac9d3c23f" class="i field">workers</a> = <b>new</b> <a href="/Sharpen/A.html#137874f1c58142ef" class="t constructor">AtomicInteger</a>(0);
+			<a href="#9c7a1db5823f384f" class="k">this</a>.<a href="#7c546716204583e3" class="i field">pendingUpdates</a> = <b>new</b> <a href="/Sharpen/A.html#137874f1c58142ef" class="t constructor">AtomicInteger</a>(0);
+			<a href="#9c7a1db5823f384f" class="k">this</a>.<a href="#d99287d5bd0e1312" class="i field">process</a> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#be0ae7d785e50347" class="i method">CreateSemaphore</a>(0);
+		}
+
+		<b>public override void</b> <a id="7a0fb2c6297ed170" href="../R/7a0fb2c6297ed170.html" target="n" data-glyph="72,1" class="i method">Start</a>(<b>int</b> <span id="r1 rd" class="r1 r">totalTasks</span>)
+		{
+			<b>if</b> (!<a href="#f8b576381349b399" class="i method">IsMainThread</a>())
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8d6a52a5496ce078" class="t constructor">InvalidOperationException</a>();
+			}
+			<a href="#39aba1f7a30c5714" class="i field">pm</a>.<a href="ProgressMonitor.cs.html#eb3fe34514562e2b" class="i method">Start</a>(<span class="r1 r">totalTasks</span>);
+		}
+
+		<b>public override void</b> <a id="2869056802c63c88" href="../R/2869056802c63c88.html" target="n" data-glyph="72,1" class="i method">BeginTask</a>(<b>string</b> <span id="r2 rd" class="r2 r">title</span>, <b>int</b> <span id="r3 rd" class="r3 r">totalWork</span>)
+		{
+			<b>if</b> (!<a href="#f8b576381349b399" class="i method">IsMainThread</a>())
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8d6a52a5496ce078" class="t constructor">InvalidOperationException</a>();
+			}
+			<a href="#39aba1f7a30c5714" class="i field">pm</a>.<a href="ProgressMonitor.cs.html#6a8572606d4aca16" class="i method">BeginTask</a>(<span class="r2 r">title</span>, <span class="r3 r">totalWork</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Notify the monitor a worker is starting.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Notify the monitor a worker is starting.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="2e5f56f1fd122580" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">StartWorker</a>()
+		{
+			<a href="#87a60725098b67c6" class="i method">StartWorkers</a>(1);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Notify the monitor of workers starting.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Notify the monitor of workers starting.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the number of worker threads that are starting.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="87a60725098b67c6" href="../R/87a60725098b67c6.html" target="n" data-glyph="72,1" class="i method">StartWorkers</a>(<b>int</b> <span id="r4 rd" class="r4 r">count</span>)
+		{
+			<a href="#6574a5cac9d3c23f" class="i field">workers</a>.<a href="/Sharpen/A.html#7c5eba0748c4308b" class="i method">AddAndGet</a>(<span class="r4 r">count</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Notify the monitor a worker is finished.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Notify the monitor a worker is finished.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="2fd7e006469e82b4" href="../R/2fd7e006469e82b4.html" target="n" data-glyph="72,1" class="i method">EndWorker</a>()
+		{
+			<b>if</b> (<a href="#6574a5cac9d3c23f" class="i field">workers</a>.<a href="/Sharpen/A.html#da21d23e10f19f42" class="i method">DecrementAndGet</a>() == 0)
+			{
+				<a href="#d99287d5bd0e1312" class="i field">process</a>.<a href="@0@System/A.html#fda57f3832e16332" class="i method">Release</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Non-blocking poll for pending updates.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Non-blocking poll for pending updates.</span>
+		<span class="c">///</span><span class="c"> This method can only be invoked by the same thread that allocated this</span>
+		<span class="c">///</span><span class="c"> ThreadSafeProgressMonior.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="4841d96c35e6587d" href="../R/4841d96c35e6587d.html" target="n" data-glyph="72,1" class="i method">PollForUpdates</a>()
+		{
+			<span class="c">//assert isMainThread();</span>
+			<a href="#2ab4d2df1ed65202" class="i method">DoUpdates</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Process pending updates and wait for workers to finish.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Process pending updates and wait for workers to finish.</span>
+		<span class="c">///</span><span class="c"> This method can only be invoked by the same thread that allocated this</span>
+		<span class="c">///</span><span class="c"> ThreadSafeProgressMonior.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the main thread is interrupted while waiting for</span>
+		<span class="c">///</span><span class="c"> completion of workers.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="c3571f8ebde19735" href="../R/c3571f8ebde19735.html" target="n" data-glyph="72,1" class="i method">WaitForCompletion</a>()
+		{
+			<span class="c">//assert isMainThread();</span>
+			<b>while</b> (0 &lt; <a href="#6574a5cac9d3c23f" class="i field">workers</a>.<a href="/Sharpen/A.html#b8bbb95c7a899e7b" class="i method">Get</a>())
+			{
+				<a href="#2ab4d2df1ed65202" class="i method">DoUpdates</a>();
+				<a href="#d99287d5bd0e1312" class="i field">process</a>.<a href="@0@mscorlib/A.html#8f366147dd3f5f63" class="i method">WaitOne</a>();
+			}
+			<a href="#2ab4d2df1ed65202" class="i method">DoUpdates</a>();
+		}
+
+		<b>private void</b> <a id="2ab4d2df1ed65202" href="../R/2ab4d2df1ed65202.html" target="n" data-glyph="76,1" class="i method">DoUpdates</a>()
+		{
+			<b>int</b> <span id="r5 rd" class="r5 r">cnt</span> = <a href="#7c546716204583e3" class="i field">pendingUpdates</a>.<a href="/Sharpen/A.html#c71d2ed0f7645641" class="i method">GetAndSet</a>(0);
+			<b>if</b> (0 &lt; <span class="r5 r">cnt</span>)
+			{
+				<a href="#39aba1f7a30c5714" class="i field">pm</a>.<a href="ProgressMonitor.cs.html#e0fd80498a9dd608" class="i method">Update</a>(<span class="r5 r">cnt</span>);
+			}
+		}
+
+		<b>public override void</b> <a id="f8808a04e62ad039" href="../R/f8808a04e62ad039.html" target="n" data-glyph="72,1" class="i method">Update</a>(<b>int</b> <span id="r6 rd" class="r6 r">completed</span>)
+		{
+			<b>int</b> <span id="r7 rd" class="r7 r">old</span> = <a href="#7c546716204583e3" class="i field">pendingUpdates</a>.<a href="/Sharpen/A.html#5113060b8bb7a1c5" class="i method">GetAndAdd</a>(<span class="r6 r">completed</span>);
+			<b>if</b> (<a href="#f8b576381349b399" class="i method">IsMainThread</a>())
+			{
+				<a href="#2ab4d2df1ed65202" class="i method">DoUpdates</a>();
+			}
+			<b>else</b>
+			{
+				<b>if</b> (<span class="r7 r">old</span> == 0)
+				{
+					<a href="#d99287d5bd0e1312" class="i field">process</a>.<a href="@0@System/A.html#fda57f3832e16332" class="i method">Release</a>();
+				}
+			}
+		}
+
+		<b>public override bool</b> <a id="2fe6d3a4050e3f11" href="../R/2fe6d3a4050e3f11.html" target="n" data-glyph="72,1" class="i method">IsCancelled</a>()
+		{
+			<a href="#d92eb796e401b65f" class="i field">Lock</a>.<a href="/Sharpen/A.html#a6fea67e04df00c1" class="i method">Lock</a>();
+			<b>try</b>
+			{
+				<b>return</b> <a href="#39aba1f7a30c5714" class="i field">pm</a>.<a href="ProgressMonitor.cs.html#02d53f65c9e87b6b" class="i method">IsCancelled</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#d92eb796e401b65f" class="i field">Lock</a>.<a href="/Sharpen/A.html#da892348593a917f" class="i method">Unlock</a>();
+			}
+		}
+
+		<b>public override void</b> <a id="36d34c18f2c2471a" href="../R/36d34c18f2c2471a.html" target="n" data-glyph="72,1" class="i method">EndTask</a>()
+		{
+			<b>if</b> (!<a href="#f8b576381349b399" class="i method">IsMainThread</a>())
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8d6a52a5496ce078" class="t constructor">InvalidOperationException</a>();
+			}
+			<a href="#39aba1f7a30c5714" class="i field">pm</a>.<a href="ProgressMonitor.cs.html#de6d9bc67483d4a5" class="i method">EndTask</a>();
+		}
+
+		<b>private bool</b> <a id="f8b576381349b399" href="../R/f8b576381349b399.html" target="n" data-glyph="76,1" class="i method">IsMainThread</a>()
+		{
+			<b>return</b> <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="/Sharpen/A.html#9c18f268284a4c54" class="i method">CurrentThread</a>() == <a href="#3db4ccbb4c152c1b" class="i field">mainThread</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

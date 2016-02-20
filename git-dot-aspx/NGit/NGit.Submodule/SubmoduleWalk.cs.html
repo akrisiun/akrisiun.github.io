@@ -1,0 +1,722 @@
+﻿<!DOCTYPE html>
+<html><head><title>SubmoduleWalk.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(713);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Submodule/SubmoduleWalk.cs" target="_top">NGit.Submodule\SubmoduleWalk.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Storage</span>.<span class="i n">File</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Walker that visits all submodule entries found in a tree</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="4f883fed91c11051" href="../R/4f883fed91c11051.html" target="n" data-glyph="0,0" class="t t">SubmoduleWalk</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a generator to walk over the submodule entries currently in the</span>
+		<span class="c">///</span><span class="c"> index</span>
+		<span class="c">///</span><span class="c"> The</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.gitmodules</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> file is read from the index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">generator over submodule index entries</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="ff13715902e5475c" href="../R/ff13715902e5475c.html" target="n" data-glyph="72,1" class="i method">ForIndex</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repository</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <span id="r1 rd" class="r1 r">generator</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#ee53ec73d4945b53" class="t constructor">SubmoduleWalk</a>(<span class="r0 r">repository</span>
+				);
+			<b>try</b>
+			{
+				<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r2 rd" class="r2 r">index</span> = <span class="r0 r">repository</span>.<a href="../NGit/Repository.cs.html#f2ac93d271828141" class="i method">ReadDirCache</a>();
+				<span class="r1 r">generator</span>.<a href="#a3ccbe061e532bf8" class="i method">SetTree</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#8bfe310b8b94624c" class="t constructor">DirCacheIterator</a>(<span class="r2 r">index</span>));
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r3 rd" class="r3 r">e</span>)
+			{
+				<span class="r1 r">generator</span>.<a href="#7d7416a15f3e0f24" class="i method">Release</a>();
+				<b>throw</b>;
+			}
+			<b>return</b> <span class="r1 r">generator</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a generator and advance it to the submodule entry at the given</span>
+		<span class="c">///</span><span class="c"> path</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">treeId</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the root of a tree containing both a submodule at the given path</span>
+		<span class="c">///</span><span class="c"> and .gitmodules at the root.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">generator at given path, null if no submodule at given path</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="93498f4e1fe0c84a" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ForPath</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r4 rd" class="r4 r">repository</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a>
+			 <span id="r5 rd" class="r5 r">treeId</span>, <b>string</b> <span id="r6 rd" class="r6 r">path</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <span id="r7 rd" class="r7 r">generator</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#ee53ec73d4945b53" class="t constructor">SubmoduleWalk</a>(<span class="r4 r">repository</span>
+				);
+			<b>try</b>
+			{
+				<span class="r7 r">generator</span>.<a href="#32ead87eefc8e3f0" class="i method">SetTree</a>(<span class="r5 r">treeId</span>);
+				<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a> <span id="r8 rd" class="r8 r">filter</span> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r6 r">path</span>);
+				<span class="r7 r">generator</span>.<a href="#2782e1869a013801" class="i method">SetFilter</a>(<span class="r8 r">filter</span>);
+				<span class="r7 r">generator</span>.<a href="#474f1c3efce679ba" class="i method">SetRootTree</a>(<span class="r5 r">treeId</span>);
+				<b>while</b> (<span class="r7 r">generator</span>.<a href="#bdbf5d39e00804fc" class="i method">Next</a>())
+				{
+					<b>if</b> (<span class="r8 r">filter</span>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#99ab062f8153b2da" class="i method">IsDone</a>(<span class="r7 r">generator</span>.<a href="#672a2ce1eab47a2c" class="i field">walk</a>))
+					{
+						<b>return</b> <span class="r7 r">generator</span>;
+					}
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r9 rd" class="r9 r">e</span>)
+			{
+				<span class="r7 r">generator</span>.<a href="#7d7416a15f3e0f24" class="i method">Release</a>();
+				<b>throw</b>;
+			}
+			<span class="r7 r">generator</span>.<a href="#7d7416a15f3e0f24" class="i method">Release</a>();
+			<b>return null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a generator and advance it to the submodule entry at the given</span>
+		<span class="c">///</span><span class="c"> path</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">iterator</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the root of a tree containing both a submodule at the given path</span>
+		<span class="c">///</span><span class="c"> and .gitmodules at the root.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">generator at given path, null if no submodule at given path</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="5ff8cc92f8b7f3b8" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">ForPath</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r10 rd" class="r10 r">repository</span>, <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>
+			 <span id="r11 rd" class="r11 r">iterator</span>, <b>string</b> <span id="r12 rd" class="r12 r">path</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <span id="r13 rd" class="r13 r">generator</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#ee53ec73d4945b53" class="t constructor">SubmoduleWalk</a>(<span class="r10 r">repository</span>
+				);
+			<b>try</b>
+			{
+				<span class="r13 r">generator</span>.<a href="#a3ccbe061e532bf8" class="i method">SetTree</a>(<span class="r11 r">iterator</span>);
+				<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a> <span id="r14 rd" class="r14 r">filter</span> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r12 r">path</span>);
+				<span class="r13 r">generator</span>.<a href="#2782e1869a013801" class="i method">SetFilter</a>(<span class="r14 r">filter</span>);
+				<span class="r13 r">generator</span>.<a href="#54ee6787d335c899" class="i method">SetRootTree</a>(<span class="r11 r">iterator</span>);
+				<b>while</b> (<span class="r13 r">generator</span>.<a href="#bdbf5d39e00804fc" class="i method">Next</a>())
+				{
+					<b>if</b> (<span class="r14 r">filter</span>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#99ab062f8153b2da" class="i method">IsDone</a>(<span class="r13 r">generator</span>.<a href="#672a2ce1eab47a2c" class="i field">walk</a>))
+					{
+						<b>return</b> <span class="r13 r">generator</span>;
+					}
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r15 rd" class="r15 r">e</span>)
+			{
+				<span class="r13 r">generator</span>.<a href="#7d7416a15f3e0f24" class="i method">Release</a>();
+				<b>throw</b>;
+			}
+			<span class="r13 r">generator</span>.<a href="#7d7416a15f3e0f24" class="i method">Release</a>();
+			<b>return null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get submodule directory</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">parent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">directory</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="e4b093a27def0b29" href="../R/e4b093a27def0b29.html" target="n" data-glyph="72,1" class="i method">GetSubmoduleDirectory</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r16 rd" class="r16 r">parent</span>, <b>string</b> <span id="r17 rd" class="r17 r">path</span>)
+		{
+			<b>return</b> <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r16 r">parent</span>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>, <span class="r17 r">path</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get submodule repository</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">parent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">repository or null if repository doesn&#39;t exist</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="2fb30f1023a19857" href="../R/2fb30f1023a19857.html" target="n" data-glyph="72,1" class="i method">GetSubmoduleRepository</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r18 rd" class="r18 r">parent</span>, <b>string</b> <span id="r19 rd" class="r19 r">path</span>)
+		{
+			<b>return</b> <a href="#4ec89e1757e1e8c1" class="i method">GetSubmoduleRepository</a>(<span class="r18 r">parent</span>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>, <span class="r19 r">path</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get submodule repository at path</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">parent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r21 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">repository or null if repository doesn&#39;t exist</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="4ec89e1757e1e8c1" href="../R/4ec89e1757e1e8c1.html" target="n" data-glyph="72,1" class="i method">GetSubmoduleRepository</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r20 rd" class="r20 r">parent</span>, <b>string</b> <span id="r21 rd" class="r21 r">path</span>)
+		{
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r22 rd" class="r22 r">subWorkTree</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r20 r">parent</span>, <span class="r21 r">path</span>);
+			<b>if</b> (!<span class="r22 r">subWorkTree</span>.<a href="/Sharpen/A.html#a2dbf0660084a9f8" class="i method">IsDirectory</a>())
+			{
+				<b>return null</b>;
+			}
+			<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r23 rd" class="r23 r">workTree</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<span class="r20 r">parent</span>, <span class="r21 r">path</span>);
+			<b>try</b>
+			{
+				<b>return</b> <b>new</b> <a href="../NGit/RepositoryBuilder.cs.html#45c54b442ea4cc50" class="t constructor">RepositoryBuilder</a>().<a href="../NGit/BaseRepositoryBuilder.cs.html#a522c67fd14dd850" class="i method">SetMustExist</a>(<b>true</b>).<a href="../NGit/BaseRepositoryBuilder.cs.html#6d7a30b14b9be929" class="i method">SetFS</a>(<a href="../NGit.Util/FS.cs.html#e131ecdeb2edce2f" class="t t">FS</a>.<a href="../NGit.Util/FS.cs.html#31f8611d0e8dd4ae" class="i field">DETECTED</a>).<a href="../NGit/BaseRepositoryBuilder.cs.html#e8cc278b5d886e56" class="i method">SetWorkTree</a>(
+					<span class="r23 r">workTree</span>).<a href="../NGit/BaseRepositoryBuilder.cs.html#9cc124337b6e0e84" class="i method">Build</a>();
+			}
+			<b>catch</b> (<a href="../NGit.Errors/RepositoryNotFoundException.cs.html#2c6e6f96d347ce78" class="t t">RepositoryNotFoundException</a>)
+			{
+				<span class="c">//</span>
+				<span class="c">//</span>
+				<span class="c">//</span>
+				<span class="c">//</span>
+				<b>return null</b>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Resolve submodule repository URL.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Resolve submodule repository URL.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This handles relative URLs that are typically specified in the</span>
+		<span class="c">///</span><span class="c"> &#39;.gitmodules&#39; file by resolving them against the remote URL of the parent</span>
+		<span class="c">///</span><span class="c"> repository.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Relative URLs will be resolved against the parent repository&#39;s working</span>
+		<span class="c">///</span><span class="c"> directory if the parent repository has no configured remote URL.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">parent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">parent repository</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r25 r">url</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">absolute or relative URL of the submodule repository</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">resolved URL</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static string</b> <a id="58b65bbae8004dbf" href="../R/58b65bbae8004dbf.html" target="n" data-glyph="72,1" class="i method">GetSubmoduleRemoteUrl</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r24 rd" class="r24 r">parent</span>, <b>string</b> <span id="r25 rd" class="r25 r">url</span>)
+		{
+			<b>if</b> (!<span class="r25 r">url</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;./&quot;</span>) &amp;&amp; !<span class="r25 r">url</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;../&quot;</span>))
+			{
+				<b>return</b> <span class="r25 r">url</span>;
+			}
+			<b>string</b> <span id="r26 rd" class="r26 r">remoteName</span> = <b>null</b>;
+			<span class="c">// Look up remote URL associated wit HEAD ref</span>
+			<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r27 rd" class="r27 r">@ref</span> = <span class="r24 r">parent</span>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+			<b>if</b> (<span class="r27 r">@ref</span> != <b>null</b>)
+			{
+				<b>if</b> (<span class="r27 r">@ref</span>.<a href="../NGit/Ref.cs.html#298ee9c00de1f373" class="i method">IsSymbolic</a>())
+				{
+					<span class="r27 r">@ref</span> = <span class="r27 r">@ref</span>.<a href="../NGit/Ref.cs.html#e4cf36bd3b40adac" class="i method">GetLeaf</a>();
+				}
+				<span class="r26 r">remoteName</span> = <span class="r24 r">parent</span>.<a href="../NGit/Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>().<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#c9590165808c4007" class="i field">CONFIG_BRANCH_SECTION</a>, 
+					<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="../NGit/Repository.cs.html#a6bd9d9bb860e572" class="i method">ShortenRefName</a>(<span class="r27 r">@ref</span>.<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>()), <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#52fcad01a119f59a" class="i field">CONFIG_KEY_REMOTE</a>);
+			}
+			<span class="c">// Fall back to &#39;origin&#39; if current HEAD ref has no remote URL</span>
+			<b>if</b> (<span class="r26 r">remoteName</span> == <b>null</b>)
+			{
+				<span class="r26 r">remoteName</span> = <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#3472bc510c43e9de" class="i field">DEFAULT_REMOTE_NAME</a>;
+			}
+			<b>string</b> <span id="r28 rd" class="r28 r">remoteUrl</span> = <span class="r24 r">parent</span>.<a href="../NGit/Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>().<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#52bac1aa28079517" class="i field">CONFIG_REMOTE_SECTION</a>
+				, <span class="r26 r">remoteName</span>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#01859b80db589d99" class="i field">CONFIG_KEY_URL</a>);
+			<span class="c">// Fall back to parent repository&#39;s working directory if no remote URL</span>
+			<b>if</b> (<span class="r28 r">remoteUrl</span> == <b>null</b>)
+			{
+				<span class="r28 r">remoteUrl</span> = <span class="r24 r">parent</span>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>.<a href="/Sharpen/A.html#26770e74c1c011f6" class="i method">GetAbsolutePath</a>();
+				<span class="c">// Normalize slashes to &#39;/&#39;</span>
+				<b>if</b> (<span class="s">&#39;\\&#39;</span> == <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a>.<a href="/Sharpen/A.html#504877c3fc29fd55" class="i property">separatorChar</a>)
+				{
+					<span class="r28 r">remoteUrl</span> = <span class="r28 r">remoteUrl</span>.<a href="@0@mscorlib/A.html#987da5dfb39f1927" class="i method">Replace</a>(<span class="s">&#39;\\&#39;</span>, <span class="s">&#39;/&#39;</span>);
+				}
+			}
+			<span class="c">// Remove trailing &#39;/&#39;</span>
+			<b>if</b> (<span class="r28 r">remoteUrl</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r28 r">remoteUrl</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1] == <span class="s">&#39;/&#39;</span>)
+			{
+				<span class="r28 r">remoteUrl</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r28 r">remoteUrl</span>, 0, <span class="r28 r">remoteUrl</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> - 1);
+			}
+			<b>char</b> <span id="r29 rd" class="r29 r">separator</span> = <span class="s">&#39;/&#39;</span>;
+			<b>string</b> <span id="r30 rd" class="r30 r">submoduleUrl</span> = <span class="r25 r">url</span>;
+			<b>while</b> (<span class="r30 r">submoduleUrl</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &gt; 0)
+			{
+				<b>if</b> (<span class="r30 r">submoduleUrl</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;./&quot;</span>))
+				{
+					<span class="r30 r">submoduleUrl</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#b77d80ab77ebce19" class="i method">Substring</a>(<span class="r30 r">submoduleUrl</span>, 2);
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r30 r">submoduleUrl</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="s">&quot;../&quot;</span>))
+					{
+						<b>int</b> <span id="r31 rd" class="r31 r">lastSeparator</span> = <span class="r28 r">remoteUrl</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;/&#39;</span>);
+						<b>if</b> (<span class="r31 r">lastSeparator</span> &lt; 1)
+						{
+							<span class="r31 r">lastSeparator</span> = <span class="r28 r">remoteUrl</span>.<a href="@0@mscorlib/A.html#43ea090a2243545e" class="i method">LastIndexOf</a>(<span class="s">&#39;:&#39;</span>);
+							<span class="r29 r">separator</span> = <span class="s">&#39;:&#39;</span>;
+						}
+						<b>if</b> (<span class="r31 r">lastSeparator</span> &lt; 1)
+						{
+							<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#d26cdba5084bf6f5" class="i field">submoduleParentRemoteUrlInvalid</a>
+								, <span class="r28 r">remoteUrl</span>));
+						}
+						<span class="r28 r">remoteUrl</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#a02a391db91900ee" class="i method">Substring</a>(<span class="r28 r">remoteUrl</span>, 0, <span class="r31 r">lastSeparator</span>);
+						<span class="r30 r">submoduleUrl</span> = <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#e8e79b34b4baa5b2" class="t t">Runtime</a>.<a href="/Sharpen/A.html#b77d80ab77ebce19" class="i method">Substring</a>(<span class="r30 r">submoduleUrl</span>, 3);
+					}
+					<b>else</b>
+					{
+						<b>break</b>;
+					}
+				}
+			}
+			<b>return</b> <span class="r28 r">remoteUrl</span> + <span class="r29 r">separator</span> + <span class="r30 r">submoduleUrl</span>;
+		}
+
+		<b>private readonly</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="f4de06c7e02dfa9e" href="../R/f4de06c7e02dfa9e.html" target="n" data-glyph="46,1" class="i field">repository</a>;
+
+		<b>private readonly</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <a id="672a2ce1eab47a2c" href="../R/672a2ce1eab47a2c.html" target="n" data-glyph="46,1" class="i field">walk</a>;
+
+		<b>private</b> <a href="../NGit/StoredConfig.cs.html#7f4ef6d46ca0d942" class="t t">StoredConfig</a> <a id="a535ae8087813be5" href="../R/a535ae8087813be5.html" target="n" data-glyph="46,1" class="i field">repoConfig</a>;
+
+		<b>private</b> <a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <a id="32dc4171f6f01fb6" href="../R/32dc4171f6f01fb6.html" target="n" data-glyph="46,1" class="i field">rootTree</a>;
+
+		<b>private</b> <a href="../NGit/Config.cs.html#11d8b6b96d6e047f" class="t t">Config</a> <a id="3e304f4d2ad151fc" href="../R/3e304f4d2ad151fc.html" target="n" data-glyph="46,1" class="i field">modulesConfig</a>;
+
+		<b>private string</b> <a id="84068c7b6e1561dd" href="../R/84068c7b6e1561dd.html" target="n" data-glyph="46,1" class="i field">path</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create submodule generator</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">repository</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="ee53ec73d4945b53" href="../R/ee53ec73d4945b53.html" target="n" data-glyph="72,1" class="i constructor">SubmoduleWalk</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r32 rd" class="r32 r">repository</span>)
+		{
+			<a href="#4f883fed91c11051" class="k">this</a>.<a href="#f4de06c7e02dfa9e" class="i field">repository</a> = <span class="r32 r">repository</span>;
+			<a href="#a535ae8087813be5" class="i field">repoConfig</a> = <span class="r32 r">repository</span>.<a href="../NGit/Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>();
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#a3ef4fc16aa4c2b5" class="t constructor">TreeWalk</a>(<span class="r32 r">repository</span>);
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the config used by this walk.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the config used by this walk.</span>
+		<span class="c">///</span><span class="c"> This method need only be called if constructing a walk manually instead of</span>
+		<span class="c">///</span><span class="c"> with one of the static factory methods above.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">config</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">.gitmodules config object</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="f4c8fa1e9a1b277c" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetModulesConfig</a>(<a href="../NGit/Config.cs.html#11d8b6b96d6e047f" class="t t">Config</a> <span id="r33 rd" class="r33 r">config</span>)
+		{
+			<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <span class="r33 r">config</span>;
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the tree used by this walk for finding</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.gitmodules</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The root tree is not read until the first submodule is encountered by the</span>
+		<span class="c">///</span><span class="c"> walk.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method need only be called if constructing a walk manually instead of</span>
+		<span class="c">///</span><span class="c"> with one of the static factory methods above.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">tree</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">tree containing .gitmodules</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="54ee6787d335c899" href="../R/54ee6787d335c899.html" target="n" data-glyph="72,1" class="i method">SetRootTree</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r34 rd" class="r34 r">tree</span>
+			)
+		{
+			<a href="#32dc4171f6f01fb6" class="i field">rootTree</a> = <span class="r34 r">tree</span>;
+			<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <b>null</b>;
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set the tree used by this walk for finding</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.gitmodules</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The root tree is not read until the first submodule is encountered by the</span>
+		<span class="c">///</span><span class="c"> walk.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method need only be called if constructing a walk manually instead of</span>
+		<span class="c">///</span><span class="c"> with one of the static factory methods above.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ID of a tree containing .gitmodules</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="474f1c3efce679ba" href="../R/474f1c3efce679ba.html" target="n" data-glyph="72,1" class="i method">SetRootTree</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r35 rd" class="r35 r">id</span>)
+		{
+			<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#a60903c92f9361ae" class="t t">CanonicalTreeParser</a> <span id="r36 rd" class="r36 r">p</span> = <b>new</b> <a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#f5ed137783f5f49b" class="t constructor">CanonicalTreeParser</a>();
+			<span class="r36 r">p</span>.<a href="../NGit.Treewalk/CanonicalTreeParser.cs.html#94d346c8eb471421" class="i method">Reset</a>(<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#36c5cf926726aefc" class="i property">ObjectReader</a>, <span class="r35 r">id</span>);
+			<a href="#32dc4171f6f01fb6" class="i field">rootTree</a> = <span class="r36 r">p</span>;
+			<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <b>null</b>;
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Load the config for this walk from</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.gitmodules</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Uses the root tree if</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#54ee6787d335c899" class="i method">SetRootTree</a>(<span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SetRootTree(NGit.Treewalk.AbstractTreeIterator)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> was</span>
+		<span class="c">///</span><span class="c"> previously called, otherwise uses the working tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> If no submodule config is found, loads an empty config.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">if an error occurred, or if the repository is bare</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="2e472544243b075e" href="../R/2e472544243b075e.html" target="n" data-glyph="72,1" class="i method">LoadModulesConfig</a>()
+		{
+			<b>if</b> (<a href="#32dc4171f6f01fb6" class="i field">rootTree</a> == <b>null</b>)
+			{
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r37 rd" class="r37 r">modulesFile</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#f4de06c7e02dfa9e" class="i field">repository</a>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#aeda1b07aa5ea69d" class="i field">DOT_GIT_MODULES</a>
+					);
+				<a href="../NGit.Storage.File/FileBasedConfig.cs.html#8b596021dd22cd14" class="t t">FileBasedConfig</a> <span id="r38 rd" class="r38 r">config</span> = <b>new</b> <a href="../NGit.Storage.File/FileBasedConfig.cs.html#fd65318bccca2285" class="t constructor">FileBasedConfig</a>(<span class="r37 r">modulesFile</span>, <a href="#f4de06c7e02dfa9e" class="i field">repository</a>.<a href="../NGit/Repository.cs.html#d1abf7dc4ca536a9" class="i property">FileSystem</a>);
+				<span class="r38 r">config</span>.<a href="../NGit.Storage.File/FileBasedConfig.cs.html#65029b3a93818c23" class="i method">Load</a>();
+				<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <span class="r38 r">config</span>;
+			}
+			<b>else</b>
+			{
+				<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r39 rd" class="r39 r">configWalk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#a3ef4fc16aa4c2b5" class="t constructor">TreeWalk</a>(<a href="#f4de06c7e02dfa9e" class="i field">repository</a>);
+				<b>try</b>
+				{
+					<span class="r39 r">configWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<a href="#32dc4171f6f01fb6" class="i field">rootTree</a>);
+					<span class="c">// The root tree may be part of the submodule walk, so we need to revert</span>
+					<span class="c">// it after this walk.</span>
+					<b>int</b> <span id="r40 rd" class="r40 r">idx</span>;
+					<b>for</b> (<span class="r40 r">idx</span> = 0; !<a href="#32dc4171f6f01fb6" class="i field">rootTree</a>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#e88e10774cf9539b" class="i property">First</a>; <span class="r40 r">idx</span>++)
+					{
+						<a href="#32dc4171f6f01fb6" class="i field">rootTree</a>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#ded0ae6810adb704" class="i method">Back</a>(1);
+					}
+					<b>try</b>
+					{
+						<span class="r39 r">configWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>false</b>;
+						<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a> <span id="r41 rd" class="r41 r">filter</span> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#aeda1b07aa5ea69d" class="i field">DOT_GIT_MODULES</a>);
+						<span class="r39 r">configWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <span class="r41 r">filter</span>;
+						<b>while</b> (<span class="r39 r">configWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+						{
+							<b>if</b> (<span class="r41 r">filter</span>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#99ab062f8153b2da" class="i method">IsDone</a>(<span class="r39 r">configWalk</span>))
+							{
+								<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <b>new</b> <a href="../NGit/BlobBasedConfig.cs.html#8e0e7bcd8f5d6d5a" class="t constructor">BlobBasedConfig</a>(<b>null</b>, <a href="#f4de06c7e02dfa9e" class="i field">repository</a>, <span class="r39 r">configWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#45a8b24f2a66a666" class="i method">GetObjectId</a>(0));
+								<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+							}
+						}
+						<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <b>new</b> <a href="../NGit/Config.cs.html#72571355f7fcf9f5" class="t constructor">Config</a>();
+					}
+					<b>finally</b>
+					{
+						<b>if</b> (<span class="r40 r">idx</span> &gt; 0)
+						{
+							<a href="#32dc4171f6f01fb6" class="i field">rootTree</a>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#49f1a68467610506" class="i method">Next</a>(<span class="r40 r">idx</span>);
+						}
+					}
+				}
+				<b>finally</b>
+				{
+					<span class="r39 r">configWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#1b296f1621d6151d" class="i method">Release</a>();
+				}
+			}
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="7776c1a123f791a9" href="../R/7776c1a123f791a9.html" target="n" data-glyph="76,1" class="i method">LazyLoadModulesConfig</a>()
+		{
+			<b>if</b> (<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> == <b>null</b>)
+			{
+				<a href="#2e472544243b075e" class="i method">LoadModulesConfig</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set tree filter</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r42 r">filter</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="2782e1869a013801" href="../R/2782e1869a013801.html" target="n" data-glyph="72,1" class="i method">SetFilter</a>(<a href="../NGit.Treewalk.Filter/TreeFilter.cs.html#d73e123de7c7397f" class="t t">TreeFilter</a> <span id="r42 rd" class="r42 r">filter</span>)
+		{
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <span class="r42 r">filter</span>;
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the tree iterator used for finding submodule entries</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">iterator</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CorruptObjectException.cs.html#cc0fe9dcd5bb1542" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.CorruptObjectException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="a3ccbe061e532bf8" href="../R/a3ccbe061e532bf8.html" target="n" data-glyph="72,1" class="i method">SetTree</a>(<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#419c03614a585e71" class="t t">AbstractTreeIterator</a> <span id="r43 rd" class="r43 r">iterator</span>
+			)
+		{
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<span class="r43 r">iterator</span>);
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Set the tree used for finding submodule entries</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">treeId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/IncorrectObjectTypeException.cs.html#7a5fb726328ac329" class="t t">IncorrectObjectTypeException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.IncorrectObjectTypeException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.MissingObjectException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="32ead87eefc8e3f0" href="../R/32ead87eefc8e3f0.html" target="n" data-glyph="72,1" class="i method">SetTree</a>(<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r44 rd" class="r44 r">treeId</span>)
+		{
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#60bae0462baed659" class="i method">AddTree</a>(<span class="r44 r">treeId</span>);
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Reset generator and start new submodule walk</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this generator</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Submodule</span>.<a href="#4f883fed91c11051" class="t t">SubmoduleWalk</a> <a id="c33095a288996082" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">Reset</a>()
+		{
+			<a href="#a535ae8087813be5" class="i field">repoConfig</a> = <a href="#f4de06c7e02dfa9e" class="i field">repository</a>.<a href="../NGit/Repository.cs.html#92534c7d0a3b9913" class="i method">GetConfig</a>();
+			<a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a> = <b>null</b>;
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#8374b8406d09f7d4" class="i method">Reset</a>();
+			<b>return</b> <a href="#4f883fed91c11051" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get directory that will be the root of the submodule&#39;s local repository</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">submodule repository directory</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="b3cf601084ec18d1" href="../R/b3cf601084ec18d1.html" target="n" data-glyph="72,1" class="i method">GetDirectory</a>()
+		{
+			<b>return</b> <a href="#e4b093a27def0b29" class="i method">GetSubmoduleDirectory</a>(<a href="#f4de06c7e02dfa9e" class="i field">repository</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Advance to next submodule in the index tree.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Advance to next submodule in the index tree.</span>
+		<span class="c">///</span><span class="c"> The object id and path of the next entry can be obtained by calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#42929fcac3ba4041" class="i method">GetObjectId</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetObjectId()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> and</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#97bc528b75ece9da" class="i method">GetPath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetPath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">true if entry found, false otherwise</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual bool</b> <a id="bdbf5d39e00804fc" href="../R/bdbf5d39e00804fc.html" target="n" data-glyph="72,1" class="i method">Next</a>()
+		{
+			<b>while</b> (<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<b>if</b> (<a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#c273d0f94fcaa76e" class="i field">GITLINK</a> != <a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#b1724a1eb4d8d6ac" class="i method">GetFileMode</a>(0))
+				{
+					<b>continue</b>;
+				}
+				<a href="#84068c7b6e1561dd" class="i field">path</a> = <a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>;
+				<b>return true</b>;
+			}
+			<a href="#84068c7b6e1561dd" class="i field">path</a> = <b>null</b>;
+			<b>return false</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get path of current submodule entry</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">path</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="97bc528b75ece9da" href="../R/97bc528b75ece9da.html" target="n" data-glyph="72,1" class="i method">GetPath</a>()
+		{
+			<b>return</b> <a href="#84068c7b6e1561dd" class="i field">path</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get object id of current submodule entry</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">object id</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="42929fcac3ba4041" href="../R/42929fcac3ba4041.html" target="n" data-glyph="72,1" class="i method">GetObjectId</a>()
+		{
+			<b>return</b> <a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#45a8b24f2a66a666" class="i method">GetObjectId</a>(0);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the configured path for current entry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the configured path for current entry. This will be the value from</span>
+		<span class="c">///</span><span class="c"> the .gitmodules file in the current repository&#39;s working tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">configured path</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="6cfd257ec54f97df" href="../R/6cfd257ec54f97df.html" target="n" data-glyph="72,1" class="i method">GetModulesPath</a>()
+		{
+			<a href="#7776c1a123f791a9" class="i method">LazyLoadModulesConfig</a>();
+			<b>return</b> <a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a>.<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#7b44dcae5dfa4adb" class="i field">CONFIG_SUBMODULE_SECTION</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>
+				.<a href="../NGit/ConfigConstants.cs.html#fb9b3542808c628f" class="i field">CONFIG_KEY_PATH</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the configured remote URL for current entry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the configured remote URL for current entry. This will be the value</span>
+		<span class="c">///</span><span class="c"> from the repository&#39;s config.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">configured URL</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="296c049e23861423" href="../R/296c049e23861423.html" target="n" data-glyph="72,1" class="i method">GetConfigUrl</a>()
+		{
+			<b>return</b> <a href="#a535ae8087813be5" class="i field">repoConfig</a>.<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#7b44dcae5dfa4adb" class="i field">CONFIG_SUBMODULE_SECTION</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>
+				.<a href="../NGit/ConfigConstants.cs.html#01859b80db589d99" class="i field">CONFIG_KEY_URL</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the configured remote URL for current entry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the configured remote URL for current entry. This will be the value</span>
+		<span class="c">///</span><span class="c"> from the .gitmodules file in the current repository&#39;s working tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">configured URL</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="f797bec9b5a7cad2" href="../R/f797bec9b5a7cad2.html" target="n" data-glyph="72,1" class="i method">GetModulesUrl</a>()
+		{
+			<a href="#7776c1a123f791a9" class="i method">LazyLoadModulesConfig</a>();
+			<b>return</b> <a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a>.<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#7b44dcae5dfa4adb" class="i field">CONFIG_SUBMODULE_SECTION</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>
+				.<a href="../NGit/ConfigConstants.cs.html#01859b80db589d99" class="i field">CONFIG_KEY_URL</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the configured update field for current entry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the configured update field for current entry. This will be the value</span>
+		<span class="c">///</span><span class="c"> from the repository&#39;s config.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">update value</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="548a776901b26d6e" href="../R/548a776901b26d6e.html" target="n" data-glyph="72,1" class="i method">GetConfigUpdate</a>()
+		{
+			<b>return</b> <a href="#a535ae8087813be5" class="i field">repoConfig</a>.<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#7b44dcae5dfa4adb" class="i field">CONFIG_SUBMODULE_SECTION</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>
+				.<a href="../NGit/ConfigConstants.cs.html#d05a72e12fa71d32" class="i field">CONFIG_KEY_UPDATE</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the configured update field for current entry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the configured update field for current entry. This will be the value</span>
+		<span class="c">///</span><span class="c"> from the .gitmodules file in the current repository&#39;s working tree.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">update value</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="09e802effbdee067" href="../R/09e802effbdee067.html" target="n" data-glyph="72,1" class="i method">GetModulesUpdate</a>()
+		{
+			<a href="#7776c1a123f791a9" class="i method">LazyLoadModulesConfig</a>();
+			<b>return</b> <a href="#3e304f4d2ad151fc" class="i field">modulesConfig</a>.<a href="../NGit/Config.cs.html#d4776c1591047007" class="i method">GetString</a>(<a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>.<a href="../NGit/ConfigConstants.cs.html#7b44dcae5dfa4adb" class="i field">CONFIG_SUBMODULE_SECTION</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>, <a href="../NGit/ConfigConstants.cs.html#f4adf48f409b5e4e" class="t t">ConfigConstants</a>
+				.<a href="../NGit/ConfigConstants.cs.html#d05a72e12fa71d32" class="i field">CONFIG_KEY_UPDATE</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get repository for current submodule entry</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">repository or null if non-existent</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <a id="2bb819c78a6ad05b" href="../R/2bb819c78a6ad05b.html" target="n" data-glyph="72,1" class="i method">GetRepository</a>()
+		{
+			<b>return</b> <a href="#2fb30f1023a19857" class="i method">GetSubmoduleRepository</a>(<a href="#f4de06c7e02dfa9e" class="i field">repository</a>, <a href="#84068c7b6e1561dd" class="i field">path</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get commit id that HEAD points to in the current submodule&#39;s repository</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">object id of HEAD reference</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="658e045421f1a58c" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetHead</a>()
+		{
+			<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r45 rd" class="r45 r">subRepo</span> = <a href="#2bb819c78a6ad05b" class="i method">GetRepository</a>();
+			<b>if</b> (<span class="r45 r">subRepo</span> == <b>null</b>)
+			{
+				<b>return null</b>;
+			}
+			<b>try</b>
+			{
+				<b>return</b> <span class="r45 r">subRepo</span>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+			}
+			<b>finally</b>
+			{
+				<span class="r45 r">subRepo</span>.<a href="../NGit/Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get ref that HEAD points to in the current submodule&#39;s repository</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">ref name, null on failures</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="516a21cb5e74a6f6" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetHeadRef</a>()
+		{
+			<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r46 rd" class="r46 r">subRepo</span> = <a href="#2bb819c78a6ad05b" class="i method">GetRepository</a>();
+			<b>if</b> (<span class="r46 r">subRepo</span> == <b>null</b>)
+			{
+				<b>return null</b>;
+			}
+			<b>try</b>
+			{
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r47 rd" class="r47 r">head</span> = <span class="r46 r">subRepo</span>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<b>return</b> <span class="r47 r">head</span> != <b>null</b> ? <span class="r47 r">head</span>.<a href="../NGit/Ref.cs.html#e4cf36bd3b40adac" class="i method">GetLeaf</a>().<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>() : <b>null</b>;
+			}
+			<b>finally</b>
+			{
+				<span class="r46 r">subRepo</span>.<a href="../NGit/Repository.cs.html#cbb627f4d19510ea" class="i method">Close</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the resolved remote URL for the current submodule.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the resolved remote URL for the current submodule.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This method resolves the value of</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f797bec9b5a7cad2" class="i method">GetModulesUrl</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetModulesUrl()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to an absolute</span>
+		<span class="c">///</span><span class="c"> URL</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">resolved remote URL</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/ConfigInvalidException.cs.html#79055270c752f591" class="t t">ConfigInvalidException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Errors.ConfigInvalidException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="4eebc2878cd19568" href="../R/4eebc2878cd19568.html" target="n" data-glyph="72,1" class="i method">GetRemoteUrl</a>()
+		{
+			<b>string</b> <span id="r48 rd" class="r48 r">url</span> = <a href="#f797bec9b5a7cad2" class="i method">GetModulesUrl</a>();
+			<b>return</b> <span class="r48 r">url</span> != <b>null</b> ? <a href="#58b65bbae8004dbf" class="i method">GetSubmoduleRemoteUrl</a>(<a href="#f4de06c7e02dfa9e" class="i field">repository</a>, <span class="r48 r">url</span>) : <b>null</b>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Release any resources used by this walker&#39;s reader.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Release any resources used by this walker&#39;s reader.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="7d7416a15f3e0f24" href="../R/7d7416a15f3e0f24.html" target="n" data-glyph="72,1" class="i method">Release</a>()
+		{
+			<a href="#672a2ce1eab47a2c" class="i field">walk</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#1b296f1621d6151d" class="i method">Release</a>();
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

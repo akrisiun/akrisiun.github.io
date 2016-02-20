@@ -1,0 +1,309 @@
+﻿<!DOCTYPE html>
+<html><head><title>InterruptTimer.cs</title><link rel="stylesheet" href="../../../styles.css"><script src="../../../scripts.js"></script></head>
+<body class="cB" onload="i(300);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/IO/InterruptTimer.cs" target="_top">Util\IO\InterruptTimer.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2009, Google Inc.
+ * Copyright (C) 2010, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Eclipse Foundation, Inc. nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">Tamir</span>.<span class="i n">SharpSsh</span>.<span class="i n">java</span>.<span class="i n">lang</span>;
+<b>using</b> <span class="t">Thread</span> = <span class="i n">Tamir</span>.<span class="i n">SharpSsh</span>.<span class="i n">java</span>.<span class="i n">lang</span>.<span class="t t">Thread</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>
+{
+
+	<span class="c">// TODO: [henon] this approach does not work in .net. Either the calling thread must be aborted (which is problematic) or the IO stream closed. </span>
+	<span class="c">// See how TimeoutStream uses a timer to abort IO.</span>
+
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c">  Triggers an interrupt on the calling thread if it doesn&#39;t complete a block.</span>
+	<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c">  Classes can use this to trip an alarm interrupting the calling thread if it</span>
+	<span class="c">///</span><span class="c">  doesn&#39;t complete a block within the specified timeout. Typical calling</span>
+	<span class="c">///</span><span class="c">  pattern is:</span>
+	<span class="c">///</span><span class="c"> </span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c">  private InterruptTimer myTimer = ...;</span>
+	<span class="c">///</span><span class="c">  void foo() {</span>
+	<span class="c">///</span><span class="c">    try {</span>
+	<span class="c">///</span><span class="c">      myTimer.begin(timeout);</span>
+	<span class="c">///</span><span class="c">      // work</span>
+	<span class="c">///</span><span class="c">    } finally {</span>
+	<span class="c">///</span><span class="c">      myTimer.end();</span>
+	<span class="c">///</span><span class="c">    }</span>
+	<span class="c">///</span><span class="c">  }</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c">  An InterruptTimer is not recursive. To implement recursive timers,</span>
+	<span class="c">///</span><span class="c">  independent InterruptTimer instances are required. A single InterruptTimer</span>
+	<span class="c">///</span><span class="c">  may be shared between objects which won&#39;t recursively call each other.</span>
+	<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c">  Each InterruptTimer spawns one background thread to sleep the specified time</span>
+	<span class="c">///</span><span class="c">  and interrupt the thread which called {@link #begin(int)}. It is up to the</span>
+	<span class="c">///</span><span class="c">  caller to ensure that the operations within the work block between the</span>
+	<span class="c">///</span><span class="c">  matched begin and end calls tests the interrupt flag (most IO operations do).</span>
+	<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c">  To terminate the background thread, use {@link #terminate()}. If the</span>
+	<span class="c">///</span><span class="c">  application fails to terminate the thread, it will (eventually) terminate</span>
+	<span class="c">///</span><span class="c">  itself when the InterruptTimer instance is garbage collected.</span>
+	<span class="c">///</span><span class="c"> </span>
+	<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i">TimeoutInputStream</span><span class="c">&quot;</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="ca1a050976423ed8" href="../../R/../../0000000000.html" target="n" data-glyph="0,0" class="t t">InterruptTimer</a>
+	{
+		<b>private readonly</b> <a href="#9294598243a44bc6" class="t t">AlarmState</a> <a id="6af17529c2f1f0cc" href="../../R/6af17529c2f1f0cc.html" target="n" data-glyph="46,1" class="i field">state</a>;
+
+		<b>private readonly</b> <a href="#662af511f382a976" class="t t">AlarmThread</a> <a id="41508d5463558520" href="../../R/41508d5463558520.html" target="n" data-glyph="46,1" class="i field">thread</a>;
+
+		<b>private readonly</b> <a href="#a854496d023205bb" class="t t">AutoKiller</a> <a id="c5f73e792e0538c4" href="../../R/c5f73e792e0538c4.html" target="n" data-glyph="46,1" class="i field">autoKiller</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c"> Create a new timer with a default thread name./// </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a id="e9c1a8c3482a5a06" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">InterruptTimer</a>()
+			: <a href="#29dcac04109072cc" class="k">this</a>(<span class="s">&quot;JGit-InterruptTimer&quot;</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">  Create a new timer to signal on interrupt on the caller.</span>
+		<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c">  The timer thread is created in the calling thread&#39;s ThreadGroup.</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">threadName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c"> name of the timer thread.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a id="29dcac04109072cc" href="../../R/29dcac04109072cc.html" target="n" data-glyph="72,1" class="i constructor">InterruptTimer</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r0 rd" class="r0 r">threadName</span>)
+		{
+			<a href="#6af17529c2f1f0cc" class="i field">state</a> = <b>new</b> <a href="#79a21984239e1b4c" class="t constructor">AlarmState</a>();
+			<a href="#c5f73e792e0538c4" class="i field">autoKiller</a> = <b>new</b> <a href="#5c897d5a11b50bd3" class="t constructor">AutoKiller</a>(<a href="#6af17529c2f1f0cc" class="i field">state</a>);
+			<a href="#41508d5463558520" class="i field">thread</a> = <b>new</b> <a href="#e427566d342c0c70" class="t constructor">AlarmThread</a>(<span class="r0 r">threadName</span>, <a href="#6af17529c2f1f0cc" class="i field">state</a>);
+			<a href="#41508d5463558520" class="i field">thread</a>.<span class="i method">start</span>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">  Arm the interrupt timer before entering a blocking operation.</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c">  </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">timeout</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">             number of milliseconds before the interrupt should trigger.</span>
+		<span class="c">///</span><span class="c">             Must be &gt; 0.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="2066334240ae3d84" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">begin</a>(<b>int</b> <span id="r1 rd" class="r1 r">timeout</span>)
+		{
+			<b>if</b> (<span class="r1 r">timeout</span> &lt;= 0)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Invalid timeout: &quot;</span> + <span class="r1 r">timeout</span>);
+			<span class="c">//Thread.interrupted();</span>
+			<a href="#6af17529c2f1f0cc" class="i field">state</a>.<a href="#c37af544cde6f6dc" class="i method">begin</a>(<span class="r1 r">timeout</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c"> Disable the interrupt timer, as the operation is complete./// </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="2072c267e79ad3f5" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">end</a>()
+		{
+			<a href="#6af17529c2f1f0cc" class="i field">state</a>.<a href="#8eb47c9607de8368" class="i method">end</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c"> Shutdown the timer thread, and wait for it to terminate./// </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public void</b> <a id="98b4e89333db02db" href="../../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">terminate</a>()
+		{
+			<a href="#6af17529c2f1f0cc" class="i field">state</a>.<a href="#589b3724cd270343" class="i method">terminate</a>();
+			<span class="c">//try {</span>
+			<a href="#41508d5463558520" class="i field">thread</a>.<a href="#9d619e201caff3db" class="i property">InnerThread</a>.<a href="@0@mscorlib/A.html#6f7bed56e0efe767" class="i method">Join</a>();
+			<span class="c">//} catch (InterruptedException e) {</span>
+			<span class="c">//   //</span>
+			<span class="c">//}</span>
+		}
+	}
+
+	<b>public class</b> <a id="662af511f382a976" href="../../R/662af511f382a976.html" target="n" data-glyph="0,0" class="t t">AlarmThread</a> : <span class="t t">Thread</span>
+	{
+		<b>public</b> <a id="e427566d342c0c70" href="../../R/e427566d342c0c70.html" target="n" data-glyph="72,1" class="i constructor">AlarmThread</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r2 rd" class="r2 r">name</span>, <a href="#9294598243a44bc6" class="t t">AlarmState</a> <span id="r3 rd" class="r3 r">q</span>)
+			: <b>base</b>(<span class="r3 r">q</span>)
+		{
+			<span class="i method">setName</span>(<span class="r2 r">name</span>);
+			<a href="#9d619e201caff3db" class="i property">InnerThread</a>.<a href="@0@mscorlib/A.html#babbe0201454caa0" class="i property">IsBackground</a> = <b>true</b>;
+		}
+
+		<span class="c">// Todo: [henon] this can easily break so we should better adapt our own Java-Thread implementation based on TamirSsh&#39;s Thread and expose the inner thread</span>
+		<b>public</b> <span class="i n">System</span>.<span class="i n">Threading</span>.<a href="@0@mscorlib/A.html#3980e012bae82e96" class="t t">Thread</a> <a id="9d619e201caff3db" href="../../R/9d619e201caff3db.html" target="n" data-glyph="102,1" class="i property">InnerThread</a>
+		{
+			<b>get</b>
+			{
+				<b>return typeof</b>(<span class="t t">Thread</span>).<a href="@0@mscorlib/A.html#0a8706ee1c09aece" class="i method">GetField</a>(<span class="s">&quot;t&quot;</span>, <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#54a14f747b06c614" class="i field">Instance</a> | <a href="@0@mscorlib/A.html#4795caf3b483702d" class="t t">BindingFlags</a>.<a href="@0@mscorlib/A.html#5144189c11f6b668" class="i field">NonPublic</a>).<a href="@0@mscorlib/A.html#f8ddbb1dc1c6b29e" class="i method">GetValue</a>(<a href="#662af511f382a976" class="k">this</a>) <b>as</b> <span class="i n">System</span>.<span class="i n">Threading</span>.<a href="@0@mscorlib/A.html#3980e012bae82e96" class="t t">Thread</a>;
+			}
+		}
+	}
+
+	<span class="c">// The trick here is, the AlarmThread does not have a reference to the</span>
+	<span class="c">// AutoKiller instance, only the InterruptTimer itself does. Thus when</span>
+	<span class="c">// the InterruptTimer is GC&#39;d, the AutoKiller is also unreachable and</span>
+	<span class="c">// can be GC&#39;d. When it gets finalized, it tells the AlarmThread to</span>
+	<span class="c">// terminate, triggering the thread to exit gracefully.</span>
+	<span class="c">//</span>
+	<b>internal class</b> <a id="a854496d023205bb" href="../../R/a854496d023205bb.html" target="n" data-glyph="2,0" class="t t">AutoKiller</a>
+	{
+		<b>private</b> <a href="#9294598243a44bc6" class="t t">AlarmState</a> <a id="70d50d78dce142ad" href="../../R/70d50d78dce142ad.html" target="n" data-glyph="46,1" class="i field">state</a>;
+
+		<b>public</b> <a id="5c897d5a11b50bd3" href="../../R/5c897d5a11b50bd3.html" target="n" data-glyph="72,1" class="i constructor">AutoKiller</a>(<a href="#9294598243a44bc6" class="t t">AlarmState</a> <span id="r4 rd" class="r4 r">s</span>)
+		{
+			<a href="#70d50d78dce142ad" class="i field">state</a> = <span class="r4 r">s</span>;
+		}
+
+		~<a id="7a0fbb5250c98b65" href="../../R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">AutoKiller</a>()
+		{
+			<a href="#70d50d78dce142ad" class="i field">state</a>.<a href="#589b3724cd270343" class="i method">terminate</a>();
+		}
+	}
+
+	<b>public class</b> <a id="9294598243a44bc6" href="../../R/9294598243a44bc6.html" target="n" data-glyph="0,0" class="t t">AlarmState</a> : <span class="t t">Runnable</span>
+	{
+
+
+		<b>private</b> <span class="t t">Thread</span> <a id="8b8be81b41f2fdf0" href="../../R/8b8be81b41f2fdf0.html" target="n" data-glyph="46,1" class="i field">callingThread</a>;
+
+		<b>private long</b> <a id="73b2b1bd98b60083" href="../../R/73b2b1bd98b60083.html" target="n" data-glyph="46,1" class="i field">deadline</a>;
+
+		<b>private bool</b> <a id="8342659ea8b765ae" href="../../R/8342659ea8b765ae.html" target="n" data-glyph="46,1" class="i field">terminated</a>;
+
+		<b>public</b> <a id="79a21984239e1b4c" href="../../R/79a21984239e1b4c.html" target="n" data-glyph="72,1" class="i constructor">AlarmState</a>()
+		{
+			<a href="#8b8be81b41f2fdf0" class="i field">callingThread</a> = <span class="t t">Thread</span>.<span class="i method">currentThread</span>();
+		}
+
+		<b>public void</b> <a id="779d5c9e5d906867" href="../../R/779d5c9e5d906867.html" target="n" data-glyph="72,1" class="i method">run</a>()
+		{
+			<b>lock</b> (<a href="#9294598243a44bc6" class="k">this</a>)
+			{
+				<b>while</b> (!<a href="#8342659ea8b765ae" class="i field">terminated</a> &amp;&amp; <a href="#8b8be81b41f2fdf0" class="i field">callingThread</a>.<span class="i method">isAlive</span>())
+				{
+					<span class="c">//try</span>
+					<span class="c">//{</span>
+					<b>if</b> (0 &lt; <a href="#73b2b1bd98b60083" class="i field">deadline</a>)
+					{
+						<b>long</b> <span id="r5 rd" class="r5 r">delay</span> = <a href="#73b2b1bd98b60083" class="i field">deadline</a> - <a href="#871201e92dfda401" class="i method">now</a>();
+						<b>if</b> (<span class="r5 r">delay</span> &lt;= 0)
+						{
+							<a href="#73b2b1bd98b60083" class="i field">deadline</a> = 0;
+							<a href="#8b8be81b41f2fdf0" class="i field">callingThread</a>.<span class="i method">interrupt</span>();
+						}
+						<b>else</b>
+						{
+							<span class="t t">Thread</span>.<span class="i method">sleep</span>((<b>int</b>)<span class="r5 r">delay</span>);
+						}
+					}
+					<b>else</b>
+					{
+						<a href="#9e167c9d39652efb" class="i method">wait</a>(1000);
+					}
+					<span class="c">//}</span>
+					<span class="c">//catch (InterruptedException e) // Note: [henon] Thread does not throw an equivalent exception in C# ??</span>
+					<span class="c">//{</span>
+					<span class="c">//   // Treat an interrupt as notice to examine state.</span>
+					<span class="c">//}</span>
+				}
+			}
+		}
+
+		<b>public void</b> <a id="c37af544cde6f6dc" href="../../R/c37af544cde6f6dc.html" target="n" data-glyph="72,1" class="i method">begin</a>(<b>int</b> <span id="r6 rd" class="r6 r">timeout</span>)
+		{
+			<b>lock</b> (<a href="#9294598243a44bc6" class="k">this</a>)
+			{
+				<b>if</b> (<a href="#8342659ea8b765ae" class="i field">terminated</a>)
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<span class="s">&quot;Timer already terminated&quot;</span>);
+				<a href="#8b8be81b41f2fdf0" class="i field">callingThread</a> = <span class="t t">Thread</span>.<span class="i method">currentThread</span>();
+				<a href="#73b2b1bd98b60083" class="i field">deadline</a> = <a href="#871201e92dfda401" class="i method">now</a>() + <span class="r6 r">timeout</span>;
+				<a href="#46ec6c4242d9b76f" class="i method">notifyAll</a>();
+			}
+		}
+
+		<b>public void</b> <a id="8eb47c9607de8368" href="../../R/8eb47c9607de8368.html" target="n" data-glyph="72,1" class="i method">end</a>()
+		{
+			<b>lock</b> (<a href="#9294598243a44bc6" class="k">this</a>)
+			{
+				<span class="c">//if (0 == deadline)</span>
+				<span class="c">//   Thread.interrupted(); // &lt;-- Note: [henon] this code does nothing but reset an irrelevant java thread internal flag AFAIK (which is not supported by our thread implementation)</span>
+				<span class="c">//else</span>
+				<a href="#73b2b1bd98b60083" class="i field">deadline</a> = 0;
+				<a href="#46ec6c4242d9b76f" class="i method">notifyAll</a>();
+			}
+		}
+
+		<b>public void</b> <a id="589b3724cd270343" href="../../R/589b3724cd270343.html" target="n" data-glyph="72,1" class="i method">terminate</a>()
+		{
+			<b>lock</b> (<a href="#9294598243a44bc6" class="k">this</a>)
+			{
+				<b>if</b> (!<a href="#8342659ea8b765ae" class="i field">terminated</a>)
+				{
+					<a href="#73b2b1bd98b60083" class="i field">deadline</a> = 0;
+					<a href="#8342659ea8b765ae" class="i field">terminated</a> = <b>true</b>;
+					<a href="#46ec6c4242d9b76f" class="i method">notifyAll</a>();
+				}
+			}
+		}
+
+		<b>private static long</b> <a id="871201e92dfda401" href="../../R/871201e92dfda401.html" target="n" data-glyph="76,1" class="i method">now</a>()
+		{
+			<b>return</b> <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>.<a href="../DateTimeExtensions.cs.html#fed56d578bd3de3f" class="i method">ToMillisecondsSinceEpoch</a>();
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> --&gt; Java helpers
+
+		<span class="c">// Note: [henon] to simulate java&#39;s builtin wait and notifyAll we use a waithandle</span>
+		<b>private</b> <a href="@0@mscorlib/A.html#b5d828778d2b9227" class="t t">AutoResetEvent</a> <a id="e5e7f336328e6976" href="../../R/e5e7f336328e6976.html" target="n" data-glyph="46,1" class="i field">wait_handle</a> = <b>new</b> <a href="@0@mscorlib/A.html#3fceb706cf6c61c6" class="t constructor">AutoResetEvent</a>(<b>false</b>);
+
+		<b>private void</b> <a id="9e167c9d39652efb" href="../../R/9e167c9d39652efb.html" target="n" data-glyph="76,1" class="i method">wait</a>(<b>int</b> <span id="r7 rd" class="r7 r">milliseconds</span>)
+		{
+			<a href="#e5e7f336328e6976" class="i field">wait_handle</a>.<a href="@0@mscorlib/A.html#4b231a1c8efbe5a7" class="i method">WaitOne</a>(<span class="r7 r">milliseconds</span>);
+		}
+
+		<b>private void</b> <a id="46ec6c4242d9b76f" href="../../R/46ec6c4242d9b76f.html" target="n" data-glyph="76,1" class="i method">notifyAll</a>()
+		{
+			<a href="#e5e7f336328e6976" class="i field">wait_handle</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a>();
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+
+}
+</pre></td></tr></table></div></body></html>

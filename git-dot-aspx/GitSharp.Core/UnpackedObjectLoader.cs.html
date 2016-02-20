@@ -1,0 +1,256 @@
+﻿<!DOCTYPE html>
+<html><head><title>UnpackedObjectLoader.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(247);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/UnpackedObjectLoader.cs" target="_top">UnpackedObjectLoader.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Loose object loader. This class loads an object not stored in a pack.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="eb853b8fc63cf924" href="R/eb853b8fc63cf924.html" target="n" data-glyph="0,0" class="t t">UnpackedObjectLoader</a> : <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a>
+	{
+		<b>private readonly int</b> <a id="90ae6ae9c8b0e8db" href="R/90ae6ae9c8b0e8db.html" target="n" data-glyph="46,1" class="i field">_objectType</a>;
+		<b>private readonly int</b> <a id="7346106ac9815a17" href="R/7346106ac9815a17.html" target="n" data-glyph="46,1" class="i field">_objectSize</a>;
+		<b>private readonly byte</b>[] <a id="1038503043a044da" href="R/1038503043a044da.html" target="n" data-glyph="46,1" class="i field">_bytes</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct an ObjectLoader to read from the file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">location of the loose object to read.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Expected identity of the object being loaded, if known.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#fd582974d1f75ac7" class="t t">FileNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The loose object file does not exist.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The loose object file exists, but is corrupt.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="f07cc8d6e13890c6" href="R/f07cc8d6e13890c6.html" target="n" data-glyph="72,1" class="i constructor">UnpackedObjectLoader</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r0 rd" class="r0 r">path</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r1 rd" class="r1 r">id</span>)
+			: <a href="#9ec109b4a37e2e07" class="k">this</a>(<a href="#caf4bb1d5092d01d" class="i method">ReadCompressed</a>(<span class="r0 r">path</span>), <span class="r1 r">id</span>)
+		{
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct an ObjectLoader from a loose object&#39;s compressed form.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">compressed</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Entire content of the loose object file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="t t">CorruptObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	The compressed data supplied does not match the format for a</span>
+		<span class="c">///</span><span class="c">	valid loose object.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public</b> <a id="4c915638d9f3db3a" href="R/4c915638d9f3db3a.html" target="n" data-glyph="72,1" class="i constructor">UnpackedObjectLoader</a>(<b>byte</b>[] <span id="r2 rd" class="r2 r">compressed</span>)
+			: <a href="#9ec109b4a37e2e07" class="k">this</a>(<span class="r2 r">compressed</span>, <b>null</b>)
+		{
+		}
+
+		<b>private static byte</b>[] <a id="caf4bb1d5092d01d" href="R/caf4bb1d5092d01d.html" target="n" data-glyph="76,1" class="i method">ReadCompressed</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r3 rd" class="r3 r">path</span>)
+		{
+			<b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="k">var</a> <span id="r4 rd" class="r4 r">inStream</span> = <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<span class="r3 r">path</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#0f1c68c756d0636b" class="i field">Read</a>))
+			{
+				<b>var</b> <span id="r5 rd" class="r5 r">compressed</span> = <b>new</b> <b>byte</b>[(<b>int</b>)<span class="r4 r">inStream</span>.<a href="@0@mscorlib/A.html#fa88edfdb51ed91c" class="i property">Length</a>];
+				<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r4 r">inStream</span>, <span class="r5 r">compressed</span>, 0, <span class="r5 r">compressed</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<b>return</b> <span class="r5 r">compressed</span>;
+			}
+		}
+
+		<b>private</b> <a id="9ec109b4a37e2e07" href="R/9ec109b4a37e2e07.html" target="n" data-glyph="76,1" class="i constructor">UnpackedObjectLoader</a>(<b>byte</b>[] <span id="r6 rd" class="r6 r">compressed</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r7 rd" class="r7 r">id</span>)
+		{
+			<span class="c">// Try to determine if this is a legacy format loose object or</span>
+			<span class="c">// a new style loose object. The legacy format was completely</span>
+			<span class="c">// compressed with zlib so the first byte must be 0x78 (15-bit</span>
+			<span class="c">// window size, deflated) and the first 16 bit word must be</span>
+			<span class="c">// evenly divisible by 31. Otherwise its a new style loose</span>
+			<span class="c">// object.</span>
+			<span class="c">//</span>
+			<span class="t t">Inflater</span> <span id="r8 rd" class="r8 r">inflater</span> = <a href="InflaterCache.cs.html#4501370cb361e63d" class="t t">InflaterCache</a>.<a href="InflaterCache.cs.html#f34a9199b9f0dd3c" class="i property">Instance</a>.<a href="InflaterCache.cs.html#37cf43157350c5e2" class="i method">get</a>();
+			<b>try</b>
+			{
+				<b>int</b> <span id="r9 rd" class="r9 r">fb</span> = <span class="r6 r">compressed</span>[0] &amp; 0xff;
+				<b>if</b> (<span class="r9 r">fb</span> == 0x78 &amp;&amp; (((<span class="r9 r">fb</span> &lt;&lt; 8) | <span class="r6 r">compressed</span>[1] &amp; 0xff) % 31) == 0)
+				{
+					<span class="r8 r">inflater</span>.<span class="i method">SetInput</span>(<span class="r6 r">compressed</span>);
+					<b>var</b> <span id="r10 rd" class="r10 r">hdr</span> = <b>new</b> <b>byte</b>[64];
+					<b>int</b> <span id="r11 rd" class="r11 r">avail</span> = 0;
+					<b>while</b> (!<span class="r8 r">inflater</span>.<span class="i property">IsFinished</span> &amp;&amp; <span class="r11 r">avail</span> &lt; <span class="r10 r">hdr</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+					{
+						<b>try</b>
+						{
+							<span class="r11 r">avail</span> += <span class="r8 r">inflater</span>.<span class="i method">Inflate</span>(<span class="r10 r">hdr</span>, <span class="r11 r">avail</span>, <span class="r10 r">hdr</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r11 r">avail</span>);
+						}
+						<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r12 rd" class="r12 r">dfe</span>)
+						{
+							<a href="Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="k">var</a> <span id="r13 rd" class="r13 r">coe</span> = <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#2ed16dbdfe611189" class="t constructor">CorruptObjectException</a>(<span class="r7 r">id</span>, <span class="s">&quot;bad stream&quot;</span>, <span class="r12 r">dfe</span>);
+							<span class="c">//inflater.end();</span>
+							<b>throw</b> <span class="r13 r">coe</span>;
+						}
+					}
+
+					<b>if</b> (<span class="r11 r">avail</span> &lt; 5)
+					{
+						<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<span class="r7 r">id</span>, <span class="s">&quot;no header&quot;</span>);
+					}
+
+					<a href="Util/MutableInteger.cs.html#5b3a0be7485d5537" class="k">var</a> <span id="r14 rd" class="r14 r">p</span> = <b>new</b> <a href="Util/MutableInteger.cs.html#5b3a0be7485d5537" class="t constructor">MutableInteger</a>();
+					<a href="#90ae6ae9c8b0e8db" class="i field">_objectType</a> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#32aa56921834aa72" class="i method">decodeTypeString</a>(<span class="r7 r">id</span>, <span class="r10 r">hdr</span>, (<b>byte</b>)<span class="s">&#39; &#39;</span>, <span class="r14 r">p</span>);
+					<a href="#7346106ac9815a17" class="i field">_objectSize</a> = <a href="Util/RawParseUtils.cs.html#9c316fb813def011" class="t t">RawParseUtils</a>.<a href="Util/RawParseUtils.cs.html#52168a0231cef30b" class="i method">parseBase10</a>(<span class="r10 r">hdr</span>, <span class="r14 r">p</span>.<a href="Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>, <span class="r14 r">p</span>);
+
+					<b>if</b> (<a href="#7346106ac9815a17" class="i field">_objectSize</a> &lt; 0)
+					{
+						<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<span class="r7 r">id</span>, <span class="s">&quot;negative size&quot;</span>);
+					}
+
+					<b>if</b> (<span class="r10 r">hdr</span>[<span class="r14 r">p</span>.<a href="Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>++] != 0)
+					{
+						<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<span class="r7 r">id</span>, <span class="s">&quot;garbage after size&quot;</span>);
+					}
+
+					<a href="#1038503043a044da" class="i field">_bytes</a> = <b>new</b> <b>byte</b>[<a href="#7346106ac9815a17" class="i field">_objectSize</a>];
+
+					<b>if</b> (<span class="r14 r">p</span>.<a href="Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a> &lt; <span class="r11 r">avail</span>)
+					{
+						<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r10 r">hdr</span>, <span class="r14 r">p</span>.<a href="Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>, <a href="#1038503043a044da" class="i field">_bytes</a>, 0, <span class="r11 r">avail</span> - <span class="r14 r">p</span>.<a href="Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>);
+					}
+
+					<a href="#772ed6ef9dbbaa33" class="i method">Decompress</a>(<span class="r7 r">id</span>, <span class="r8 r">inflater</span>, <span class="r11 r">avail</span> - <span class="r14 r">p</span>.<a href="Util/MutableInteger.cs.html#1eabd2e28ad6a7f0" class="i field">value</a>);
+				}
+				<b>else</b>
+				{
+					<b>int</b> <span id="r15 rd" class="r15 r">p</span> = 0;
+					<b>int</b> <span id="r16 rd" class="r16 r">c</span> = <span class="r6 r">compressed</span>[<span class="r15 r">p</span>++] &amp; 0xff;
+					<b>int</b> <span id="r17 rd" class="r17 r">typeCode</span> = (<span class="r16 r">c</span> &gt;&gt; 4) &amp; 7;
+					<b>int</b> <span id="r18 rd" class="r18 r">size</span> = <span class="r16 r">c</span> &amp; 15;
+					<b>int</b> <span id="r19 rd" class="r19 r">shift</span> = 4;
+					<b>while</b> ((<span class="r16 r">c</span> &amp; 0x80) != 0)
+					{
+						<span class="r16 r">c</span> = <span class="r6 r">compressed</span>[<span class="r15 r">p</span>++] &amp; 0xff;
+						<span class="r18 r">size</span> += (<span class="r16 r">c</span> &amp; 0x7f) &lt;&lt; <span class="r19 r">shift</span>;
+						<span class="r19 r">shift</span> += 7;
+					}
+
+					<b>switch</b> (<span class="r17 r">typeCode</span>)
+					{
+						<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#5dc47817ed87c51e" class="i field">OBJ_COMMIT</a>:
+						<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#301cc4bea7313e0f" class="i field">OBJ_TREE</a>:
+						<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#ead52388c5739865" class="i field">OBJ_BLOB</a>:
+						<b>case</b> <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#026685641201f5d3" class="i field">OBJ_TAG</a>:
+							<a href="#90ae6ae9c8b0e8db" class="i field">_objectType</a> = <span class="r17 r">typeCode</span>;
+							<b>break</b>;
+
+						<b>default</b>:
+							<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<span class="r7 r">id</span>, <span class="s">&quot;invalid type&quot;</span>);
+					}
+
+					<a href="#7346106ac9815a17" class="i field">_objectSize</a> = <span class="r18 r">size</span>;
+					<a href="#1038503043a044da" class="i field">_bytes</a> = <b>new</b> <b>byte</b>[<a href="#7346106ac9815a17" class="i field">_objectSize</a>];
+					<span class="r8 r">inflater</span>.<span class="i method">SetInput</span>(<span class="r6 r">compressed</span>, <span class="r15 r">p</span>, <span class="r6 r">compressed</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r15 r">p</span>);
+					<a href="#772ed6ef9dbbaa33" class="i method">Decompress</a>(<span class="r7 r">id</span>, <span class="r8 r">inflater</span>, 0);
+				}
+			}
+			<b>finally</b>
+			{
+				<a href="InflaterCache.cs.html#4501370cb361e63d" class="t t">InflaterCache</a>.<a href="InflaterCache.cs.html#f34a9199b9f0dd3c" class="i property">Instance</a>.<a href="InflaterCache.cs.html#8b42bb69044e0ee1" class="i method">release</a>(<span class="r8 r">inflater</span>);
+			}
+		}
+
+		<b>private void</b> <a id="772ed6ef9dbbaa33" href="R/772ed6ef9dbbaa33.html" target="n" data-glyph="76,1" class="i method">Decompress</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r20 rd" class="r20 r">id</span>, <span class="t t">Inflater</span> <span id="r21 rd" class="r21 r">inf</span>, <b>int</b> <span id="r22 rd" class="r22 r">p</span>)
+		{
+			<b>try</b>
+			{
+				<b>while</b> (!<span class="r21 r">inf</span>.<span class="i property">IsFinished</span>)
+				{
+					<span class="r22 r">p</span> += <span class="r21 r">inf</span>.<span class="i method">Inflate</span>(<a href="#1038503043a044da" class="i field">_bytes</a>, <span class="r22 r">p</span>, <a href="#7346106ac9815a17" class="i field">_objectSize</a> - <span class="r22 r">p</span>);
+				}
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r23 rd" class="r23 r">dfe</span>)
+			{
+				<a href="Exceptions/CorruptObjectException.cs.html#af438e9c475472da" class="k">var</a> <span id="r24 rd" class="r24 r">coe</span> = <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#2ed16dbdfe611189" class="t constructor">CorruptObjectException</a>(<span class="r20 r">id</span>, <span class="s">&quot;bad stream&quot;</span>, <span class="r23 r">dfe</span>);
+				<b>throw</b> <span class="r24 r">coe</span>;
+			}
+
+			<b>if</b> (<span class="r22 r">p</span> != <a href="#7346106ac9815a17" class="i field">_objectSize</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/CorruptObjectException.cs.html#e29d09b634d55fbe" class="t constructor">CorruptObjectException</a>(<span class="r20 r">id</span>, <span class="s">&quot;incorrect Length&quot;</span>);
+			}
+		}
+
+		<b>public override int</b> <a id="306a6eec3f8cd044" href="R/306a6eec3f8cd044.html" target="n" data-glyph="102,1" class="i property">Type</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#90ae6ae9c8b0e8db" class="i field">_objectType</a>; }
+			<b>protected set</b> { }
+		}
+
+		<b>public override long</b> <a id="9e8f6390df3b328d" href="R/9e8f6390df3b328d.html" target="n" data-glyph="102,1" class="i property">Size</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#7346106ac9815a17" class="i field">_objectSize</a>; }
+			<b>protected set</b> { }
+		}
+
+		<b>public override byte</b>[] <a id="9cc5154163869403" href="R/9cc5154163869403.html" target="n" data-glyph="102,1" class="i property">CachedBytes</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#1038503043a044da" class="i field">_bytes</a>; }
+			<b>protected set</b> { }
+		}
+
+		<b>public override int</b> <a id="5204186e070b29e9" href="R/5204186e070b29e9.html" target="n" data-glyph="102,1" class="i property">RawType</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#90ae6ae9c8b0e8db" class="i field">_objectType</a>; }
+		}
+
+		<b>public override long</b> <a id="8d3c1e4d5600f790" href="R/8d3c1e4d5600f790.html" target="n" data-glyph="102,1" class="i property">RawSize</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#7346106ac9815a17" class="i field">_objectSize</a>; }
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

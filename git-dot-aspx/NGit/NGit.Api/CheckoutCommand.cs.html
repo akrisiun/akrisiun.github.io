@@ -1,0 +1,500 @@
+﻿<!DOCTYPE html>
+<html><head><title>CheckoutCommand.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(491);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Api/CheckoutCommand.cs" target="_top">NGit.Api\CheckoutCommand.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Dircache</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Revwalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Api</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Checkout a branch to the working tree</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">seealso</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">a</span>
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span>href=&quot;http://www.kernel.org/pub/software/scm/git/docs/git-checkout.html&quot;
+	<span class="c">///</span><span class="c"> </span>*<span class="c">      </span><span class="c">&gt;</span><span class="c">Git documentation about Checkout</span><span class="c">&lt;/</span><span class="c">a</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">seealso</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="11c33b396935f397" href="../R/11c33b396935f397.html" target="n" data-glyph="0,0" class="t t">CheckoutCommand</a> : <a href="GitCommand.cs.html#07723aac137febef" class="t t">GitCommand</a>&lt;<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a>&gt;
+	{
+		<b>private string</b> <a id="72862909607f4a4f" href="../R/72862909607f4a4f.html" target="n" data-glyph="46,1" class="i field">name</a>;
+
+		<b>private bool</b> <a id="5a1861036936f535" href="../R/5a1861036936f535.html" target="n" data-glyph="46,1" class="i field">force</a> = <b>false</b>;
+
+		<b>private bool</b> <a id="6d2a5cc78d0d6930" href="../R/6d2a5cc78d0d6930.html" target="n" data-glyph="46,1" class="i field">createBranch</a> = <b>false</b>;
+
+		<b>private</b> <a href="CreateBranchCommand.cs.html#f7515acfd2fd1baa" class="t t">CreateBranchCommand</a>.<a href="CreateBranchCommand.cs.html#a6121c3a97d05869" class="t t">SetupUpstreamMode</a> <a id="afd897c83dc3c0c9" href="../R/afd897c83dc3c0c9.html" target="n" data-glyph="46,1" class="i field">upstreamMode</a>;
+
+		<b>private string</b> <a id="a0324be33ff44401" href="../R/a0324be33ff44401.html" target="n" data-glyph="46,1" class="i field">startPoint</a> = <b>null</b>;
+
+		<b>private</b> <a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <a id="a46cb927dcf82882" href="../R/a46cb927dcf82882.html" target="n" data-glyph="46,1" class="i field">startCommit</a>;
+
+		<b>private</b> <a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a> <a id="94aea2d94829fd1f" href="../R/94aea2d94829fd1f.html" target="n" data-glyph="46,1" class="i field">status</a>;
+
+		<b>private</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<b>string</b>&gt; <a id="424321272af5a067" href="../R/424321272af5a067.html" target="n" data-glyph="46,1" class="i field">paths</a>;
+
+		<b>private bool</b> <a id="de412ebc2c2c6fe4" href="../R/de412ebc2c2c6fe4.html" target="n" data-glyph="46,1" class="i field">checkoutAllPaths</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">repo</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a id="4dee88d8447e4c70" href="../R/4dee88d8447e4c70.html" target="n" data-glyph="75,1" class="i constructor">CheckoutCommand</a>(<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a> <span id="r0 rd" class="r0 r">repo</span>) : <a href="GitCommand.cs.html#b450ffab3c1f1335" class="k">base</a>(<span class="r0 r">repo</span>)
+		{
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#424321272af5a067" class="i field">paths</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<b>string</b>&gt;();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/RefAlreadyExistsException.cs.html#8a530c6fdc704aca" class="t t">RefAlreadyExistsException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> when trying to create (without force) a branch with a name</span>
+		<span class="c">///</span><span class="c"> that already exists</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/RefNotFoundException.cs.html#89222350eff5aa34" class="t t">RefNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">if the start point or branch can not be found</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/InvalidRefNameException.cs.html#cbd70b74b9e3fa11" class="t t">InvalidRefNameException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if the provided name is </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> or otherwise</span>
+		<span class="c">///</span><span class="c"> invalid</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/CheckoutConflictException.cs.html#ad9a155229ae5cd4" class="t t">CheckoutConflictException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">if the checkout results in a conflict</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the newly created branch</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/GitAPIException.cs.html#719b3a8b2c08926d" class="t t">GitAPIException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override</b> <a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <a id="d7f053ed663b1d4c" href="../R/d7f053ed663b1d4c.html" target="n" data-glyph="72,1" class="i method">Call</a>()
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#75d0811d958bbae0" class="i method">ProcessOptions</a>();
+			<b>try</b>
+			{
+				<b>if</b> (<a href="#de412ebc2c2c6fe4" class="i field">checkoutAllPaths</a> || !<a href="#424321272af5a067" class="i field">paths</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+				{
+					<a href="#db948348f9562bde" class="i method">CheckoutPaths</a>();
+					<a href="#94aea2d94829fd1f" class="i field">status</a> = <a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a>.<a href="CheckoutResult.cs.html#765646b50d314845" class="i field">OK_RESULT</a>;
+					<a href="GitCommand.cs.html#35e336747584c82b" class="i method">SetCallable</a>(<b>false</b>);
+					<b>return null</b>;
+				}
+				<b>if</b> (<a href="#6d2a5cc78d0d6930" class="i field">createBranch</a>)
+				{
+					<a href="Git.cs.html#18b9e250069d6406" class="t t">Git</a> <span id="r1 rd" class="r1 r">git</span> = <b>new</b> <a href="Git.cs.html#a6ff88b452f70105" class="t constructor">Git</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+					<a href="CreateBranchCommand.cs.html#f7515acfd2fd1baa" class="t t">CreateBranchCommand</a> <span id="r2 rd" class="r2 r">command</span> = <span class="r1 r">git</span>.<a href="Git.cs.html#120d2be3956285e8" class="i method">BranchCreate</a>();
+					<span class="r2 r">command</span>.<a href="CreateBranchCommand.cs.html#8a9effb567b5610e" class="i method">SetName</a>(<a href="#72862909607f4a4f" class="i field">name</a>);
+					<span class="r2 r">command</span>.<a href="CreateBranchCommand.cs.html#f7de2308d13ddec5" class="i method">SetStartPoint</a>(<a href="#82a83f631bba1929" class="i method">GetStartPoint</a>().<a href="../NGit/AnyObjectId.cs.html#140e21733375121a" class="i property">Name</a>);
+					<b>if</b> (<a href="#afd897c83dc3c0c9" class="i field">upstreamMode</a> != <b>null</b>)
+					{
+						<span class="r2 r">command</span>.<a href="CreateBranchCommand.cs.html#e3872d7e17ac5e6f" class="i method">SetUpstreamMode</a>(<a href="#afd897c83dc3c0c9" class="i field">upstreamMode</a>);
+					}
+					<span class="r2 r">command</span>.<a href="CreateBranchCommand.cs.html#fe028fce51a7930b" class="i method">Call</a>();
+				}
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r3 rd" class="r3 r">headRef</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>);
+				<b>string</b> <span id="r4 rd" class="r4 r">shortHeadRef</span> = <a href="#1482397fbbd6e716" class="i method">GetShortBranchName</a>(<span class="r3 r">headRef</span>);
+				<b>string</b> <span id="r5 rd" class="r5 r">refLogMessage</span> = <span class="s">&quot;checkout: moving from &quot;</span> + <span class="r4 r">shortHeadRef</span>;
+				<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r6 rd" class="r6 r">branch</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>(<a href="#72862909607f4a4f" class="i field">name</a>);
+				<b>if</b> (<span class="r6 r">branch</span> == <b>null</b>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+						, <a href="#72862909607f4a4f" class="i field">name</a>));
+				}
+				<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r7 rd" class="r7 r">revWalk</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+				<a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r8 rd" class="r8 r">headId</span> = <span class="r3 r">headRef</span>.<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>();
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r9 rd" class="r9 r">headCommit</span> = <span class="r8 r">headId</span> == <b>null</b> ? <b>null</b> : <span class="r7 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r8 r">headId</span>);
+				<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r10 rd" class="r10 r">newCommit</span> = <span class="r7 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<span class="r6 r">branch</span>);
+				<a href="../NGit.Revwalk/RevTree.cs.html#22230f5a84c040ab" class="t t">RevTree</a> <span id="r11 rd" class="r11 r">headTree</span> = <span class="r9 r">headCommit</span> == <b>null</b> ? <b>null</b> : <span class="r9 r">headCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>;
+				<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a> <span id="r12 rd" class="r12 r">dco</span>;
+				<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r13 rd" class="r13 r">dc</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>();
+				<b>try</b>
+				{
+					<span class="r12 r">dco</span> = <b>new</b> <a href="../NGit.Dircache/DirCacheCheckout.cs.html#726275afb70b49a6" class="t constructor">DirCacheCheckout</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <span class="r11 r">headTree</span>, <span class="r13 r">dc</span>, <span class="r10 r">newCommit</span>.<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+					<span class="r12 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#c98b11bb8e5d0b91" class="i method">SetFailOnConflict</a>(<b>true</b>);
+					<b>try</b>
+					{
+						<span class="r12 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#e56f2429d666ea70" class="i method">Checkout</a>();
+					}
+					<b>catch</b> (<span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/CheckoutConflictException.cs.html#b5553028ab2b1a52" class="t t">CheckoutConflictException</a> <span id="r14 rd" class="r14 r">e</span>)
+					{
+						<a href="#94aea2d94829fd1f" class="i field">status</a> = <b>new</b> <a href="CheckoutResult.cs.html#7f2ff0b4aece88d6" class="t constructor">CheckoutResult</a>(<a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a>.<a href="CheckoutResult.cs.html#3ae182854d3c17a9" class="t t">Status</a>.<a href="CheckoutResult.cs.html#878e183044174761" class="i field">CONFLICTS</a>, <span class="r12 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#8d645fdb1506227b" class="i method">GetConflicts</a>());
+						<b>throw</b> <b>new</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/CheckoutConflictException.cs.html#ec7970b18b770e84" class="t constructor">CheckoutConflictException</a>(<span class="r12 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#8d645fdb1506227b" class="i method">GetConflicts</a>(), <span class="r14 r">e</span>);
+					}
+				}
+				<b>finally</b>
+				{
+					<span class="r13 r">dc</span>.<a href="../NGit.Dircache/DirCache.cs.html#93697cefeab6d366" class="i method">Unlock</a>();
+				}
+				<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r15 rd" class="r15 r">@ref</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#eb30d1211e94288f" class="i method">GetRef</a>(<a href="#72862909607f4a4f" class="i field">name</a>);
+				<b>if</b> (<span class="r15 r">@ref</span> != <b>null</b> &amp;&amp; !<span class="r15 r">@ref</span>.<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>().<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#51f9cfd1933180d7" class="i field">R_HEADS</a>))
+				{
+					<span class="r15 r">@ref</span> = <b>null</b>;
+				}
+				<b>string</b> <span id="r16 rd" class="r16 r">toName</span> = <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="../NGit/Repository.cs.html#a6bd9d9bb860e572" class="i method">ShortenRefName</a>(<a href="#72862909607f4a4f" class="i field">name</a>);
+				<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a> <span id="r17 rd" class="r17 r">refUpdate</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#27aa83b646df120f" class="i method">UpdateRef</a>(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>, <span class="r15 r">@ref</span> == <b>null</b>);
+				<span class="r17 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#4758c92b1fdf5234" class="i method">SetForceUpdate</a>(<a href="#5a1861036936f535" class="i field">force</a>);
+				<span class="r17 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#05bba7b15544fe2d" class="i method">SetRefLogMessage</a>(<span class="r5 r">refLogMessage</span> + <span class="s">&quot; to &quot;</span> + <span class="r16 r">toName</span>, <b>false</b>);
+				<a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a> <span id="r18 rd" class="r18 r">updateResult</span>;
+				<b>if</b> (<span class="r15 r">@ref</span> != <b>null</b>)
+				{
+					<span class="r18 r">updateResult</span> = <span class="r17 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#fc49aa0d08627943" class="i method">Link</a>(<span class="r15 r">@ref</span>.<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>());
+				}
+				<b>else</b>
+				{
+					<span class="r17 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#add20e73bb7a1bcc" class="i method">SetNewObjectId</a>(<span class="r10 r">newCommit</span>);
+					<span class="r18 r">updateResult</span> = <span class="r17 r">refUpdate</span>.<a href="../NGit/RefUpdate.cs.html#d4cc527448f83ba4" class="i method">ForceUpdate</a>();
+				}
+				<a href="GitCommand.cs.html#35e336747584c82b" class="i method">SetCallable</a>(<b>false</b>);
+				<b>bool</b> <span id="r19 rd" class="r19 r">ok</span> = <b>false</b>;
+				<b>switch</b> (<span class="r18 r">updateResult</span>)
+				{
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#896c2eb530d7a9bb" class="i field">NEW</a>:
+					{
+						<span class="r19 r">ok</span> = <b>true</b>;
+						<b>break</b>;
+					}
+
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#279b180136195c74" class="i field">NO_CHANGE</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#e2aa5be4cac8eae0" class="i field">FAST_FORWARD</a>:
+					<b>case</b> <a href="../NGit/RefUpdate.cs.html#2164cd1d8095d95b" class="t t">RefUpdate</a>.<a href="../NGit/RefUpdate.cs.html#bc146b107244d167" class="t t">Result</a>.<a href="../NGit/RefUpdate.cs.html#749b19aaeca1ee8d" class="i field">FORCED</a>:
+					{
+						<span class="r19 r">ok</span> = <b>true</b>;
+						<b>break</b>;
+					}
+
+					<b>default</b>:
+					{
+						<b>break</b>;
+						<b>break</b>;
+					}
+				}
+				<b>if</b> (!<span class="r19 r">ok</span>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#100bccca6bdc192e" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#0c3bf3c46f468635" class="i field">checkoutUnexpectedResult</a>
+						, <span class="r18 r">updateResult</span>.<a href="@0@mscorlib/A.html#1365cfeffd45409d" class="i method">ToString</a>()));
+				}
+				<b>if</b> (!<span class="r12 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#a7f5eb6f06fb90cc" class="i method">GetToBeDeleted</a>().<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>())
+				{
+					<a href="#94aea2d94829fd1f" class="i field">status</a> = <b>new</b> <a href="CheckoutResult.cs.html#7f2ff0b4aece88d6" class="t constructor">CheckoutResult</a>(<a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a>.<a href="CheckoutResult.cs.html#3ae182854d3c17a9" class="t t">Status</a>.<a href="CheckoutResult.cs.html#8930306f12d453b7" class="i field">NONDELETED</a>, <span class="r12 r">dco</span>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#a7f5eb6f06fb90cc" class="i method">GetToBeDeleted</a>(
+						));
+				}
+				<b>else</b>
+				{
+					<a href="#94aea2d94829fd1f" class="i field">status</a> = <a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a>.<a href="CheckoutResult.cs.html#765646b50d314845" class="i field">OK_RESULT</a>;
+				}
+				<b>return</b> <span class="r15 r">@ref</span>;
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r20 rd" class="r20 r">ioe</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<span class="r20 r">ioe</span>.<a href="@0@mscorlib/A.html#5fba0e16215b42a3" class="i property">Message</a>, <span class="r20 r">ioe</span>);
+			}
+			<b>finally</b>
+			{
+				<b>if</b> (<a href="#94aea2d94829fd1f" class="i field">status</a> == <b>null</b>)
+				{
+					<a href="#94aea2d94829fd1f" class="i field">status</a> = <a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a>.<a href="CheckoutResult.cs.html#0cdc478596dfd870" class="i field">ERROR_RESULT</a>;
+				}
+			}
+		}
+
+		<b>private string</b> <a id="1482397fbbd6e716" href="../R/1482397fbbd6e716.html" target="n" data-glyph="76,1" class="i method">GetShortBranchName</a>(<a href="../NGit/Ref.cs.html#65afb4684ade4a12" class="t t">Ref</a> <span id="r21 rd" class="r21 r">headRef</span>)
+		{
+			<b>if</b> (<span class="r21 r">headRef</span>.<a href="../NGit/Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>().<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>().<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r21 r">headRef</span>.<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>()))
+			{
+				<b>return</b> <span class="r21 r">headRef</span>.<a href="../NGit/Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>().<a href="../NGit/Ref.cs.html#d8840e26ab016eb0" class="i method">GetObjectId</a>().<a href="../NGit/AnyObjectId.cs.html#4e9c38ea87ec4f33" class="i method">GetName</a>();
+			}
+			<b>return</b> <a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="../NGit/Repository.cs.html#a6bd9d9bb860e572" class="i method">ShortenRefName</a>(<span class="r21 r">headRef</span>.<a href="../NGit/Ref.cs.html#6e756851f02b626d" class="i method">GetTarget</a>().<a href="../NGit/Ref.cs.html#c7c271ec3d94ae5e" class="i method">GetName</a>());
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Path to update in the working tree and index.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="5a0d433ebeae2b4d" href="../R/5a0d433ebeae2b4d.html" target="n" data-glyph="72,1" class="i method">AddPath</a>(<b>string</b> <span id="r22 rd" class="r22 r">path</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#424321272af5a067" class="i field">paths</a>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r22 r">path</span>);
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Set whether to checkout all paths</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> This options should be used when you want to do a path checkout on the</span>
+		<span class="c">///</span><span class="c"> entire repository and so calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#5a0d433ebeae2b4d" class="i method">AddPath</a>(<b>string</b>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">AddPath(string)</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is not possible</span>
+		<span class="c">///</span><span class="c"> since empty paths are not allowed.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">all</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">true to checkout all paths, false otherwise</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">this</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">since</span><span class="c">&gt;</span><span class="c">2.0</span><span class="c">&lt;/</span><span class="c">since</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="f910ecbdb0e0b603" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetAllPaths</a>(<b>bool</b> <span id="r23 rd" class="r23 r">all</span>)
+		{
+			<a href="#de412ebc2c2c6fe4" class="i field">checkoutAllPaths</a> = <span class="r23 r">all</span>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Checkout paths into index and working directory</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">System.IO.IOException</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/RefNotFoundException.cs.html#89222350eff5aa34" class="t t">RefNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Api.Errors.RefNotFoundException</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected internal virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="db948348f9562bde" href="../R/db948348f9562bde.html" target="n" data-glyph="75,1" class="i method">CheckoutPaths</a>()
+		{
+			<a href="../NGit.Revwalk/RevWalk.cs.html#730aa25095d36889" class="t t">RevWalk</a> <span id="r24 rd" class="r24 r">revWalk</span> = <b>new</b> <a href="../NGit.Revwalk/RevWalk.cs.html#fb1794e6d30392bc" class="t constructor">RevWalk</a>(<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>);
+			<a href="../NGit.Dircache/DirCache.cs.html#3a36100e2d4fa295" class="t t">DirCache</a> <span id="r25 rd" class="r25 r">dc</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#fe8d0ec652d4de06" class="i method">LockDirCache</a>();
+			<b>try</b>
+			{
+				<a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a> <span id="r26 rd" class="r26 r">editor</span> = <span class="r25 r">dc</span>.<a href="../NGit.Dircache/DirCache.cs.html#bc3e720b591f7011" class="i method">Editor</a>();
+				<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r27 rd" class="r27 r">startWalk</span> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#e1052f13476153ef" class="t constructor">TreeWalk</a>(<span class="r24 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#67c5e603844b304a" class="i method">GetObjectReader</a>());
+				<span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a> = <b>true</b>;
+				<b>if</b> (!<a href="#de412ebc2c2c6fe4" class="i field">checkoutAllPaths</a>)
+				{
+					<span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/PathFilterGroup.cs.html#4d7f5bc5859d844f" class="t t">PathFilterGroup</a>.<a href="../NGit.Treewalk.Filter/PathFilterGroup.cs.html#36ddba786f9b718e" class="i method">CreateFromStrings</a>(<a href="#424321272af5a067" class="i field">paths</a>);
+				}
+				<b>bool</b> <span id="r28 rd" class="r28 r">checkoutIndex</span> = <a href="#a46cb927dcf82882" class="i field">startCommit</a> == <b>null</b> &amp;&amp; <a href="#a0324be33ff44401" class="i field">startPoint</a> == <b>null</b>;
+				<b>if</b> (!<span class="r28 r">checkoutIndex</span>)
+				{
+					<span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#60bae0462baed659" class="i method">AddTree</a>(<span class="r24 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#de2857440defb57c" class="i method">ParseCommit</a>(<a href="#82a83f631bba1929" class="i method">GetStartPoint</a>()).<a href="../NGit.Revwalk/RevCommit.cs.html#add7cecc0c55c771" class="i property">Tree</a>);
+				}
+				<b>else</b>
+				{
+					<span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<b>new</b> <a href="../NGit.Dircache/DirCacheIterator.cs.html#8bfe310b8b94624c" class="t constructor">DirCacheIterator</a>(<span class="r25 r">dc</span>));
+				}
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r29 rd" class="r29 r">workTree</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#b56e483731170f49" class="i property">WorkTree</a>;
+				<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r30 rd" class="r30 r">r</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#82d582041e6a7be3" class="i property">ObjectDatabase</a>.<a href="../NGit/ObjectDatabase.cs.html#b19b090cebcc1940" class="i method">NewReader</a>();
+				<b>try</b>
+				{
+					<b>while</b> (<span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+					{
+						<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r31 rd" class="r31 r">blobId</span> = <span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#45a8b24f2a66a666" class="i method">GetObjectId</a>(0);
+						<a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r32 rd" class="r32 r">mode</span> = <span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#b1724a1eb4d8d6ac" class="i method">GetFileMode</a>(0);
+						<span class="r26 r">editor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#21a67cfbbba09c6d" class="i method">Add</a>(<b>new</b> <a href="#f20afffe03a8d8e5" class="t constructor">_PathEdit_296</a>(<a href="#11c33b396935f397" class="k">this</a>, <span class="r31 r">blobId</span>, <span class="r32 r">mode</span>, <span class="r29 r">workTree</span>, <span class="r30 r">r</span>, <span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>
+							));
+					}
+					<span class="r26 r">editor</span>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#539b9ab91fdde821" class="i method">Commit</a>();
+				}
+				<b>finally</b>
+				{
+					<span class="r27 r">startWalk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#1b296f1621d6151d" class="i method">Release</a>();
+					<span class="r30 r">r</span>.<a href="../NGit/ObjectReader.cs.html#9b75a15983357803" class="i method">Release</a>();
+				}
+			}
+			<b>finally</b>
+			{
+				<span class="r25 r">dc</span>.<a href="../NGit.Dircache/DirCache.cs.html#93697cefeab6d366" class="i method">Unlock</a>();
+				<span class="r24 r">revWalk</span>.<a href="../NGit.Revwalk/RevWalk.cs.html#dd5a1455686b5e60" class="i method">Release</a>();
+			}
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<b>private sealed class</b> <a id="c5730c5e577f3d25" href="../R/c5730c5e577f3d25.html" target="n" data-glyph="4,1" class="t t">_PathEdit_296</a> : <a href="../NGit.Dircache/DirCacheEditor.cs.html#a9ca1482a589c176" class="t t">DirCacheEditor</a>.<a href="../NGit.Dircache/DirCacheEditor.cs.html#f871798ba8839c56" class="t t">PathEdit</a>
+		{
+			<b>public</b> <a id="f20afffe03a8d8e5" href="../R/f20afffe03a8d8e5.html" target="n" data-glyph="72,2" class="i constructor">_PathEdit_296</a>(<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <span id="r33 rd" class="r33 r">_enclosing</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r34 rd" class="r34 r">blobId</span>, <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <span id="r35 rd" class="r35 r">mode</span>, 
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r36 rd" class="r36 r">workTree</span>, <a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r37 rd" class="r37 r">r</span>, <b>string</b> <span id="r38 rd" class="r38 r">baseArg1</span>) : <a href="../NGit.Dircache/DirCacheEditor.cs.html#ccd803fd5aad55a2" class="k">base</a>(<span class="r38 r">baseArg1</span>)
+			{
+				<a href="#c5730c5e577f3d25" class="k">this</a>.<a href="#ca3a86860dbbffc2" class="i field">_enclosing</a> = <span class="r33 r">_enclosing</span>;
+				<a href="#c5730c5e577f3d25" class="k">this</a>.<a href="#efce4c5df3a63761" class="i field">blobId</a> = <span class="r34 r">blobId</span>;
+				<a href="#c5730c5e577f3d25" class="k">this</a>.<a href="#7a806c270e0e798f" class="i field">mode</a> = <span class="r35 r">mode</span>;
+				<a href="#c5730c5e577f3d25" class="k">this</a>.<a href="#cad921501528222b" class="i field">workTree</a> = <span class="r36 r">workTree</span>;
+				<a href="#c5730c5e577f3d25" class="k">this</a>.<a href="#e21b5973e467b804" class="i field">r</a> = <span class="r37 r">r</span>;
+			}
+
+			<b>public override void</b> <a id="cbb05301e088d0fc" href="../R/cbb05301e088d0fc.html" target="n" data-glyph="72,2" class="i method">Apply</a>(<a href="../NGit.Dircache/DirCacheEntry.cs.html#0a8132d2a497f441" class="t t">DirCacheEntry</a> <span id="r39 rd" class="r39 r">ent</span>)
+			{
+				<span class="r39 r">ent</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#1098b7bdf0b8ce1c" class="i method">SetObjectId</a>(<a href="#efce4c5df3a63761" class="i field">blobId</a>);
+				<span class="r39 r">ent</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#d64ac705edad125d" class="i property">FileMode</a> = <a href="#7a806c270e0e798f" class="i field">mode</a>;
+				<b>try</b>
+				{
+					<a href="../NGit.Dircache/DirCacheCheckout.cs.html#029c041cdae7b552" class="t t">DirCacheCheckout</a>.<a href="../NGit.Dircache/DirCacheCheckout.cs.html#90990bd58db5cb61" class="i method">CheckoutEntry</a>(<a href="#c5730c5e577f3d25" class="k">this</a>.<a href="#ca3a86860dbbffc2" class="i field">_enclosing</a>.<a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>, <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#cad921501528222b" class="i field">workTree</a>, <span class="r39 r">ent</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#ec7f3e264b5a0cea" class="i property">PathString</a>
+						), <span class="r39 r">ent</span>, <a href="#e21b5973e467b804" class="i field">r</a>);
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a> <span id="r40 rd" class="r40 r">e</span>)
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/JGitInternalException.cs.html#a18549f96842f778" class="t constructor">JGitInternalException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#2ee9dae9f6d99f80" class="i field">checkoutConflictWithFile</a>
+						, <span class="r39 r">ent</span>.<a href="../NGit.Dircache/DirCacheEntry.cs.html#ec7f3e264b5a0cea" class="i property">PathString</a>), <span class="r40 r">e</span>);
+				}
+			}
+
+			<b>private readonly</b> <a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="ca3a86860dbbffc2" href="../R/ca3a86860dbbffc2.html" target="n" data-glyph="46,2" class="i field">_enclosing</a>;
+
+			<b>private readonly</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="efce4c5df3a63761" href="../R/efce4c5df3a63761.html" target="n" data-glyph="46,2" class="i field">blobId</a>;
+
+			<b>private readonly</b> <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="7a806c270e0e798f" href="../R/7a806c270e0e798f.html" target="n" data-glyph="46,2" class="i field">mode</a>;
+
+			<b>private readonly</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="cad921501528222b" href="../R/cad921501528222b.html" target="n" data-glyph="46,2" class="i field">workTree</a>;
+
+			<b>private readonly</b> <a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="e21b5973e467b804" href="../R/e21b5973e467b804.html" target="n" data-glyph="46,2" class="i field">r</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/AmbiguousObjectException.cs.html#3dec36ac85c47aad" class="t t">AmbiguousObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/RefNotFoundException.cs.html#89222350eff5aa34" class="t t">RefNotFoundException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private</b> <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <a id="82a83f631bba1929" href="../R/82a83f631bba1929.html" target="n" data-glyph="76,1" class="i method">GetStartPoint</a>()
+		{
+			<b>if</b> (<a href="#a46cb927dcf82882" class="i field">startCommit</a> != <b>null</b>)
+			{
+				<b>return</b> <a href="#a46cb927dcf82882" class="i field">startCommit</a>.<a href="../NGit.Revwalk/RevObject.cs.html#10a7dc1ce89119b7" class="i property">Id</a>;
+			}
+			<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r41 rd" class="r41 r">result</span> = <b>null</b>;
+			<b>try</b>
+			{
+				<span class="r41 r">result</span> = <a href="GitCommand.cs.html#ec6b65907320cef7" class="i field">repo</a>.<a href="../NGit/Repository.cs.html#84eaed22f4fbf444" class="i method">Resolve</a>((<a href="#a0324be33ff44401" class="i field">startPoint</a> == <b>null</b>) ? <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a> : <a href="#a0324be33ff44401" class="i field">startPoint</a>);
+			}
+			<b>catch</b> (<a href="../NGit.Errors/AmbiguousObjectException.cs.html#3dec36ac85c47aad" class="t t">AmbiguousObjectException</a> <span id="r42 rd" class="r42 r">e</span>)
+			{
+				<b>throw</b>;
+			}
+			<b>if</b> (<span class="r41 r">result</span> == <b>null</b>)
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/RefNotFoundException.cs.html#6c8a1d064e501c14" class="t constructor">RefNotFoundException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#ea3c5e2daf6ed2c5" class="i field">refNotResolved</a>
+					, <a href="#a0324be33ff44401" class="i field">startPoint</a> != <b>null</b> ? <a href="#a0324be33ff44401" class="i field">startPoint</a> : <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#1111259dc0d2e59f" class="i field">HEAD</a>));
+			}
+			<b>return</b> <span class="r41 r">result</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Api</span>.<span class="i n">Errors</span>.<a href="../NGit.Api.Errors/InvalidRefNameException.cs.html#cbd70b74b9e3fa11" class="t t">InvalidRefNameException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="75d0811d958bbae0" href="../R/75d0811d958bbae0.html" target="n" data-glyph="76,1" class="i method">ProcessOptions</a>()
+		{
+			<b>if</b> ((!<a href="#de412ebc2c2c6fe4" class="i field">checkoutAllPaths</a> &amp;&amp; <a href="#424321272af5a067" class="i field">paths</a>.<a href="/Sharpen/A.html#65321941cae36d68" class="i method">IsEmpty</a>()) &amp;&amp; (<a href="#72862909607f4a4f" class="i field">name</a> == <b>null</b> || !<a href="../NGit/Repository.cs.html#1e2067e7babb66d2" class="t t">Repository</a>.<a href="../NGit/Repository.cs.html#b80237c82a008bf2" class="i method">IsValidRefName</a>
+				(<a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#51f9cfd1933180d7" class="i field">R_HEADS</a> + <a href="#72862909607f4a4f" class="i field">name</a>)))
+			{
+				<b>throw</b> <b>new</b> <a href="../NGit.Api.Errors/InvalidRefNameException.cs.html#810cb5d9988ff0a7" class="t constructor">InvalidRefNameException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#9c82f6f284873622" class="i field">branchNameInvalid</a>
+					, <a href="#72862909607f4a4f" class="i field">name</a> == <b>null</b> ? <span class="s">&quot;&lt;null&gt;&quot;</span> : <a href="#72862909607f4a4f" class="i field">name</a>));
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r43 r">name</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the name of the new branch</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="cc24f28fb914e935" href="../R/cc24f28fb914e935.html" target="n" data-glyph="72,1" class="i method">SetName</a>(<b>string</b> <span id="r43 rd" class="r43 r">name</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#72862909607f4a4f" class="i field">name</a> = <span class="r43 r">name</span>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">createBranch</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> a branch will be created as part of the</span>
+		<span class="c">///</span><span class="c"> checkout and set to the specified start point</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="a9aee275cbd6dc00" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetCreateBranch</a>(<b>bool</b> <span id="r44 rd" class="r44 r">createBranch</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#6d2a5cc78d0d6930" class="i field">createBranch</a> = <span class="r44 r">createBranch</span>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r45 r">force</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> and the branch with the given name</span>
+		<span class="c">///</span><span class="c"> already exists, the start-point of an existing branch will be</span>
+		<span class="c">///</span><span class="c"> set to a new start-point; if false, the existing branch will</span>
+		<span class="c">///</span><span class="c"> not be changed</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="f26c26c9affb23ea" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetForce</a>(<b>bool</b> <span id="r45 rd" class="r45 r">force</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#5a1861036936f535" class="i field">force</a> = <span class="r45 r">force</span>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r46 r">startPoint</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> corresponds to the start-point option; if </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">,</span>
+		<span class="c">///</span><span class="c"> the current HEAD will be used</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="9684ecdc8162f9ad" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetStartPoint</a>(<b>string</b> <span id="r46 rd" class="r46 r">startPoint</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#a0324be33ff44401" class="i field">startPoint</a> = <span class="r46 r">startPoint</span>;
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#a46cb927dcf82882" class="i field">startCommit</a> = <b>null</b>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r47 r">startCommit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> corresponds to the start-point option; if </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">,</span>
+		<span class="c">///</span><span class="c"> the current HEAD will be used</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="f19110ee1e665e56" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetStartPoint</a>(<a href="../NGit.Revwalk/RevCommit.cs.html#80679b42f6e6a34f" class="t t">RevCommit</a> <span id="r47 rd" class="r47 r">startCommit</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#a46cb927dcf82882" class="i field">startCommit</a> = <span class="r47 r">startCommit</span>;
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#a0324be33ff44401" class="i field">startPoint</a> = <b>null</b>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r48 r">mode</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> corresponds to the --track/--no-track options; may be</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">this instance</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <span class="i n">NGit</span>.<span class="i n">Api</span>.<a href="#11c33b396935f397" class="t t">CheckoutCommand</a> <a id="50f4f42981d50bcd" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetUpstreamMode</a>(<a href="CreateBranchCommand.cs.html#f7515acfd2fd1baa" class="t t">CreateBranchCommand</a>.<a href="CreateBranchCommand.cs.html#a6121c3a97d05869" class="t t">SetupUpstreamMode</a>
+			 <span id="r48 rd" class="r48 r">mode</span>)
+		{
+			<a href="GitCommand.cs.html#34a7367ac57d74bb" class="i method">CheckCallable</a>();
+			<a href="#11c33b396935f397" class="k">this</a>.<a href="#afd897c83dc3c0c9" class="i field">upstreamMode</a> = <span class="r48 r">mode</span>;
+			<b>return</b> <a href="#11c33b396935f397" class="k">this</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the result</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a> <a id="99282f9554f461cd" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetResult</a>()
+		{
+			<b>if</b> (<a href="#94aea2d94829fd1f" class="i field">status</a> == <b>null</b>)
+			{
+				<b>return</b> <a href="CheckoutResult.cs.html#4714a518b2007a15" class="t t">CheckoutResult</a>.<a href="CheckoutResult.cs.html#6d86d65d739d3ee3" class="i field">NOT_TRIED_RESULT</a>;
+			}
+			<b>return</b> <a href="#94aea2d94829fd1f" class="i field">status</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

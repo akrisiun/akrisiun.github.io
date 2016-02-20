@@ -1,0 +1,569 @@
+﻿<!DOCTYPE html>
+<html><head><title>ControllerActionInvoker.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(560);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/ControllerActionInvoker.cs" target="_top">ControllerActionInvoker.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">Contracts</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Security</span>.<span class="i n">Principal</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Filters</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Routing</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Routing</span>;
+<b>using</b> <span class="i n">Microsoft</span>.<span class="i n">Web</span>.<span class="i n">Infrastructure</span>.<span class="i n">DynamicValidationHelper</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(
+        <span class="s">&quot;Microsoft.Maintainability&quot;</span>, 
+        <span class="s">&quot;CA1506:AvoidExcessiveClassCoupling&quot;</span>,
+        <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This class has to work with both traditional and direct routing, which is the cause of the high&quot;</span> +
+        <span class="s">&quot;number of classes it uses.&quot;</span>)]
+    <b>public class</b> <a id="5a6c0f31472d5b7b" href="R/5a6c0f31472d5b7b.html" target="n" data-glyph="0,0" class="t t">ControllerActionInvoker</a> : <a href="IActionInvoker.cs.html#2670bb9a46df6eba" class="t t">IActionInvoker</a>
+    {
+        <b>private static readonly</b> <a href="ControllerDescriptorCache.cs.html#c64a447c29ab449a" class="t t">ControllerDescriptorCache</a> <a id="dba4d668d3612166" href="R/dba4d668d3612166.html" target="n" data-glyph="46,1" class="i field">_staticDescriptorCache</a> = <b>new</b> <a href="ControllerDescriptorCache.cs.html#4d040becec036147" class="t constructor">ControllerDescriptorCache</a>();
+ 
+        <b>private</b> <a href="ModelBinderDictionary.cs.html#9568831812570ab6" class="t t">ModelBinderDictionary</a> <a id="ba78b7db53f7f572" href="R/ba78b7db53f7f572.html" target="n" data-glyph="46,1" class="i field">_binders</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#8adbe0476ca899db" class="t t">Func</a>&lt;<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="Filter.cs.html#81bf9998fc30e1b3" class="t t">Filter</a>&gt;&gt; <a id="bad18f15e3e8124b" href="R/bad18f15e3e8124b.html" target="n" data-glyph="46,1" class="i field">_getFiltersThunk</a> = <a href="FilterProviders.cs.html#ca83e793b1e5e89a" class="t t">FilterProviders</a>.<a href="FilterProviders.cs.html#3123c40cb7958a07" class="i property">Providers</a>.<a href="FilterProviderCollection.cs.html#f2ec4abcebee2e98" class="i method">GetFilters</a>;
+        <b>private</b> <a href="ControllerDescriptorCache.cs.html#c64a447c29ab449a" class="t t">ControllerDescriptorCache</a> <a id="ebd8ed154154fe64" href="R/ebd8ed154154fe64.html" target="n" data-glyph="46,1" class="i field">_instanceDescriptorCache</a>;
+ 
+        <b>public</b> <a id="3c423766b66ad359" href="R/3c423766b66ad359.html" target="n" data-glyph="72,1" class="i constructor">ControllerActionInvoker</a>()
+        {
+        }
+ 
+        <b>internal</b> <a id="b908a1ab83bc7694" href="R/../../0000000000.html" target="n" data-glyph="74,1" class="i constructor">ControllerActionInvoker</a>(<b>params object</b>[] <span id="r0 rd" class="r0 r">filters</span>)
+            : <a href="#3c423766b66ad359" class="k">this</a>()
+        {
+            <b>if</b> (<span class="r0 r">filters</span> != <b>null</b>)
+            {
+                <a href="#bad18f15e3e8124b" class="i field">_getFiltersThunk</a> = (<span id="r1 rd" class="r1 r">cc</span>, <span id="r2 rd" class="r2 r">ad</span>) =&gt; <span class="r0 r">filters</span>.<a href="@0@System.Core/A.html#5c652c53e80df013" class="i method">Select</a>(<span id="r3 rd" class="r3 r">f</span> =&gt; <b>new</b> <a href="Filter.cs.html#2eeaf557b3f27f6c" class="t constructor">Filter</a>(<span class="r3 r">f</span>, <a href="FilterScope.cs.html#3c9209da7231df8f" class="t t">FilterScope</a>.<a href="FilterScope.cs.html#1ecbe62cc19a75c9" class="i field">Action</a>, <b>null</b>));
+            }
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2227:CollectionPropertiesShouldBeReadOnly&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;Property is settable so that the dictionary can be provided for unit testing purposes.&quot;</span>)]
+        <b>protected internal</b> <a href="ModelBinderDictionary.cs.html#9568831812570ab6" class="t t">ModelBinderDictionary</a> <a id="1fd94cee6b3d8d8f" href="R/1fd94cee6b3d8d8f.html" target="n" data-glyph="105,1" class="i property">Binders</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#ba78b7db53f7f572" class="i field">_binders</a> == <b>null</b>)
+                {
+                    <a href="#ba78b7db53f7f572" class="i field">_binders</a> = <a href="ModelBinders.cs.html#15cbdde03dc6f20d" class="t t">ModelBinders</a>.<a href="ModelBinders.cs.html#e6a7d72018934af8" class="i property">Binders</a>;
+                }
+                <b>return</b> <a href="#ba78b7db53f7f572" class="i field">_binders</a>;
+            }
+            <b>set</b> { <a href="#ba78b7db53f7f572" class="i field">_binders</a> = <b>value</b>; }
+        }
+ 
+        <b>internal</b> <a href="ControllerDescriptorCache.cs.html#c64a447c29ab449a" class="t t">ControllerDescriptorCache</a> <a id="65ede7451978affb" href="R/65ede7451978affb.html" target="n" data-glyph="104,1" class="i property">DescriptorCache</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#ebd8ed154154fe64" class="i field">_instanceDescriptorCache</a> == <b>null</b>)
+                {
+                    <a href="#ebd8ed154154fe64" class="i field">_instanceDescriptorCache</a> = <a href="#dba4d668d3612166" class="i field">_staticDescriptorCache</a>;
+                }
+                <b>return</b> <a href="#ebd8ed154154fe64" class="i field">_instanceDescriptorCache</a>;
+            }
+            <b>set</b> { <a href="#ebd8ed154154fe64" class="i field">_instanceDescriptorCache</a> = <b>value</b>; }
+        }
+ 
+        <b>protected virtual</b> <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <a id="2b905ecaf375b9f4" href="R/2b905ecaf375b9f4.html" target="n" data-glyph="75,1" class="i method">CreateActionResult</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r4 rd" class="r4 r">controllerContext</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r5 rd" class="r5 r">actionDescriptor</span>, <b>object</b> <span id="r6 rd" class="r6 r">actionReturnValue</span>)
+        {
+            <b>if</b> (<span class="r6 r">actionReturnValue</span> == <b>null</b>)
+            {
+                <b>return</b> <b>new</b> <a href="EmptyResult.cs.html#cf9897e1141a0ea4" class="t constructor">EmptyResult</a>();
+            }
+ 
+            <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <span id="r7 rd" class="r7 r">actionResult</span> = (<span class="r6 r">actionReturnValue</span> <b>as</b> <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a>) ??
+                                        <b>new</b> <a href="ContentResult.cs.html#eac8002bb639d898" class="t constructor">ContentResult</a> { <a href="ContentResult.cs.html#3b598b9c72a7893a" class="i property">Content</a> = <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#6a1a2c3ac58e60dd" class="i method">ToString</a>(<span class="r6 r">actionReturnValue</span>, <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>) };
+            <b>return</b> <span class="r7 r">actionResult</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <a id="26d8881a3b8becec" href="R/26d8881a3b8becec.html" target="n" data-glyph="75,1" class="i method">GetControllerDescriptor</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r8 rd" class="r8 r">controllerContext</span>)
+        {
+            <span class="c">// Frequently called, so ensure delegate is static</span>
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r9 rd" class="r9 r">controllerType</span> = <span class="r8 r">controllerContext</span>.<a href="ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>.<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>();
+            <a href="ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <span id="r10 rd" class="r10 r">controllerDescriptor</span> = <a href="#65ede7451978affb" class="i property">DescriptorCache</a>.<a href="ControllerDescriptorCache.cs.html#c24ea296c99b18b2" class="i method">GetDescriptor</a>(
+                <span class="r11 r">controllerType</span>: <span class="r9 r">controllerType</span>,
+                <span class="r12 r">creator</span>: (<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r13 rd" class="r13 r">innerType</span>) =&gt; <b>new</b> <a href="ReflectedControllerDescriptor.cs.html#c61783a4ea846cdf" class="t constructor">ReflectedControllerDescriptor</a>(<span class="r13 r">innerType</span>),
+                <span class="r14 r">state</span>: <span class="r9 r">controllerType</span>);
+            <b>return</b> <span class="r10 r">controllerDescriptor</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <a id="de642aa4c08b9b2f" href="R/de642aa4c08b9b2f.html" target="n" data-glyph="75,1" class="i method">FindAction</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r15 rd" class="r15 r">controllerContext</span>, <a href="ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <span id="r16 rd" class="r16 r">controllerDescriptor</span>, <b>string</b> <span id="r17 rd" class="r17 r">actionName</span>)
+        {
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r15 r">controllerContext</span> != <b>null</b>);
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r15 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a> != <b>null</b>);
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r16 r">controllerDescriptor</span> != <b>null</b>);
+ 
+            <b>if</b> (<span class="r15 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a>.<a href="Routing/DirectRouteExtensions.cs.html#41dece4c48b2a131" class="i method">HasDirectRouteMatch</a>())
+            {
+                <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t t">DirectRouteCandidate</a>&gt; <span id="r18 rd" class="r18 r">candidates</span> = <a href="#02976c23158d9371" class="i method">GetDirectRouteCandidates</a>(<span class="r15 r">controllerContext</span>);
+ 
+                <a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t t">DirectRouteCandidate</a> <span id="r19 rd" class="r19 r">bestCandidate</span> = <a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t t">DirectRouteCandidate</a>.<a href="Routing/DirectRouteCandidate.cs.html#66be0dc555dff16f" class="i method">SelectBestCandidate</a>(<span class="r18 r">candidates</span>, <span class="r15 r">controllerContext</span>);
+                <b>if</b> (<span class="r19 r">bestCandidate</span> == <b>null</b>)
+                {
+                    <b>return null</b>;
+                }
+                <b>else</b>
+                {
+                    <span class="c">// We need to stash the RouteData of the matched route into the context, so it can be</span>
+                    <span class="c">// used for binding.</span>
+                    <span class="r15 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a> = <span class="r19 r">bestCandidate</span>.<a href="Routing/DirectRouteCandidate.cs.html#a57ae85eb4ccc4d5" class="i property">RouteData</a>;
+                    <span class="r15 r">controllerContext</span>.<a href="ControllerContext.cs.html#0fa1060882b05e6e" class="i property">RequestContext</a>.<a href="@0@System.Web/A.html#66a25a5056592d0f" class="i property">RouteData</a> = <span class="r19 r">bestCandidate</span>.<a href="Routing/DirectRouteCandidate.cs.html#a57ae85eb4ccc4d5" class="i property">RouteData</a>;
+ 
+                    <span class="c">// We need to remove any optional parameters that haven&#39;t gotten a value (See MvcHandler)</span>
+                    <span class="r19 r">bestCandidate</span>.<a href="Routing/DirectRouteCandidate.cs.html#a57ae85eb4ccc4d5" class="i property">RouteData</a>.<a href="@0@System.Web/A.html#1c44ef4307f8e3df" class="i property">Values</a>.<a href="Common/DictionaryExtensions.cs.html#c2cc8d458ecb13f1" class="i method">RemoveFromDictionary</a>((<span id="r20 rd" class="r20 r">entry</span>) =&gt; <span class="r20 r">entry</span>.<a href="@0@mscorlib/A.html#38c0e86cc4b30170" class="i property">Value</a> == <a href="UrlParameter.cs.html#856578a2f13cdeb2" class="t t">UrlParameter</a>.<a href="UrlParameter.cs.html#282b5a406f86e1ae" class="i field">Optional</a>);
+ 
+                    <b>return</b> <span class="r19 r">bestCandidate</span>.<a href="Routing/DirectRouteCandidate.cs.html#9f6e02a8b62aa024" class="i property">ActionDescriptor</a>;
+                }
+            }
+            <b>else</b>
+            {
+                <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r21 rd" class="r21 r">actionDescriptor</span> = <span class="r16 r">controllerDescriptor</span>.<a href="ControllerDescriptor.cs.html#ad7e2dec1657b63d" class="i method">FindAction</a>(<span class="r15 r">controllerContext</span>, <span class="r17 r">actionName</span>);
+                <b>return</b> <span class="r21 r">actionDescriptor</span>;
+            }
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t t">DirectRouteCandidate</a>&gt; <a id="02976c23158d9371" href="R/02976c23158d9371.html" target="n" data-glyph="76,1" class="i method">GetDirectRouteCandidates</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r22 rd" class="r22 r">controllerContext</span>)
+        {
+            <a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#74ae7c85c0e36e34" class="i method">Assert</a>(<span class="r22 r">controllerContext</span> != <b>null</b>);
+            <a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#74ae7c85c0e36e34" class="i method">Assert</a>(<span class="r22 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a> != <b>null</b>);
+ 
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t t">DirectRouteCandidate</a>&gt; <span id="r23 rd" class="r23 r">candiates</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t t">DirectRouteCandidate</a>&gt;();
+ 
+            <a href="@0@System.Web/A.html#39b7a1fd375ff358" class="t t">RouteData</a> <span id="r24 rd" class="r24 r">routeData</span> = <span class="r22 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a>;
+            <b>foreach</b> (<a href="@0@System.Web/A.html#39b7a1fd375ff358" class="k">var</a> <span id="r25 rd" class="r25 r">directRoute</span> <b>in</b> <span class="r24 r">routeData</span>.<a href="Routing/DirectRouteExtensions.cs.html#2c5c8256e38b5dd0" class="i method">GetDirectRouteMatches</a>())
+            {
+                <b>if</b> (<span class="r25 r">directRoute</span> == <b>null</b>)
+                {
+                    <b>continue</b>;
+                }
+ 
+                <a href="ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <span id="r26 rd" class="r26 r">controllerDescriptor</span> = <span class="r25 r">directRoute</span>.<a href="Routing/DirectRouteExtensions.cs.html#6f29082ee4e4960d" class="i method">GetTargetControllerDescriptor</a>();
+                <b>if</b> (<span class="r26 r">controllerDescriptor</span> == <b>null</b>)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#f1895149367f2b21" class="i property">DirectRoute_MissingControllerDescriptor</a>);
+                }
+ 
+                <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a>[] <span id="r27 rd" class="r27 r">actionDescriptors</span> = <span class="r25 r">directRoute</span>.<a href="Routing/DirectRouteExtensions.cs.html#7c09adbbbfbdff02" class="i method">GetTargetActionDescriptors</a>();
+                <b>if</b> (<span class="r27 r">actionDescriptors</span> == <b>null</b> || <span class="r27 r">actionDescriptors</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0)
+                {
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#265d72f49e915224" class="t constructor">InvalidOperationException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#6bc87a01ef7025ef" class="i property">DirectRoute_MissingActionDescriptors</a>);
+                }
+ 
+                <b>foreach</b> (<a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="k">var</a> <span id="r28 rd" class="r28 r">actionDescriptor</span> <b>in</b> <span class="r27 r">actionDescriptors</span>)
+                {
+                    <b>if</b> (<span class="r28 r">actionDescriptor</span> != <b>null</b>)
+                    {
+                        <span class="r23 r">candiates</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="Routing/DirectRouteCandidate.cs.html#4fc14927784144a1" class="t constructor">DirectRouteCandidate</a>()
+                        {
+                            <a href="Routing/DirectRouteCandidate.cs.html#9f6e02a8b62aa024" class="i property">ActionDescriptor</a> = <span class="r28 r">actionDescriptor</span>,
+                            <a href="Routing/DirectRouteCandidate.cs.html#fa90b51cbfb19372" class="i property">ActionNameSelectors</a> = <span class="r28 r">actionDescriptor</span>.<a href="ActionDescriptor.cs.html#1bca0b00340fc5d6" class="i method">GetNameSelectors</a>(),
+                            <a href="Routing/DirectRouteCandidate.cs.html#e7e6343c677948d1" class="i property">ActionSelectors</a> = <span class="r28 r">actionDescriptor</span>.<a href="ActionDescriptor.cs.html#2fed0505d040785f" class="i method">GetSelectors</a>(),
+                            <a href="Routing/DirectRouteCandidate.cs.html#ea2e90a5a08c6d33" class="i property">Order</a> = <span class="r25 r">directRoute</span>.<a href="Routing/DirectRouteExtensions.cs.html#ec0f885e9d81e083" class="i method">GetOrder</a>(),
+                            <a href="Routing/DirectRouteCandidate.cs.html#0f98c7578ee3f349" class="i property">Precedence</a> = <span class="r25 r">directRoute</span>.<a href="Routing/DirectRouteExtensions.cs.html#5c4056b8d985ea1b" class="i method">GetPrecedence</a>(),
+                            <a href="Routing/DirectRouteCandidate.cs.html#a57ae85eb4ccc4d5" class="i property">RouteData</a> = <span class="r25 r">directRoute</span>,
+                        });
+                    }
+                }
+            }
+ 
+            <b>return</b> <span class="r23 r">candiates</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="FilterInfo.cs.html#1eb870b4b16a459c" class="t t">FilterInfo</a> <a id="720c2f51545ff88e" href="R/720c2f51545ff88e.html" target="n" data-glyph="75,1" class="i method">GetFilters</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r29 rd" class="r29 r">controllerContext</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r30 rd" class="r30 r">actionDescriptor</span>)
+        {
+            <b>return</b> <b>new</b> <a href="FilterInfo.cs.html#cb52df10aeec6829" class="t constructor">FilterInfo</a>(<a href="#bad18f15e3e8124b" class="i field">_getFiltersThunk</a>(<span class="r29 r">controllerContext</span>, <span class="r30 r">actionDescriptor</span>));
+        }
+ 
+        <b>private</b> <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <a id="b5c765d5b490c9a4" href="R/b5c765d5b490c9a4.html" target="n" data-glyph="76,1" class="i method">GetModelBinder</a>(<a href="ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a> <span id="r31 rd" class="r31 r">parameterDescriptor</span>)
+        {
+            <span class="c">// look on the parameter itself, then look in the global table</span>
+            <b>return</b> <span class="r31 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#2ef28bc8bf7e587e" class="i property">BindingInfo</a>.<a href="ParameterBindingInfo.cs.html#daa8073cc0b6fed9" class="i property">Binder</a> ?? <a href="#1fd94cee6b3d8d8f" class="i property">Binders</a>.<a href="ModelBinderDictionary.cs.html#0cbd69413bfac81c" class="i method">GetBinder</a>(<span class="r31 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#342a98d292be5a7b" class="i property">ParameterType</a>);
+        }
+ 
+        <b>protected virtual object</b> <a id="63c2bb981cc97c17" href="R/63c2bb981cc97c17.html" target="n" data-glyph="75,1" class="i method">GetParameterValue</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r32 rd" class="r32 r">controllerContext</span>, <a href="ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a> <span id="r33 rd" class="r33 r">parameterDescriptor</span>)
+        {
+            <span class="c">// collect all of the necessary binding properties</span>
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r34 rd" class="r34 r">parameterType</span> = <span class="r33 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#342a98d292be5a7b" class="i property">ParameterType</a>;
+            <a href="IModelBinder.cs.html#0a32557e7ba7be8b" class="t t">IModelBinder</a> <span id="r35 rd" class="r35 r">binder</span> = <a href="#b5c765d5b490c9a4" class="i method">GetModelBinder</a>(<span class="r33 r">parameterDescriptor</span>);
+            <a href="IValueProvider.cs.html#2570a0fa20f05e94" class="t t">IValueProvider</a> <span id="r36 rd" class="r36 r">valueProvider</span> = <span class="r32 r">controllerContext</span>.<a href="ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>.<a href="ControllerBase.cs.html#5fd26b919429e4c3" class="i property">ValueProvider</a>;
+            <b>string</b> <span id="r37 rd" class="r37 r">parameterName</span> = <span class="r33 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#2ef28bc8bf7e587e" class="i property">BindingInfo</a>.<a href="ParameterBindingInfo.cs.html#d57fd11e5c7824b0" class="i property">Prefix</a> ?? <span class="r33 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#e9c6d251af510d8d" class="i property">ParameterName</a>;
+            <a href="@0@mscorlib/A.html#ca72a018059733b1" class="t t">Predicate</a>&lt;<b>string</b>&gt; <span id="r38 rd" class="r38 r">propertyFilter</span> = <a href="#eb805a18c8dcc0a4" class="i method">GetPropertyFilter</a>(<span class="r33 r">parameterDescriptor</span>);
+ 
+            <span class="c">// finally, call into the binder</span>
+            <a href="ModelBindingContext.cs.html#a7293997e5f9a0b6" class="t t">ModelBindingContext</a> <span id="r39 rd" class="r39 r">bindingContext</span> = <b>new</b> <a href="ModelBindingContext.cs.html#b78fc5cbad2d8bb9" class="t constructor">ModelBindingContext</a>()
+            {
+                <a href="ModelBindingContext.cs.html#54aa4566e7a0f264" class="i property">FallbackToEmptyPrefix</a> = (<span class="r33 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#2ef28bc8bf7e587e" class="i property">BindingInfo</a>.<a href="ParameterBindingInfo.cs.html#d57fd11e5c7824b0" class="i property">Prefix</a> == <b>null</b>), <span class="c">// only fall back if prefix not specified</span>
+                <a href="ModelBindingContext.cs.html#35488c9141a06b98" class="i property">ModelMetadata</a> = <a href="ModelMetadataProviders.cs.html#0a0eb89054d8bc68" class="t t">ModelMetadataProviders</a>.<a href="ModelMetadataProviders.cs.html#19d9ca40978b1a26" class="i property">Current</a>.<a href="ModelMetadataProvider.cs.html#ae97be53914af06c" class="i method">GetMetadataForType</a>(<b>null</b>, <span class="r34 r">parameterType</span>),
+                <a href="ModelBindingContext.cs.html#1827cec56d77d41f" class="i property">ModelName</a> = <span class="r37 r">parameterName</span>,
+                <a href="ModelBindingContext.cs.html#0629d7f929eb8f51" class="i property">ModelState</a> = <span class="r32 r">controllerContext</span>.<a href="ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>.<a href="ControllerBase.cs.html#b6d03ff17f6d15dd" class="i property">ViewData</a>.<a href="ViewDataDictionary.cs.html#96bf24a777976c03" class="i property">ModelState</a>,
+                <a href="ModelBindingContext.cs.html#a7ee341bc3506513" class="i property">PropertyFilter</a> = <span class="r38 r">propertyFilter</span>,
+                <a href="ModelBindingContext.cs.html#b41f0a1910e777cd" class="i property">ValueProvider</a> = <span class="r36 r">valueProvider</span>
+            };
+ 
+            <b>object</b> <span id="r40 rd" class="r40 r">result</span> = <span class="r35 r">binder</span>.<a href="IModelBinder.cs.html#54cf29ab1be2d109" class="i method">BindModel</a>(<span class="r32 r">controllerContext</span>, <span class="r39 r">bindingContext</span>);
+            <b>return</b> <span class="r40 r">result</span> ?? <span class="r33 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#bd564f21453447a9" class="i property">DefaultValue</a>;
+        }
+ 
+        <b>protected virtual</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <a id="189132716962b865" href="R/189132716962b865.html" target="n" data-glyph="75,1" class="i method">GetParameterValues</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r41 rd" class="r41 r">controllerContext</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r42 rd" class="r42 r">actionDescriptor</span>)
+        {
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r43 rd" class="r43 r">parametersDict</span> = <b>new</b> <a href="@0@mscorlib/A.html#05d4a216235a779c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <b>object</b>&gt;(<a href="@0@mscorlib/A.html#a1c3d85bbf4ae20e" class="t t">StringComparer</a>.<a href="@0@mscorlib/A.html#59b9c33842417944" class="i property">OrdinalIgnoreCase</a>);
+            <a href="ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a>[] <span id="r44 rd" class="r44 r">parameterDescriptors</span> = <span class="r42 r">actionDescriptor</span>.<a href="ActionDescriptor.cs.html#1a9bd69eb673f9d7" class="i method">GetParameters</a>();
+ 
+            <b>foreach</b> (<a href="ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a> <span id="r45 rd" class="r45 r">parameterDescriptor</span> <b>in</b> <span class="r44 r">parameterDescriptors</span>)
+            {
+                <span class="r43 r">parametersDict</span><a href="@0@mscorlib/A.html#49962975508e2d83">[</a><span class="r45 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#e9c6d251af510d8d" class="i property">ParameterName</a>] = <a href="#63c2bb981cc97c17" class="i method">GetParameterValue</a>(<span class="r41 r">controllerContext</span>, <span class="r45 r">parameterDescriptor</span>);
+            }
+            <b>return</b> <span class="r43 r">parametersDict</span>;
+        }
+ 
+        <b>private static</b> <a href="@0@mscorlib/A.html#ca72a018059733b1" class="t t">Predicate</a>&lt;<b>string</b>&gt; <a id="eb805a18c8dcc0a4" href="R/eb805a18c8dcc0a4.html" target="n" data-glyph="76,1" class="i method">GetPropertyFilter</a>(<a href="ParameterDescriptor.cs.html#89e9ad3e410861a4" class="t t">ParameterDescriptor</a> <span id="r46 rd" class="r46 r">parameterDescriptor</span>)
+        {
+            <a href="ParameterBindingInfo.cs.html#11577a22c976cab3" class="t t">ParameterBindingInfo</a> <span id="r47 rd" class="r47 r">bindingInfo</span> = <span class="r46 r">parameterDescriptor</span>.<a href="ParameterDescriptor.cs.html#2ef28bc8bf7e587e" class="i property">BindingInfo</a>;
+            <b>return</b> <span id="r48 rd" class="r48 r">propertyName</span> =&gt; <a href="BindAttribute.cs.html#ace2f65d19413ac5" class="t t">BindAttribute</a>.<a href="BindAttribute.cs.html#6273e55ae3c69c3b" class="i method">IsPropertyAllowed</a>(<span class="r48 r">propertyName</span>, <span class="r47 r">bindingInfo</span>.<a href="ParameterBindingInfo.cs.html#b6a4bb2a7b15c364" class="i property">Include</a>, <span class="r47 r">bindingInfo</span>.<a href="ParameterBindingInfo.cs.html#9b2930c5747b7237" class="i property">Exclude</a>);
+        }
+ 
+        <b>public virtual bool</b> <a id="883df756c9de0539" href="R/883df756c9de0539.html" target="n" data-glyph="72,1" class="i method">InvokeAction</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r49 rd" class="r49 r">controllerContext</span>, <b>string</b> <span id="r50 rd" class="r50 r">actionName</span>)
+        {
+            <b>if</b> (<span class="r49 r">controllerContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerContext&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r49 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a> != <b>null</b>);
+            <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<span class="r50 r">actionName</span>) &amp;&amp; !<span class="r49 r">controllerContext</span>.<a href="ControllerContext.cs.html#754ac1d20a65feb7" class="i property">RouteData</a>.<a href="Routing/DirectRouteExtensions.cs.html#41dece4c48b2a131" class="i method">HasDirectRouteMatch</a>())
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(<a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#b811ee329004b31f" class="i property">Common_NullOrEmpty</a>, <span class="s">&quot;actionName&quot;</span>);
+            }
+ 
+            <a href="ControllerDescriptor.cs.html#20202e8261f37923" class="t t">ControllerDescriptor</a> <span id="r51 rd" class="r51 r">controllerDescriptor</span> = <a href="#26d8881a3b8becec" class="i method">GetControllerDescriptor</a>(<span class="r49 r">controllerContext</span>);
+            <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r52 rd" class="r52 r">actionDescriptor</span> = <a href="#de642aa4c08b9b2f" class="i method">FindAction</a>(<span class="r49 r">controllerContext</span>, <span class="r51 r">controllerDescriptor</span>, <span class="r50 r">actionName</span>);
+ 
+            <b>if</b> (<span class="r52 r">actionDescriptor</span> != <b>null</b>)
+            {
+                <a href="FilterInfo.cs.html#1eb870b4b16a459c" class="t t">FilterInfo</a> <span id="r53 rd" class="r53 r">filterInfo</span> = <a href="#720c2f51545ff88e" class="i method">GetFilters</a>(<span class="r49 r">controllerContext</span>, <span class="r52 r">actionDescriptor</span>);
+ 
+                <b>try</b>
+                {
+                    <a href="Filters/AuthenticationContext.cs.html#a6c73975929a7023" class="t t">AuthenticationContext</a> <span id="r54 rd" class="r54 r">authenticationContext</span> = <a href="#718a443092e4339a" class="i method">InvokeAuthenticationFilters</a>(<span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#a8619f09903851ad" class="i property">AuthenticationFilters</a>, <span class="r52 r">actionDescriptor</span>);
+ 
+                    <b>if</b> (<span class="r54 r">authenticationContext</span>.<a href="Filters/AuthenticationContext.cs.html#11c81fb18bf2b8c1" class="i property">Result</a> != <b>null</b>)
+                    {
+                        <span class="c">// An authentication filter signaled that we should short-circuit the request. Let all</span>
+                        <span class="c">// authentication filters contribute to an action result (to combine authentication</span>
+                        <span class="c">// challenges). Then, run this action result.</span>
+                        <a href="Filters/AuthenticationChallengeContext.cs.html#e92a90e211c320f0" class="t t">AuthenticationChallengeContext</a> <span id="r55 rd" class="r55 r">challengeContext</span> = <a href="#9f878bb6bd04bee5" class="i method">InvokeAuthenticationFiltersChallenge</a>(
+                            <span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#a8619f09903851ad" class="i property">AuthenticationFilters</a>, <span class="r52 r">actionDescriptor</span>,
+                            <span class="r54 r">authenticationContext</span>.<a href="Filters/AuthenticationContext.cs.html#11c81fb18bf2b8c1" class="i property">Result</a>);
+                        <a href="#6c30f0ba23c554fe" class="i method">InvokeActionResult</a>(<span class="r49 r">controllerContext</span>, <span class="r55 r">challengeContext</span>.<a href="Filters/AuthenticationChallengeContext.cs.html#4db7db7f274fc752" class="i property">Result</a> ?? <span class="r54 r">authenticationContext</span>.<a href="Filters/AuthenticationContext.cs.html#11c81fb18bf2b8c1" class="i property">Result</a>);
+                    }
+                    <b>else</b>
+                    {
+                        <a href="AuthorizationContext.cs.html#45e7db493539034a" class="t t">AuthorizationContext</a> <span id="r56 rd" class="r56 r">authorizationContext</span> = <a href="#f00e6812c9a3632f" class="i method">InvokeAuthorizationFilters</a>(<span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#2755cb81dfbf1576" class="i property">AuthorizationFilters</a>, <span class="r52 r">actionDescriptor</span>);
+                        <b>if</b> (<span class="r56 r">authorizationContext</span>.<a href="AuthorizationContext.cs.html#a402086d855c7290" class="i property">Result</a> != <b>null</b>)
+                        {
+                            <span class="c">// An authorization filter signaled that we should short-circuit the request. Let all</span>
+                            <span class="c">// authentication filters contribute to an action result (to combine authentication</span>
+                            <span class="c">// challenges). Then, run this action result.</span>
+                            <a href="Filters/AuthenticationChallengeContext.cs.html#e92a90e211c320f0" class="t t">AuthenticationChallengeContext</a> <span id="r57 rd" class="r57 r">challengeContext</span> = <a href="#9f878bb6bd04bee5" class="i method">InvokeAuthenticationFiltersChallenge</a>(
+                                <span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#a8619f09903851ad" class="i property">AuthenticationFilters</a>, <span class="r52 r">actionDescriptor</span>,
+                                <span class="r56 r">authorizationContext</span>.<a href="AuthorizationContext.cs.html#a402086d855c7290" class="i property">Result</a>);
+                            <a href="#6c30f0ba23c554fe" class="i method">InvokeActionResult</a>(<span class="r49 r">controllerContext</span>, <span class="r57 r">challengeContext</span>.<a href="Filters/AuthenticationChallengeContext.cs.html#4db7db7f274fc752" class="i property">Result</a> ?? <span class="r56 r">authorizationContext</span>.<a href="AuthorizationContext.cs.html#a402086d855c7290" class="i property">Result</a>);
+                        }
+                        <b>else</b>
+                        {
+                            <b>if</b> (<span class="r49 r">controllerContext</span>.<a href="ControllerContext.cs.html#722f9acba70af924" class="i property">Controller</a>.<a href="ControllerBase.cs.html#39c34750f1305927" class="i property">ValidateRequest</a>)
+                            {
+                                <a href="#1b5d4daac6ff5292" class="i method">ValidateRequest</a>(<span class="r49 r">controllerContext</span>);
+                            }
+ 
+                            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r58 rd" class="r58 r">parameters</span> = <a href="#189132716962b865" class="i method">GetParameterValues</a>(<span class="r49 r">controllerContext</span>, <span class="r52 r">actionDescriptor</span>);
+                            <a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a> <span id="r59 rd" class="r59 r">postActionContext</span> = <a href="#36ed42e1414d7c27" class="i method">InvokeActionMethodWithFilters</a>(<span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#d95633ced4357150" class="i property">ActionFilters</a>, <span class="r52 r">actionDescriptor</span>, <span class="r58 r">parameters</span>);
+ 
+                            <span class="c">// The action succeeded. Let all authentication filters contribute to an action result (to</span>
+                            <span class="c">// combine authentication challenges; some authentication filters need to do negotiation</span>
+                            <span class="c">// even on a successful result). Then, run this action result.</span>
+                            <a href="Filters/AuthenticationChallengeContext.cs.html#e92a90e211c320f0" class="t t">AuthenticationChallengeContext</a> <span id="r60 rd" class="r60 r">challengeContext</span> = <a href="#9f878bb6bd04bee5" class="i method">InvokeAuthenticationFiltersChallenge</a>(
+                                <span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#a8619f09903851ad" class="i property">AuthenticationFilters</a>, <span class="r52 r">actionDescriptor</span>,
+                                <span class="r59 r">postActionContext</span>.<a href="ActionExecutedContext.cs.html#26fe45b16618eee9" class="i property">Result</a>);
+                            <a href="#3242657646b81c77" class="i method">InvokeActionResultWithFilters</a>(<span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#ec4d431f980dbfd6" class="i property">ResultFilters</a>,
+                                <span class="r60 r">challengeContext</span>.<a href="Filters/AuthenticationChallengeContext.cs.html#4db7db7f274fc752" class="i property">Result</a> ?? <span class="r59 r">postActionContext</span>.<a href="ActionExecutedContext.cs.html#26fe45b16618eee9" class="i property">Result</a>);
+                        }
+                    }
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#1b47a5a85e0d5883" class="t t">ThreadAbortException</a>)
+                {
+                    <span class="c">// This type of exception occurs as a result of Response.Redirect(), but we special-case so that</span>
+                    <span class="c">// the filters don&#39;t see this as an error.</span>
+                    <b>throw</b>;
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r61 rd" class="r61 r">ex</span>)
+                {
+                    <span class="c">// something blew up, so execute the exception filters</span>
+                    <a href="ExceptionContext.cs.html#64e554bfeb46df68" class="t t">ExceptionContext</a> <span id="r62 rd" class="r62 r">exceptionContext</span> = <a href="#169df7312216009d" class="i method">InvokeExceptionFilters</a>(<span class="r49 r">controllerContext</span>, <span class="r53 r">filterInfo</span>.<a href="FilterInfo.cs.html#48484d74b12cf2e6" class="i property">ExceptionFilters</a>, <span class="r61 r">ex</span>);
+                    <b>if</b> (!<span class="r62 r">exceptionContext</span>.<a href="ExceptionContext.cs.html#e2b91239a2061db3" class="i property">ExceptionHandled</a>)
+                    {
+                        <b>throw</b>;
+                    }
+                    <a href="#6c30f0ba23c554fe" class="i method">InvokeActionResult</a>(<span class="r49 r">controllerContext</span>, <span class="r62 r">exceptionContext</span>.<a href="ExceptionContext.cs.html#8dbedbd00c7189dc" class="i property">Result</a>);
+                }
+ 
+                <b>return true</b>;
+            }
+ 
+            <span class="c">// notify controller that no method matched</span>
+            <b>return false</b>;
+        }
+ 
+        <b>protected virtual</b> <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <a id="0aa3cfdbfc7a54df" href="R/0aa3cfdbfc7a54df.html" target="n" data-glyph="75,1" class="i method">InvokeActionMethod</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r63 rd" class="r63 r">controllerContext</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r64 rd" class="r64 r">actionDescriptor</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r65 rd" class="r65 r">parameters</span>)
+        {
+            <b>object</b> <span id="r66 rd" class="r66 r">returnValue</span> = <span class="r64 r">actionDescriptor</span>.<a href="ActionDescriptor.cs.html#2eba38e4aac3da60" class="i method">Execute</a>(<span class="r63 r">controllerContext</span>, <span class="r65 r">parameters</span>);
+            <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <span id="r67 rd" class="r67 r">result</span> = <a href="#2b905ecaf375b9f4" class="i method">CreateActionResult</a>(<span class="r63 r">controllerContext</span>, <span class="r64 r">actionDescriptor</span>, <span class="r66 r">returnValue</span>);
+            <b>return</b> <span class="r67 r">result</span>;
+        }
+ 
+        <b>internal static</b> <a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a> <a id="597323bdd7a9508a" href="R/597323bdd7a9508a.html" target="n" data-glyph="74,1" class="i method">InvokeActionMethodFilter</a>(<a href="IActionFilter.cs.html#11570d9642b3eeee" class="t t">IActionFilter</a> <span id="r68 rd" class="r68 r">filter</span>, <a href="ActionExecutingContext.cs.html#39784fbc246122e1" class="t t">ActionExecutingContext</a> <span id="r69 rd" class="r69 r">preContext</span>, <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a>&gt; <span id="r70 rd" class="r70 r">continuation</span>)
+        {
+            <span class="r68 r">filter</span>.<a href="IActionFilter.cs.html#1caf69887439b837" class="i method">OnActionExecuting</a>(<span class="r69 r">preContext</span>);
+            <b>if</b> (<span class="r69 r">preContext</span>.<a href="ActionExecutingContext.cs.html#0f2a66fe5c3a5fee" class="i property">Result</a> != <b>null</b>)
+            {
+                <b>return</b> <b>new</b> <a href="ActionExecutedContext.cs.html#9729e48f062bf141" class="t constructor">ActionExecutedContext</a>(<span class="r69 r">preContext</span>, <span class="r69 r">preContext</span>.<a href="ActionExecutingContext.cs.html#336cfe2229573afd" class="i property">ActionDescriptor</a>, <b>true</b> <span class="c">/* canceled */</span>, <b>null</b> <span class="c">/* exception */</span>)
+                {
+                    <a href="ActionExecutedContext.cs.html#26fe45b16618eee9" class="i property">Result</a> = <span class="r69 r">preContext</span>.<a href="ActionExecutingContext.cs.html#0f2a66fe5c3a5fee" class="i property">Result</a>
+                };
+            }
+ 
+            <b>bool</b> <span id="r71 rd" class="r71 r">wasError</span> = <b>false</b>;
+            <a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a> <span id="r72 rd" class="r72 r">postContext</span> = <b>null</b>;
+            <b>try</b>
+            {
+                <span class="r72 r">postContext</span> = <span class="r70 r">continuation</span>();
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#1b47a5a85e0d5883" class="t t">ThreadAbortException</a>)
+            {
+                <span class="c">// This type of exception occurs as a result of Response.Redirect(), but we special-case so that</span>
+                <span class="c">// the filters don&#39;t see this as an error.</span>
+                <span class="r72 r">postContext</span> = <b>new</b> <a href="ActionExecutedContext.cs.html#9729e48f062bf141" class="t constructor">ActionExecutedContext</a>(<span class="r69 r">preContext</span>, <span class="r69 r">preContext</span>.<a href="ActionExecutingContext.cs.html#336cfe2229573afd" class="i property">ActionDescriptor</a>, <b>false</b> <span class="c">/* canceled */</span>, <b>null</b> <span class="c">/* exception */</span>);
+                <span class="r68 r">filter</span>.<a href="IActionFilter.cs.html#06ddaff3f668d0fc" class="i method">OnActionExecuted</a>(<span class="r72 r">postContext</span>);
+                <b>throw</b>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r73 rd" class="r73 r">ex</span>)
+            {
+                <span class="r71 r">wasError</span> = <b>true</b>;
+                <span class="r72 r">postContext</span> = <b>new</b> <a href="ActionExecutedContext.cs.html#9729e48f062bf141" class="t constructor">ActionExecutedContext</a>(<span class="r69 r">preContext</span>, <span class="r69 r">preContext</span>.<a href="ActionExecutingContext.cs.html#336cfe2229573afd" class="i property">ActionDescriptor</a>, <b>false</b> <span class="c">/* canceled */</span>, <span class="r73 r">ex</span>);
+                <span class="r68 r">filter</span>.<a href="IActionFilter.cs.html#06ddaff3f668d0fc" class="i method">OnActionExecuted</a>(<span class="r72 r">postContext</span>);
+                <b>if</b> (!<span class="r72 r">postContext</span>.<a href="ActionExecutedContext.cs.html#793e68ee99ffb3b3" class="i property">ExceptionHandled</a>)
+                {
+                    <b>throw</b>;
+                }
+            }
+            <b>if</b> (!<span class="r71 r">wasError</span>)
+            {
+                <span class="r68 r">filter</span>.<a href="IActionFilter.cs.html#06ddaff3f668d0fc" class="i method">OnActionExecuted</a>(<span class="r72 r">postContext</span>);
+            }
+            <b>return</b> <span class="r72 r">postContext</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a> <a id="36ed42e1414d7c27" href="R/36ed42e1414d7c27.html" target="n" data-glyph="75,1" class="i method">InvokeActionMethodWithFilters</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r74 rd" class="r74 r">controllerContext</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IActionFilter.cs.html#11570d9642b3eeee" class="t t">IActionFilter</a>&gt; <span id="r75 rd" class="r75 r">filters</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r76 rd" class="r76 r">actionDescriptor</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <b>object</b>&gt; <span id="r77 rd" class="r77 r">parameters</span>)
+        {
+            <a href="ActionExecutingContext.cs.html#39784fbc246122e1" class="t t">ActionExecutingContext</a> <span id="r78 rd" class="r78 r">preContext</span> = <b>new</b> <a href="ActionExecutingContext.cs.html#16f88021bc4cf88c" class="t constructor">ActionExecutingContext</a>(<span class="r74 r">controllerContext</span>, <span class="r76 r">actionDescriptor</span>, <span class="r77 r">parameters</span>);
+            <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a>&gt; <span id="r79 rd" class="r79 r">continuation</span> = () =&gt;
+                                                       <b>new</b> <a href="ActionExecutedContext.cs.html#9729e48f062bf141" class="t constructor">ActionExecutedContext</a>(<span class="r74 r">controllerContext</span>, <span class="r76 r">actionDescriptor</span>, <b>false</b> <span class="c">/* canceled */</span>, <b>null</b> <span class="c">/* exception */</span>)
+                                                       {
+                                                           <a href="ActionExecutedContext.cs.html#26fe45b16618eee9" class="i property">Result</a> = <a href="#0aa3cfdbfc7a54df" class="i method">InvokeActionMethod</a>(<span class="r74 r">controllerContext</span>, <span class="r76 r">actionDescriptor</span>, <span class="r77 r">parameters</span>)
+                                                       };
+ 
+            <span class="c">// need to reverse the filter list because the continuations are built up backward</span>
+            <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="ActionExecutedContext.cs.html#702e1e1833b63b7b" class="t t">ActionExecutedContext</a>&gt; <span id="r80 rd" class="r80 r">thunk</span> = <span class="r75 r">filters</span>.<a href="@0@System.Core/A.html#3af306c560f8c669" class="i method">Reverse</a>().<a href="@0@System.Core/A.html#82b209add5c21465" class="i method">Aggregate</a>(<span class="r79 r">continuation</span>,
+                                                                            (<span id="r81 rd" class="r81 r">next</span>, <span id="r82 rd" class="r82 r">filter</span>) =&gt; () =&gt; <a href="#597323bdd7a9508a" class="i method">InvokeActionMethodFilter</a>(<span class="r82 r">filter</span>, <span class="r78 r">preContext</span>, <span class="r81 r">next</span>));
+            <b>return</b> <span class="r80 r">thunk</span>();
+        }
+ 
+        <b>protected virtual void</b> <a id="6c30f0ba23c554fe" href="R/6c30f0ba23c554fe.html" target="n" data-glyph="75,1" class="i method">InvokeActionResult</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r83 rd" class="r83 r">controllerContext</span>, <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <span id="r84 rd" class="r84 r">actionResult</span>)
+        {
+            <span class="r84 r">actionResult</span>.<a href="ActionResult.cs.html#79c15f845dd718f9" class="i method">ExecuteResult</a>(<span class="r83 r">controllerContext</span>);
+        }
+ 
+        <b>private</b> <a href="ResultExecutedContext.cs.html#ead256ea27cbc548" class="t t">ResultExecutedContext</a> <a id="a5565d7030f601c9" href="R/a5565d7030f601c9.html" target="n" data-glyph="76,1" class="i method">InvokeActionResultFilterRecursive</a>(<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IResultFilter.cs.html#1455e64ef815b72b" class="t t">IResultFilter</a>&gt; <span id="r85 rd" class="r85 r">filters</span>, <b>int</b> <span id="r86 rd" class="r86 r">filterIndex</span>, <a href="ResultExecutingContext.cs.html#70779de1a7fe6836" class="t t">ResultExecutingContext</a> <span id="r87 rd" class="r87 r">preContext</span>, <a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r88 rd" class="r88 r">controllerContext</span>, <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <span id="r89 rd" class="r89 r">actionResult</span>)
+        {
+            <span class="c">// Performance-sensitive</span>
+ 
+            <span class="c">// For compatbility, the following behavior must be maintained</span>
+            <span class="c">//   The OnResultExecuting events must fire in forward order</span>
+            <span class="c">//   The InvokeActionResult must then fire</span>
+            <span class="c">//   The OnResultExecuted events must fire in reverse order</span>
+            <span class="c">//   Earlier filters can process the results and exceptions from the handling of later filters</span>
+            <span class="c">// This is achieved by calling recursively and moving through the filter list forwards</span>
+ 
+            <span class="c">// If there are no more filters to recurse over, create the main result</span>
+            <b>if</b> (<span class="r86 r">filterIndex</span> &gt; <span class="r85 r">filters</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a> - 1)
+            {
+                <a href="#6c30f0ba23c554fe" class="i method">InvokeActionResult</a>(<span class="r88 r">controllerContext</span>, <span class="r89 r">actionResult</span>);
+                <b>return</b> <b>new</b> <a href="ResultExecutedContext.cs.html#33010b5558da9718" class="t constructor">ResultExecutedContext</a>(<span class="r88 r">controllerContext</span>, <span class="r89 r">actionResult</span>, <span class="r90 r">canceled</span>: <b>false</b>, <span class="r91 r">exception</span>: <b>null</b>);
+            }
+ 
+            <span class="c">// Otherwise process the filters recursively</span>
+            <a href="IResultFilter.cs.html#1455e64ef815b72b" class="t t">IResultFilter</a> <span id="r92 rd" class="r92 r">filter</span> = <span class="r85 r">filters</span><a href="@0@mscorlib/A.html#396bb785d31f5979">[</a><span class="r86 r">filterIndex</span>];
+            <span class="r92 r">filter</span>.<a href="IResultFilter.cs.html#172b334c83b84555" class="i method">OnResultExecuting</a>(<span class="r87 r">preContext</span>);
+            <b>if</b> (<span class="r87 r">preContext</span>.<a href="ResultExecutingContext.cs.html#7d56c85db96a3f04" class="i property">Cancel</a>)
+            {
+                <b>return</b> <b>new</b> <a href="ResultExecutedContext.cs.html#33010b5558da9718" class="t constructor">ResultExecutedContext</a>(<span class="r87 r">preContext</span>, <span class="r87 r">preContext</span>.<a href="ResultExecutingContext.cs.html#96d8d4ab3f9b20c8" class="i property">Result</a>, <span class="r90 r">canceled</span>: <b>true</b>, <span class="r91 r">exception</span>: <b>null</b>);
+            }
+ 
+            <b>bool</b> <span id="r93 rd" class="r93 r">wasError</span> = <b>false</b>;
+            <a href="ResultExecutedContext.cs.html#ead256ea27cbc548" class="t t">ResultExecutedContext</a> <span id="r94 rd" class="r94 r">postContext</span> = <b>null</b>;
+            <b>try</b>
+            {
+                <span class="c">// Use the filters in forward direction</span>
+                <b>int</b> <span id="r95 rd" class="r95 r">nextFilterIndex</span> = <span class="r86 r">filterIndex</span> + 1;
+                <span class="r94 r">postContext</span> = <a href="#a5565d7030f601c9" class="i method">InvokeActionResultFilterRecursive</a>(<span class="r85 r">filters</span>, <span class="r95 r">nextFilterIndex</span>, <span class="r87 r">preContext</span>, <span class="r88 r">controllerContext</span>, <span class="r89 r">actionResult</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#1b47a5a85e0d5883" class="t t">ThreadAbortException</a>)
+            {
+                <span class="c">// This type of exception occurs as a result of Response.Redirect(), but we special-case so that</span>
+                <span class="c">// the filters don&#39;t see this as an error.</span>
+                <span class="r94 r">postContext</span> = <b>new</b> <a href="ResultExecutedContext.cs.html#33010b5558da9718" class="t constructor">ResultExecutedContext</a>(<span class="r87 r">preContext</span>, <span class="r87 r">preContext</span>.<a href="ResultExecutingContext.cs.html#96d8d4ab3f9b20c8" class="i property">Result</a>, <span class="r90 r">canceled</span>: <b>false</b>, <span class="r91 r">exception</span>: <b>null</b>);
+                <span class="r92 r">filter</span>.<a href="IResultFilter.cs.html#c2215e8e79bc71e5" class="i method">OnResultExecuted</a>(<span class="r94 r">postContext</span>);
+                <b>throw</b>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r96 rd" class="r96 r">ex</span>)
+            {
+                <span class="r93 r">wasError</span> = <b>true</b>;
+                <span class="r94 r">postContext</span> = <b>new</b> <a href="ResultExecutedContext.cs.html#33010b5558da9718" class="t constructor">ResultExecutedContext</a>(<span class="r87 r">preContext</span>, <span class="r87 r">preContext</span>.<a href="ResultExecutingContext.cs.html#96d8d4ab3f9b20c8" class="i property">Result</a>, <span class="r90 r">canceled</span>: <b>false</b>, <span class="r91 r">exception</span>: <span class="r96 r">ex</span>);
+                <span class="r92 r">filter</span>.<a href="IResultFilter.cs.html#c2215e8e79bc71e5" class="i method">OnResultExecuted</a>(<span class="r94 r">postContext</span>);
+                <b>if</b> (!<span class="r94 r">postContext</span>.<a href="ResultExecutedContext.cs.html#8ca35aba18714b63" class="i property">ExceptionHandled</a>)
+                {
+                    <b>throw</b>;
+                }
+            }
+            <b>if</b> (!<span class="r93 r">wasError</span>)
+            {
+                <span class="r92 r">filter</span>.<a href="IResultFilter.cs.html#c2215e8e79bc71e5" class="i method">OnResultExecuted</a>(<span class="r94 r">postContext</span>);
+            }
+            <b>return</b> <span class="r94 r">postContext</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="ResultExecutedContext.cs.html#ead256ea27cbc548" class="t t">ResultExecutedContext</a> <a id="3242657646b81c77" href="R/3242657646b81c77.html" target="n" data-glyph="75,1" class="i method">InvokeActionResultWithFilters</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r97 rd" class="r97 r">controllerContext</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IResultFilter.cs.html#1455e64ef815b72b" class="t t">IResultFilter</a>&gt; <span id="r98 rd" class="r98 r">filters</span>, <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <span id="r99 rd" class="r99 r">actionResult</span>)
+        {
+            <a href="ResultExecutingContext.cs.html#70779de1a7fe6836" class="t t">ResultExecutingContext</a> <span id="r100 rd" class="r100 r">preContext</span> = <b>new</b> <a href="ResultExecutingContext.cs.html#dcaec38b230363ae" class="t constructor">ResultExecutingContext</a>(<span class="r97 r">controllerContext</span>, <span class="r99 r">actionResult</span>);
+ 
+            <b>int</b> <span id="r101 rd" class="r101 r">startingFilterIndex</span> = 0;
+            <b>return</b> <a href="#a5565d7030f601c9" class="i method">InvokeActionResultFilterRecursive</a>(<span class="r98 r">filters</span>, <span class="r101 r">startingFilterIndex</span>, <span class="r100 r">preContext</span>, <span class="r97 r">controllerContext</span>, <span class="r99 r">actionResult</span>);
+        }
+ 
+        <b>protected virtual</b> <a href="Filters/AuthenticationContext.cs.html#a6c73975929a7023" class="t t">AuthenticationContext</a> <a id="718a443092e4339a" href="R/718a443092e4339a.html" target="n" data-glyph="75,1" class="i method">InvokeAuthenticationFilters</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r102 rd" class="r102 r">controllerContext</span>,
+            <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Filters/IAuthenticationFilter.cs.html#1b0b1c5ef030dad4" class="t t">IAuthenticationFilter</a>&gt; <span id="r103 rd" class="r103 r">filters</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r104 rd" class="r104 r">actionDescriptor</span>)
+        {
+            <b>if</b> (<span class="r102 r">controllerContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerContext&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r102 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a> != <b>null</b>);
+            <a href="@0@mscorlib/A.html#40fe672fdd6dae6b" class="t t">IPrincipal</a> <span id="r105 rd" class="r105 r">originalPrincipal</span> = <span class="r102 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#8e42fd20f0557a68" class="i property">User</a>;
+            <a href="Filters/AuthenticationContext.cs.html#a6c73975929a7023" class="t t">AuthenticationContext</a> <span id="r106 rd" class="r106 r">context</span> = <b>new</b> <a href="Filters/AuthenticationContext.cs.html#6f3b4e7666aff0b7" class="t constructor">AuthenticationContext</a>(<span class="r102 r">controllerContext</span>, <span class="r104 r">actionDescriptor</span>,
+                <span class="r105 r">originalPrincipal</span>);
+            <b>foreach</b> (<a href="Filters/IAuthenticationFilter.cs.html#1b0b1c5ef030dad4" class="t t">IAuthenticationFilter</a> <span id="r107 rd" class="r107 r">filter</span> <b>in</b> <span class="r103 r">filters</span>)
+            {
+                <span class="r107 r">filter</span>.<a href="Filters/IAuthenticationFilter.cs.html#f9a1eed4819f5104" class="i method">OnAuthentication</a>(<span class="r106 r">context</span>);
+                <span class="c">// short-circuit evaluation when an error occurs</span>
+                <b>if</b> (<span class="r106 r">context</span>.<a href="Filters/AuthenticationContext.cs.html#11c81fb18bf2b8c1" class="i property">Result</a> != <b>null</b>)
+                {
+                    <b>break</b>;
+                }
+            }
+ 
+            <a href="@0@mscorlib/A.html#40fe672fdd6dae6b" class="t t">IPrincipal</a> <span id="r108 rd" class="r108 r">newPrincipal</span> = <span class="r106 r">context</span>.<a href="Filters/AuthenticationContext.cs.html#6acc5181106a3ef6" class="i property">Principal</a>;
+ 
+            <b>if</b> (<span class="r108 r">newPrincipal</span> != <span class="r105 r">originalPrincipal</span>)
+            {
+                <a href="@0@mscorlib/A.html#c575dbe300e57438" class="t t">Contract</a>.<a href="@0@mscorlib/A.html#e87e73b73368f052" class="i method">Assert</a>(<span class="r106 r">context</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a> != <b>null</b>);
+                <span class="r106 r">context</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#8e42fd20f0557a68" class="i property">User</a> = <span class="r108 r">newPrincipal</span>;
+                <a href="@0@mscorlib/A.html#3980e012bae82e96" class="t t">Thread</a>.<a href="@0@mscorlib/A.html#af38dde3f1bd6b93" class="i property">CurrentPrincipal</a> = <span class="r108 r">newPrincipal</span>;
+            }
+ 
+            <b>return</b> <span class="r106 r">context</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="Filters/AuthenticationChallengeContext.cs.html#e92a90e211c320f0" class="t t">AuthenticationChallengeContext</a> <a id="9f878bb6bd04bee5" href="R/9f878bb6bd04bee5.html" target="n" data-glyph="75,1" class="i method">InvokeAuthenticationFiltersChallenge</a>(
+            <a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r109 rd" class="r109 r">controllerContext</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="Filters/IAuthenticationFilter.cs.html#1b0b1c5ef030dad4" class="t t">IAuthenticationFilter</a>&gt; <span id="r110 rd" class="r110 r">filters</span>,
+            <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r111 rd" class="r111 r">actionDescriptor</span>, <a href="ActionResult.cs.html#8bbb8ceda32fbb12" class="t t">ActionResult</a> <span id="r112 rd" class="r112 r">result</span>)
+        {
+            <a href="Filters/AuthenticationChallengeContext.cs.html#e92a90e211c320f0" class="t t">AuthenticationChallengeContext</a> <span id="r113 rd" class="r113 r">context</span> = <b>new</b> <a href="Filters/AuthenticationChallengeContext.cs.html#2b393aafc9ebb551" class="t constructor">AuthenticationChallengeContext</a>(<span class="r109 r">controllerContext</span>,
+                <span class="r111 r">actionDescriptor</span>, <span class="r112 r">result</span>);
+            <b>foreach</b> (<a href="Filters/IAuthenticationFilter.cs.html#1b0b1c5ef030dad4" class="t t">IAuthenticationFilter</a> <span id="r114 rd" class="r114 r">filter</span> <b>in</b> <span class="r110 r">filters</span>)
+            {
+                <span class="r114 r">filter</span>.<a href="Filters/IAuthenticationFilter.cs.html#c063135a99a95207" class="i method">OnAuthenticationChallenge</a>(<span class="r113 r">context</span>);
+                <span class="c">// unlike other filter types, don&#39;t short-circuit evaluation when context.Result != null (since it</span>
+                <span class="c">// starts out that way, and multiple filters may add challenges to the result)</span>
+            }
+ 
+            <b>return</b> <span class="r113 r">context</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="AuthorizationContext.cs.html#45e7db493539034a" class="t t">AuthorizationContext</a> <a id="f00e6812c9a3632f" href="R/f00e6812c9a3632f.html" target="n" data-glyph="75,1" class="i method">InvokeAuthorizationFilters</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r115 rd" class="r115 r">controllerContext</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IAuthorizationFilter.cs.html#e44ca61bdc1b0c55" class="t t">IAuthorizationFilter</a>&gt; <span id="r116 rd" class="r116 r">filters</span>, <a href="ActionDescriptor.cs.html#dcef6bdd6f885ebe" class="t t">ActionDescriptor</a> <span id="r117 rd" class="r117 r">actionDescriptor</span>)
+        {
+            <a href="AuthorizationContext.cs.html#45e7db493539034a" class="t t">AuthorizationContext</a> <span id="r118 rd" class="r118 r">context</span> = <b>new</b> <a href="AuthorizationContext.cs.html#ac0cc8c15b678616" class="t constructor">AuthorizationContext</a>(<span class="r115 r">controllerContext</span>, <span class="r117 r">actionDescriptor</span>);
+            <b>foreach</b> (<a href="IAuthorizationFilter.cs.html#e44ca61bdc1b0c55" class="t t">IAuthorizationFilter</a> <span id="r119 rd" class="r119 r">filter</span> <b>in</b> <span class="r116 r">filters</span>)
+            {
+                <span class="r119 r">filter</span>.<a href="IAuthorizationFilter.cs.html#ee662e194bfd9632" class="i method">OnAuthorization</a>(<span class="r118 r">context</span>);
+                <span class="c">// short-circuit evaluation when an error occurs</span>
+                <b>if</b> (<span class="r118 r">context</span>.<a href="AuthorizationContext.cs.html#a402086d855c7290" class="i property">Result</a> != <b>null</b>)
+                {
+                    <b>break</b>;
+                }
+            }
+ 
+            <b>return</b> <span class="r118 r">context</span>;
+        }
+ 
+        <b>protected virtual</b> <a href="ExceptionContext.cs.html#64e554bfeb46df68" class="t t">ExceptionContext</a> <a id="169df7312216009d" href="R/169df7312216009d.html" target="n" data-glyph="75,1" class="i method">InvokeExceptionFilters</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r120 rd" class="r120 r">controllerContext</span>, <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<a href="IExceptionFilter.cs.html#21627f436425ea64" class="t t">IExceptionFilter</a>&gt; <span id="r121 rd" class="r121 r">filters</span>, <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a> <span id="r122 rd" class="r122 r">exception</span>)
+        {
+            <a href="ExceptionContext.cs.html#64e554bfeb46df68" class="t t">ExceptionContext</a> <span id="r123 rd" class="r123 r">context</span> = <b>new</b> <a href="ExceptionContext.cs.html#6946a142096dec42" class="t constructor">ExceptionContext</a>(<span class="r120 r">controllerContext</span>, <span class="r122 r">exception</span>);
+            <b>foreach</b> (<a href="IExceptionFilter.cs.html#21627f436425ea64" class="t t">IExceptionFilter</a> <span id="r124 rd" class="r124 r">filter</span> <b>in</b> <span class="r121 r">filters</span>.<a href="@0@System.Core/A.html#3af306c560f8c669" class="i method">Reverse</a>())
+            {
+                <span class="r124 r">filter</span>.<a href="IExceptionFilter.cs.html#bc0a1ed120d26a2b" class="i method">OnException</a>(<span class="r123 r">context</span>);
+            }
+ 
+            <b>return</b> <span class="r123 r">context</span>;
+        }
+ 
+        <b>internal static void</b> <a id="1b5d4daac6ff5292" href="R/1b5d4daac6ff5292.html" target="n" data-glyph="74,1" class="i method">ValidateRequest</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r125 rd" class="r125 r">controllerContext</span>)
+        {
+            <b>if</b> (<span class="r125 r">controllerContext</span>.<a href="ControllerContext.cs.html#a6bb7a97561e2497" class="i property">IsChildAction</a>)
+            {
+                <b>return</b>;
+            }
+ 
+            <span class="c">// DevDiv 214040: Enable Request Validation by default for all controller requests</span>
+            <span class="c">// </span>
+            <span class="c">// Earlier versions of this method dereferenced Request.RawUrl to force validation of</span>
+            <span class="c">// that field. This was necessary for Routing before ASP.NET v4, which read the incoming</span>
+            <span class="c">// path from RawUrl. Request validation has been moved earlier in the pipeline by default and</span>
+            <span class="c">// routing no longer consumes this property, so we don&#39;t have to either.</span>
+ 
+            <span class="c">// Tolerate null HttpContext for testing</span>
+            <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a> <span id="r126 rd" class="r126 r">currentContext</span> = <a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>;
+            <b>if</b> (<span class="r126 r">currentContext</span> != <b>null</b>)
+            {
+                <a href="/Microsoft.Web.Infrastructure/A.html#e693921b4651bbdd" class="t t">ValidationUtility</a>.<a href="/Microsoft.Web.Infrastructure/A.html#cd7a22fc9a653607" class="i method">EnableDynamicValidation</a>(<span class="r126 r">currentContext</span>);
+            }
+ 
+            <span class="r125 r">controllerContext</span>.<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#bf9eed8ebb48f81f" class="i property">Request</a>.<a href="@0@System.Web/A.html#58fe0b976764fcdb" class="i method">ValidateInput</a>();
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

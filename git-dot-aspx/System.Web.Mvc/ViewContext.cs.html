@@ -1,0 +1,386 @@
+﻿<!DOCTYPE html>
+<html><head><title>ViewContext.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(377);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/ViewContext.cs" target="_top">ViewContext.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Html</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">WebPages</span>.<span class="i n">Scope</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    <b>public class</b> <a id="a8ebdc672bc34562" href="R/a8ebdc672bc34562.html" target="n" data-glyph="0,0" class="t t">ViewContext</a> : <a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a>
+    {
+        <b>private const string</b> <a id="5c1fdc70e12e770b" href="R/5c1fdc70e12e770b.html" target="n" data-glyph="10,1" class="i field">ClientValidationScript</a> = <span class="s">@&quot;&lt;script type=&quot;&quot;text/javascript&quot;&quot;&gt;
+//&lt;![CDATA[
+if (!window.mvcClientValidationMetadata) {{ window.mvcClientValidationMetadata = []; }}
+window.mvcClientValidationMetadata.push({0});
+//]]&gt;
+&lt;/script&gt;&quot;</span>;
+ 
+        <b>internal static readonly string</b> <a id="121470d9f847495c" href="R/121470d9f847495c.html" target="n" data-glyph="44,1" class="i field">ClientValidationKeyName</a> = <span class="s">&quot;ClientValidationEnabled&quot;</span>;
+        <b>internal static readonly string</b> <a id="1e0cce8ab963a744" href="R/1e0cce8ab963a744.html" target="n" data-glyph="44,1" class="i field">UnobtrusiveJavaScriptKeyName</a> = <span class="s">&quot;UnobtrusiveJavaScriptEnabled&quot;</span>;
+        <b>internal static readonly string</b> <a id="1ce08c50410d75ad" href="R/1ce08c50410d75ad.html" target="n" data-glyph="44,1" class="i field">ValidationSummaryMessageElementKeyName</a> = <span class="s">&quot;ValidationSummaryMessageElement&quot;</span>;
+        <b>internal static readonly string</b> <a id="433a60528fa4be6a" href="R/433a60528fa4be6a.html" target="n" data-glyph="44,1" class="i field">ValidationMessageElementKeyName</a> = <span class="s">&quot;ValidationMessageElement&quot;</span>;
+ 
+        <span class="c">// Some values have to be stored in HttpContext.Items in order to be propagated between calls</span>
+        <span class="c">// to RenderPartial(), RenderAction(), etc.</span>
+        <b>private static readonly object</b> <a id="25fa0527fb34176f" href="R/25fa0527fb34176f.html" target="n" data-glyph="46,1" class="i field">_formContextKey</a> = <b>new</b> <b>object</b>();
+        <b>private static readonly object</b> <a id="453b6ed7bf2e85e9" href="R/453b6ed7bf2e85e9.html" target="n" data-glyph="46,1" class="i field">_lastFormNumKey</a> = <b>new</b> <b>object</b>();
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt;&gt; <a id="1442533a6aaec85e" href="R/1442533a6aaec85e.html" target="n" data-glyph="46,1" class="i field">_scopeThunk</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <a id="4cd355386ef8bca0" href="R/4cd355386ef8bca0.html" target="n" data-glyph="46,1" class="i field">_transientScope</a>;
+ 
+        <b>private</b> <a href="DynamicViewDataDictionary.cs.html#70e4c38c8c0c87a7" class="t t">DynamicViewDataDictionary</a> <a id="2c0dc0eefdc83ee9" href="R/2c0dc0eefdc83ee9.html" target="n" data-glyph="46,1" class="i field">_dynamicViewDataDictionary</a>;
+        <b>private</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<b>string</b>&gt; <a id="478a5b2233a1d3ee" href="R/478a5b2233a1d3ee.html" target="n" data-glyph="46,1" class="i field">_formIdGenerator</a>;
+ 
+        <span class="c">// We need a default FormContext if the user uses html &lt;form&gt; instead of an MvcForm</span>
+        <b>private</b> <a href="FormContext.cs.html#3e66a87cce57e15d" class="t t">FormContext</a> <a id="849dcb96fe6ba6ab" href="R/849dcb96fe6ba6ab.html" target="n" data-glyph="46,1" class="i field">_defaultFormContext</a> = <b>new</b> <a href="FormContext.cs.html#3e66a87cce57e15d" class="t constructor">FormContext</a>();
+ 
+        <span class="c">// parameterless constructor used for mocking</span>
+        <b>public</b> <a id="982e8c9477e6ac57" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">ViewContext</a>()
+        {
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2214:DoNotCallOverridableMethodsInConstructors&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The virtual property setters are only to support mocking frameworks, in which case this constructor shouldn&#39;t be called anyway.&quot;</span>)]
+        <b>public</b> <a id="ddc48a4794489b9d" href="R/ddc48a4794489b9d.html" target="n" data-glyph="72,1" class="i constructor">ViewContext</a>(<a href="ControllerContext.cs.html#2d2ade91d6ccd6fe" class="t t">ControllerContext</a> <span id="r0 rd" class="r0 r">controllerContext</span>, <a href="IView.cs.html#82f8cb446948d3d5" class="t t">IView</a> <span id="r1 rd" class="r1 r">view</span>, <a href="ViewDataDictionary.cs.html#d437a6ecdb0c13aa" class="t t">ViewDataDictionary</a> <span id="r2 rd" class="r2 r">viewData</span>, <a href="TempDataDictionary.cs.html#c8afcd39e8092cdd" class="t t">TempDataDictionary</a> <span id="r3 rd" class="r3 r">tempData</span>, <a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <span id="r4 rd" class="r4 r">writer</span>)
+            : <a href="ControllerContext.cs.html#58bcbf93d51b9937" class="k">base</a>(<span class="r0 r">controllerContext</span>)
+        {
+            <b>if</b> (<span class="r0 r">controllerContext</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;controllerContext&quot;</span>);
+            }
+            <b>if</b> (<span class="r1 r">view</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;view&quot;</span>);
+            }
+            <b>if</b> (<span class="r2 r">viewData</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;viewData&quot;</span>);
+            }
+            <b>if</b> (<span class="r3 r">tempData</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;tempData&quot;</span>);
+            }
+            <b>if</b> (<span class="r4 r">writer</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;writer&quot;</span>);
+            }
+ 
+            <a href="#b75ff8bd87ae20a9" class="i property">View</a> = <span class="r1 r">view</span>;
+            <a href="#afe7b59d25ffb5b4" class="i property">ViewData</a> = <span class="r2 r">viewData</span>;
+            <a href="#cd45b3097298d816" class="i property">Writer</a> = <span class="r4 r">writer</span>;
+            <a href="#3fd028b9ea02c32b" class="i property">TempData</a> = <span class="r3 r">tempData</span>;
+        }
+ 
+        <b>public virtual bool</b> <a id="2681ed694dd7c3c3" href="R/2681ed694dd7c3c3.html" target="n" data-glyph="102,1" class="i property">ClientValidationEnabled</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#b04f57b84e847a6b" class="i method">GetClientValidationEnabled</a>(<a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>); }
+            <b>set</b> { <a href="#a010d5309778396c" class="i method">SetClientValidationEnabled</a>(<b>value</b>, <a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>); }
+        }
+ 
+        <b>public virtual</b> <a href="FormContext.cs.html#3e66a87cce57e15d" class="t t">FormContext</a> <a id="2fda98061f2a9fac" href="R/2fda98061f2a9fac.html" target="n" data-glyph="102,1" class="i property">FormContext</a>
+        {
+            <b>get</b>
+            {
+                <span class="c">// Never return a null form context, this is important for validation purposes</span>
+                <b>return</b> <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#25fa0527fb34176f" class="i field">_formContextKey</a>] <b>as</b> <a href="FormContext.cs.html#3e66a87cce57e15d" class="t t">FormContext</a> ?? <a href="#849dcb96fe6ba6ab" class="i field">_defaultFormContext</a>;
+            }
+            <b>set</b> { <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#25fa0527fb34176f" class="i field">_formContextKey</a>] = <b>value</b>; }
+        }
+ 
+        <b>internal</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<b>string</b>&gt; <a id="0dc5701ec1b883c3" href="R/0dc5701ec1b883c3.html" target="n" data-glyph="104,1" class="i property">FormIdGenerator</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#478a5b2233a1d3ee" class="i field">_formIdGenerator</a> == <b>null</b>)
+                {
+                    <a href="#478a5b2233a1d3ee" class="i field">_formIdGenerator</a> = <a href="#4c1912b6fb4f22dc" class="i method">DefaultFormIdGenerator</a>;
+                }
+                <b>return</b> <a href="#478a5b2233a1d3ee" class="i field">_formIdGenerator</a>;
+            }
+            <b>set</b> { <a href="#478a5b2233a1d3ee" class="i field">_formIdGenerator</a> = <b>value</b>; }
+        }
+ 
+        <b>internal static</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt;&gt; <a id="06ad1efa11628aa3" href="R/06ad1efa11628aa3.html" target="n" data-glyph="104,1" class="i property">GlobalScopeThunk</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>private</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <a id="4c6fc15baea051a3" href="R/4c6fc15baea051a3.html" target="n" data-glyph="106,1" class="i property">Scope</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#0dfbb33eeda6025e" class="i property">ScopeThunk</a> != <b>null</b>)
+                {
+                    <b>return</b> <a href="#0dfbb33eeda6025e" class="i property">ScopeThunk</a>();
+                }
+                <b>if</b> (<a href="#4cd355386ef8bca0" class="i field">_transientScope</a> == <b>null</b>)
+                {
+                    <a href="#4cd355386ef8bca0" class="i field">_transientScope</a> = <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>object</b>, <b>object</b>&gt;();
+                }
+                <b>return</b> <a href="#4cd355386ef8bca0" class="i field">_transientScope</a>;
+            }
+        }
+ 
+        <b>internal</b> <a href="@0@mscorlib/A.html#87d60abb7092d5a4" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt;&gt; <a id="0dfbb33eeda6025e" href="R/0dfbb33eeda6025e.html" target="n" data-glyph="104,1" class="i property">ScopeThunk</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#1442533a6aaec85e" class="i field">_scopeThunk</a> ?? <a href="#06ad1efa11628aa3" class="i property">GlobalScopeThunk</a>; }
+            <b>set</b> { <a href="#1442533a6aaec85e" class="i field">_scopeThunk</a> = <b>value</b>; }
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2227:CollectionPropertiesShouldBeReadOnly&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The property setter is only here to support mocking this type and should not be called at runtime.&quot;</span>)]
+        <b>public virtual</b> <a href="TempDataDictionary.cs.html#c8afcd39e8092cdd" class="t t">TempDataDictionary</a> <a id="3fd028b9ea02c32b" href="R/3fd028b9ea02c32b.html" target="n" data-glyph="102,1" class="i property">TempData</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>public virtual bool</b> <a id="207f7e231a9c09a7" href="R/207f7e231a9c09a7.html" target="n" data-glyph="102,1" class="i property">UnobtrusiveJavaScriptEnabled</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#45f24ce841154073" class="i method">GetUnobtrusiveJavaScriptEnabled</a>(<a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>); }
+            <b>set</b> { <a href="#b9081ed5d56997dc" class="i method">SetUnobtrusiveJavaScriptEnabled</a>(<b>value</b>, <a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>); }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Element name used to wrap a top-level message generated by</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Html/ValidationExtensions.cs.html#faf46f8d662f6758" class="t t">ValidationExtensions</a>.<a href="Html/ValidationExtensions.cs.html#14251a28a7770e32" class="i method">ValidationSummary</a>(<a href="HtmlHelper.cs.html#ebd284f3fdf9102f" class="t t">HtmlHelper</a>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> and other overloads.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public virtual string</b> <a id="4cab106808d57d17" href="R/4cab106808d57d17.html" target="n" data-glyph="102,1" class="i property">ValidationSummaryMessageElement</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#e5c5c98d8e320935" class="i method">GetValidationSummaryMessageElement</a>(<a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>); }
+            <b>set</b>
+            {
+                <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<b>value</b>))
+                {
+                    <b>throw</b> <a href="Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="Error.cs.html#1d47f3d5072367d1" class="i method">ParameterCannotBeNullOrEmpty</a>(<span class="s">&quot;value&quot;</span>);
+                }
+ 
+                <a href="#824248bf6ebadbd0" class="i method">SetValidationSummaryMessageElement</a>(<b>value</b>, <a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>);
+            }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Element name used to wrap a top-level message generated by</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Html/ValidationExtensions.cs.html#faf46f8d662f6758" class="t t">ValidationExtensions</a>.<a href="Html/ValidationExtensions.cs.html#61fdd90df6d59da8" class="i method">ValidationMessage</a>(<a href="HtmlHelper.cs.html#ebd284f3fdf9102f" class="t t">HtmlHelper</a>, <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> and other overloads.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public virtual string</b> <a id="f7a1065227f9d75f" href="R/f7a1065227f9d75f.html" target="n" data-glyph="102,1" class="i property">ValidationMessageElement</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#675d5ab53373b0c2" class="i method">GetValidationMessageElement</a>(<a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>); }
+            <b>set</b>
+            {
+                <b>if</b> (<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#23a8597f842071f4" class="i method">IsNullOrEmpty</a>(<b>value</b>))
+                {
+                    <b>throw</b> <a href="Error.cs.html#99b77324465ca7fb" class="t t">Error</a>.<a href="Error.cs.html#1d47f3d5072367d1" class="i method">ParameterCannotBeNullOrEmpty</a>(<span class="s">&quot;value&quot;</span>);
+                }
+ 
+                <a href="#aeb89046c375af84" class="i method">SetValidationMessageElement</a>(<b>value</b>, <a href="#4c6fc15baea051a3" class="i property">Scope</a>, <a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>);
+            }
+        }
+ 
+        <b>public virtual</b> <a href="IView.cs.html#82f8cb446948d3d5" class="t t">IView</a> <a id="b75ff8bd87ae20a9" href="R/b75ff8bd87ae20a9.html" target="n" data-glyph="102,1" class="i property">View</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>public dynamic</b> <a id="87b5dc7e43cf6ef6" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">ViewBag</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#2c0dc0eefdc83ee9" class="i field">_dynamicViewDataDictionary</a> == <b>null</b>)
+                {
+                    <a href="#2c0dc0eefdc83ee9" class="i field">_dynamicViewDataDictionary</a> = <b>new</b> <a href="DynamicViewDataDictionary.cs.html#bbe2066b8a67c566" class="t constructor">DynamicViewDataDictionary</a>(() =&gt; <a href="#afe7b59d25ffb5b4" class="i property">ViewData</a>);
+                }
+                <b>return</b> <a href="#2c0dc0eefdc83ee9" class="i field">_dynamicViewDataDictionary</a>;
+            }
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Usage&quot;</span>, <span class="s">&quot;CA2227:CollectionPropertiesShouldBeReadOnly&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;The property setter is only here to support mocking this type and should not be called at runtime.&quot;</span>)]
+        <b>public virtual</b> <a href="ViewDataDictionary.cs.html#d437a6ecdb0c13aa" class="t t">ViewDataDictionary</a> <a id="afe7b59d25ffb5b4" href="R/afe7b59d25ffb5b4.html" target="n" data-glyph="102,1" class="i property">ViewData</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>public virtual</b> <a href="@0@mscorlib/A.html#6e84a88dc2be46e3" class="t t">TextWriter</a> <a id="cd45b3097298d816" href="R/cd45b3097298d816.html" target="n" data-glyph="102,1" class="i property">Writer</a> { <b>get</b>; <b>set</b>; }
+ 
+        <b>private string</b> <a id="4c1912b6fb4f22dc" href="R/4c1912b6fb4f22dc.html" target="n" data-glyph="76,1" class="i method">DefaultFormIdGenerator</a>()
+        {
+            <b>int</b> <span id="r5 rd" class="r5 r">formNum</span> = <a href="#ec56ef98f66dd8f0" class="i method">IncrementFormCount</a>(<a href="ControllerContext.cs.html#c1cdcccfa9f6a3ed" class="i property">HttpContext</a>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a>);
+            <b>return</b> <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <span class="s">&quot;form{0}&quot;</span>, <span class="r5 r">formNum</span>);
+        }
+ 
+        <b>internal static bool</b> <a id="b04f57b84e847a6b" href="R/b04f57b84e847a6b.html" target="n" data-glyph="74,1" class="i method">GetClientValidationEnabled</a>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r6 rd" class="r6 r">scope</span> = <b>null</b>, <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r7 rd" class="r7 r">httpContext</span> = <b>null</b>)
+        {
+            <b>return</b> <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r6 r">scope</span>, <span class="r7 r">httpContext</span>).<a href="#f2f48fe6d5751111" class="i property">ClientValidationEnabled</a>;
+        }
+ 
+        <b>internal</b> <a href="FormContext.cs.html#3e66a87cce57e15d" class="t t">FormContext</a> <a id="f9cbf65b7696089b" href="R/f9cbf65b7696089b.html" target="n" data-glyph="74,1" class="i method">GetFormContextForClientValidation</a>()
+        {
+            <b>return</b> (<a href="#2681ed694dd7c3c3" class="i property">ClientValidationEnabled</a>) ? <a href="#2fda98061f2a9fac" class="i property">FormContext</a> : <b>null</b>;
+        }
+ 
+        <b>internal static bool</b> <a id="45f24ce841154073" href="R/45f24ce841154073.html" target="n" data-glyph="74,1" class="i method">GetUnobtrusiveJavaScriptEnabled</a>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r8 rd" class="r8 r">scope</span> = <b>null</b>, <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r9 rd" class="r9 r">httpContext</span> = <b>null</b>)
+        {
+            <b>return</b> <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r8 r">scope</span>, <span class="r9 r">httpContext</span>).<a href="#27190039b43baa71" class="i property">UnobtrusiveJavaScriptEnabled</a>;
+        }
+ 
+        <b>internal static string</b> <a id="e5c5c98d8e320935" href="R/e5c5c98d8e320935.html" target="n" data-glyph="74,1" class="i method">GetValidationSummaryMessageElement</a>(
+            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r10 rd" class="r10 r">scope</span> = <b>null</b>,
+            <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r11 rd" class="r11 r">httpContext</span> = <b>null</b>)
+        {
+            <b>return</b> <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r10 r">scope</span>, <span class="r11 r">httpContext</span>).<a href="#3739dfe0438be446" class="i property">ValidationSummaryMessageElement</a>;
+        }
+ 
+        <b>internal static string</b> <a id="675d5ab53373b0c2" href="R/675d5ab53373b0c2.html" target="n" data-glyph="74,1" class="i method">GetValidationMessageElement</a>(
+            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r12 rd" class="r12 r">scope</span> = <b>null</b>,
+            <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r13 rd" class="r13 r">httpContext</span> = <b>null</b>)
+        {
+            <b>return</b> <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r12 r">scope</span>, <span class="r13 r">httpContext</span>).<a href="#a21e0a6328b4f659" class="i property">ValidationMessageElement</a>;
+        }
+ 
+        <b>private static int</b> <a id="ec56ef98f66dd8f0" href="R/ec56ef98f66dd8f0.html" target="n" data-glyph="76,1" class="i method">IncrementFormCount</a>(<a href="@0@mscorlib/A.html#ea6b36745fa51e08" class="t t">IDictionary</a> <span id="r14 rd" class="r14 r">items</span>)
+        {
+            <b>object</b> <span id="r15 rd" class="r15 r">lastFormNum</span> = <span class="r14 r">items</span><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#453b6ed7bf2e85e9" class="i field">_lastFormNumKey</a>];
+            <b>int</b> <span id="r16 rd" class="r16 r">newFormNum</span> = (<span class="r15 r">lastFormNum</span> != <b>null</b>) ? ((<b>int</b>)<span class="r15 r">lastFormNum</span>) + 1 : 0;
+            <span class="r14 r">items</span><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#453b6ed7bf2e85e9" class="i field">_lastFormNumKey</a>] = <span class="r16 r">newFormNum</span>;
+            <b>return</b> <span class="r16 r">newFormNum</span>;
+        }
+ 
+        <b>public void</b> <a id="46d3182ad39548f2" href="R/46d3182ad39548f2.html" target="n" data-glyph="72,1" class="i method">OutputClientValidation</a>()
+        {
+            <a href="FormContext.cs.html#3e66a87cce57e15d" class="t t">FormContext</a> <span id="r17 rd" class="r17 r">formContext</span> = <a href="#f9cbf65b7696089b" class="i method">GetFormContextForClientValidation</a>();
+            <b>if</b> (<span class="r17 r">formContext</span> == <b>null</b> || <a href="#207f7e231a9c09a7" class="i property">UnobtrusiveJavaScriptEnabled</a>)
+            {
+                <b>return</b>; <span class="c">// do nothing</span>
+            }
+ 
+            <b>string</b> <span id="r18 rd" class="r18 r">scriptWithCorrectNewLines</span> = <a href="#5c1fdc70e12e770b" class="i field">ClientValidationScript</a>.<a href="@0@mscorlib/A.html#69fc1d0aa6df8a90" class="i method">Replace</a>(<span class="s">&quot;\r\n&quot;</span>, <a href="@0@mscorlib/A.html#7d2f1469d916fc63" class="t t">Environment</a>.<a href="@0@mscorlib/A.html#63a04833d43dd9d3" class="i property">NewLine</a>);
+            <b>string</b> <span id="r19 rd" class="r19 r">validationJson</span> = <span class="r17 r">formContext</span>.<a href="FormContext.cs.html#a49eb3b56c277016" class="i method">GetJsonValidationMetadata</a>();
+            <b>string</b> <span id="r20 rd" class="r20 r">formatted</span> = <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(<a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>, <span class="r18 r">scriptWithCorrectNewLines</span>, <span class="r19 r">validationJson</span>);
+ 
+            <a href="#cd45b3097298d816" class="i property">Writer</a>.<a href="@0@mscorlib/A.html#d3fb8ea93246e9a9" class="i method">Write</a>(<span class="r20 r">formatted</span>);
+        }
+ 
+        <b>internal static void</b> <a id="a010d5309778396c" href="R/a010d5309778396c.html" target="n" data-glyph="74,1" class="i method">SetClientValidationEnabled</a>(<b>bool</b> <span id="r21 rd" class="r21 r">enabled</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r22 rd" class="r22 r">scope</span> = <b>null</b>, <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r23 rd" class="r23 r">httpContext</span> = <b>null</b>)
+        {
+            <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r22 r">scope</span>, <span class="r23 r">httpContext</span>).<a href="#f2f48fe6d5751111" class="i property">ClientValidationEnabled</a> = <span class="r21 r">enabled</span>;
+        }
+ 
+        <b>internal static void</b> <a id="b9081ed5d56997dc" href="R/b9081ed5d56997dc.html" target="n" data-glyph="74,1" class="i method">SetUnobtrusiveJavaScriptEnabled</a>(<b>bool</b> <span id="r24 rd" class="r24 r">enabled</span>, <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r25 rd" class="r25 r">scope</span> = <b>null</b>, <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r26 rd" class="r26 r">httpContext</span> = <b>null</b>)
+        {
+            <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r25 r">scope</span>, <span class="r26 r">httpContext</span>).<a href="#27190039b43baa71" class="i property">UnobtrusiveJavaScriptEnabled</a> = <span class="r24 r">enabled</span>;
+        }
+ 
+        <b>internal static void</b> <a id="824248bf6ebadbd0" href="R/824248bf6ebadbd0.html" target="n" data-glyph="74,1" class="i method">SetValidationSummaryMessageElement</a>(
+            <b>string</b> <span id="r27 rd" class="r27 r">elementName</span>,
+            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r28 rd" class="r28 r">scope</span> = <b>null</b>,
+            <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r29 rd" class="r29 r">httpContext</span> = <b>null</b>)
+        {
+            <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r28 r">scope</span>, <span class="r29 r">httpContext</span>).<a href="#3739dfe0438be446" class="i property">ValidationSummaryMessageElement</a> = <span class="r27 r">elementName</span>;
+        }
+ 
+        <b>internal static void</b> <a id="aeb89046c375af84" href="R/aeb89046c375af84.html" target="n" data-glyph="74,1" class="i method">SetValidationMessageElement</a>(
+            <b>string</b> <span id="r30 rd" class="r30 r">elementName</span>,
+            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r31 rd" class="r31 r">scope</span> = <b>null</b>,
+            <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r32 rd" class="r32 r">httpContext</span> = <b>null</b>)
+        {
+            <a href="#0d9425880b0da935" class="t t">ScopeCache</a>.<a href="#9b0fc7aa73aa54ed" class="i method">Get</a>(<span class="r31 r">scope</span>, <span class="r32 r">httpContext</span>).<a href="#a21e0a6328b4f659" class="i property">ValidationMessageElement</a> = <span class="r30 r">elementName</span>;
+        }
+ 
+        <b>private static</b> <span class="r33 r t">TValue</span> <a id="d38b361bda73b4f8" href="R/d38b361bda73b4f8.html" target="n" data-glyph="76,1" class="i method">ScopeGet</a>&lt;<span id="r33 rd t" class="r33 r t">TValue</span>&gt;(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r34 rd" class="r34 r">scope</span>, <b>string</b> <span id="r35 rd" class="r35 r">name</span>, <span class="r33 r t">TValue</span> <span id="r36 rd" class="r36 r">defaultValue</span> = <b>default</b>(<span class="r33 r t">TValue</span>))
+        {
+            <b>object</b> <span id="r37 rd" class="r37 r">result</span>;
+            <b>if</b> (<span class="r34 r">scope</span>.<a href="@0@mscorlib/A.html#6b9f9049901aacea" class="i method">TryGetValue</a>(<span class="r35 r">name</span>, <b>out</b> <span class="r37 r">result</span>))
+            {
+                <b>return</b> (<span class="r33 r t">TValue</span>)<a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#3bcca7a9bda4114e" class="i method">ChangeType</a>(<span class="r37 r">result</span>, <b>typeof</b>(<span class="r33 r t">TValue</span>), <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#26ef1c020f0dbb7a" class="i property">InvariantCulture</a>);
+            }
+            <b>return</b> <span class="r36 r">defaultValue</span>;
+        }
+ 
+        <b>private sealed class</b> <a id="0d9425880b0da935" href="R/0d9425880b0da935.html" target="n" data-glyph="4,1" class="t t">ScopeCache</a>
+        {
+            <b>private static readonly object</b> <a id="10f362d86899b791" href="R/10f362d86899b791.html" target="n" data-glyph="46,2" class="i field">_cacheKey</a> = <b>new</b> <b>object</b>();
+            <b>private bool</b> <a id="c8fb22cf0bf65660" href="R/c8fb22cf0bf65660.html" target="n" data-glyph="46,2" class="i field">_clientValidationEnabled</a>;
+            <b>private</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <a id="d26c699772cae128" href="R/d26c699772cae128.html" target="n" data-glyph="46,2" class="i field">_scope</a>;
+            <b>private bool</b> <a id="9a609adeea9c561f" href="R/9a609adeea9c561f.html" target="n" data-glyph="46,2" class="i field">_unobtrusiveJavaScriptEnabled</a>;
+            <b>private string</b> <a id="6864ae99a26b5371" href="R/6864ae99a26b5371.html" target="n" data-glyph="46,2" class="i field">_validationSummaryMessageElement</a>;
+            <b>private string</b> <a id="102501dbbfe1d591" href="R/102501dbbfe1d591.html" target="n" data-glyph="46,2" class="i field">_validationMessageElement</a>;
+ 
+            <b>private</b> <a id="5f6d7f5bbf69df73" href="R/5f6d7f5bbf69df73.html" target="n" data-glyph="76,2" class="i constructor">ScopeCache</a>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r38 rd" class="r38 r">scope</span>)
+            {
+                <a href="#d26c699772cae128" class="i field">_scope</a> = <span class="r38 r">scope</span>;
+ 
+                <a href="#c8fb22cf0bf65660" class="i field">_clientValidationEnabled</a> = <a href="#d38b361bda73b4f8" class="i method">ScopeGet</a>(<span class="r38 r">scope</span>, <a href="#121470d9f847495c" class="i field">ClientValidationKeyName</a>, <b>false</b>);
+                <a href="#9a609adeea9c561f" class="i field">_unobtrusiveJavaScriptEnabled</a> = <a href="#d38b361bda73b4f8" class="i method">ScopeGet</a>(<span class="r38 r">scope</span>, <a href="#1e0cce8ab963a744" class="i field">UnobtrusiveJavaScriptKeyName</a>, <b>false</b>);
+                <a href="#6864ae99a26b5371" class="i field">_validationSummaryMessageElement</a> = <a href="#d38b361bda73b4f8" class="i method">ScopeGet</a>(<span class="r38 r">scope</span>, <a href="#1ce08c50410d75ad" class="i field">ValidationSummaryMessageElementKeyName</a>, <span class="s">&quot;span&quot;</span>);
+                <a href="#102501dbbfe1d591" class="i field">_validationMessageElement</a> = <a href="#d38b361bda73b4f8" class="i method">ScopeGet</a>(<span class="r38 r">scope</span>, <a href="#433a60528fa4be6a" class="i field">ValidationMessageElementKeyName</a>, <span class="s">&quot;span&quot;</span>);
+            }
+ 
+            <b>public bool</b> <a id="f2f48fe6d5751111" href="R/f2f48fe6d5751111.html" target="n" data-glyph="102,2" class="i property">ClientValidationEnabled</a>
+            {
+                <b>get</b> { <b>return</b> <a href="#c8fb22cf0bf65660" class="i field">_clientValidationEnabled</a>; }
+                <b>set</b>
+                {
+                    <a href="#c8fb22cf0bf65660" class="i field">_clientValidationEnabled</a> = <b>value</b>;
+                    <a href="#d26c699772cae128" class="i field">_scope</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><a href="#121470d9f847495c" class="i field">ClientValidationKeyName</a>] = <b>value</b>;
+                }
+            }
+ 
+            <b>public bool</b> <a id="27190039b43baa71" href="R/27190039b43baa71.html" target="n" data-glyph="102,2" class="i property">UnobtrusiveJavaScriptEnabled</a>
+            {
+                <b>get</b> { <b>return</b> <a href="#9a609adeea9c561f" class="i field">_unobtrusiveJavaScriptEnabled</a>; }
+                <b>set</b>
+                {
+                    <a href="#9a609adeea9c561f" class="i field">_unobtrusiveJavaScriptEnabled</a> = <b>value</b>;
+                    <a href="#d26c699772cae128" class="i field">_scope</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><a href="#1e0cce8ab963a744" class="i field">UnobtrusiveJavaScriptKeyName</a>] = <b>value</b>;
+                }
+            }
+ 
+            <b>public string</b> <a id="3739dfe0438be446" href="R/3739dfe0438be446.html" target="n" data-glyph="102,2" class="i property">ValidationSummaryMessageElement</a>
+            {
+                <b>get</b> { <b>return</b> <a href="#6864ae99a26b5371" class="i field">_validationSummaryMessageElement</a>; }
+                <b>set</b>
+                {
+                    <a href="#6864ae99a26b5371" class="i field">_validationSummaryMessageElement</a> = <b>value</b>;
+                    <a href="#d26c699772cae128" class="i field">_scope</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><a href="#1ce08c50410d75ad" class="i field">ValidationSummaryMessageElementKeyName</a>] = <b>value</b>;
+                }
+            }
+ 
+            <b>public string</b> <a id="a21e0a6328b4f659" href="R/a21e0a6328b4f659.html" target="n" data-glyph="102,2" class="i property">ValidationMessageElement</a>
+            {
+                <b>get</b> { <b>return</b> <a href="#102501dbbfe1d591" class="i field">_validationMessageElement</a>; }
+                <b>set</b>
+                {
+                    <a href="#102501dbbfe1d591" class="i field">_validationMessageElement</a> = <b>value</b>;
+                    <a href="#d26c699772cae128" class="i field">_scope</a><a href="@0@mscorlib/A.html#86884956b17e491a">[</a><a href="#433a60528fa4be6a" class="i field">ValidationMessageElementKeyName</a>] = <b>value</b>;
+                }
+            }
+ 
+            <b>public static</b> <a href="#0d9425880b0da935" class="t t">ScopeCache</a> <a id="9b0fc7aa73aa54ed" href="R/9b0fc7aa73aa54ed.html" target="n" data-glyph="72,2" class="i method">Get</a>(<a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>object</b>, <b>object</b>&gt; <span id="r39 rd" class="r39 r">scope</span>, <a href="@0@System.Web/A.html#91a04cddc33c5bea" class="t t">HttpContextBase</a> <span id="r40 rd" class="r40 r">httpContext</span>)
+            {
+                <b>if</b> (<span class="r40 r">httpContext</span> == <b>null</b> &amp;&amp; <span class="i n">Web</span>.<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a> != <b>null</b>)
+                {
+                    <span class="r40 r">httpContext</span> = <b>new</b> <a href="@0@System.Web/A.html#283c1f24639cc0e7" class="t constructor">HttpContextWrapper</a>(<span class="i n">Web</span>.<a href="@0@System.Web/A.html#6fba8e72335f5cc8" class="t t">HttpContext</a>.<a href="@0@System.Web/A.html#917b79cec44466cd" class="i property">Current</a>);
+                }
+ 
+                <a href="#0d9425880b0da935" class="t t">ScopeCache</a> <span id="r41 rd" class="r41 r">result</span> = <b>null</b>;
+                <span class="r39 r">scope</span> = <span class="r39 r">scope</span> ?? <a href="/System.Web.WebPages/A.html#a90fc7976ee468ff" class="t t">ScopeStorage</a>.<a href="/System.Web.WebPages/A.html#215da84fc1e015d0" class="i property">CurrentScope</a>;
+ 
+                <b>if</b> (<span class="r40 r">httpContext</span> != <b>null</b>)
+                {
+                    <span class="r41 r">result</span> = <span class="r40 r">httpContext</span>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#10f362d86899b791" class="i field">_cacheKey</a>] <b>as</b> <a href="#0d9425880b0da935" class="t t">ScopeCache</a>;
+                }
+ 
+                <b>if</b> (<span class="r41 r">result</span> == <b>null</b> || <span class="r41 r">result</span>.<a href="#d26c699772cae128" class="i field">_scope</a> != <span class="r39 r">scope</span>)
+                {
+                    <span class="r41 r">result</span> = <b>new</b> <a href="#5f6d7f5bbf69df73" class="t constructor">ScopeCache</a>(<span class="r39 r">scope</span>);
+ 
+                    <b>if</b> (<span class="r40 r">httpContext</span> != <b>null</b>)
+                    {
+                        <span class="r40 r">httpContext</span>.<a href="@0@System.Web/A.html#ed16f14ec24225a6" class="i property">Items</a><a href="@0@mscorlib/A.html#121995d2df15485a">[</a><a href="#10f362d86899b791" class="i field">_cacheKey</a>] = <span class="r41 r">result</span>;
+                    }
+                }
+ 
+                <b>return</b> <span class="r41 r">result</span>;
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

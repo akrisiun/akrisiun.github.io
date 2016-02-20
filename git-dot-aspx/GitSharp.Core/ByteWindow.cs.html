@@ -1,0 +1,225 @@
+﻿<!DOCTYPE html>
+<html><head><title>ByteWindow.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(216);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/ByteWindow.cs" target="_top">ByteWindow.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> A window of data currently stored within a cache.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> All bytes in the window can be assumed to be &quot;immediately available&quot;, that is</span>
+	<span class="c">///</span><span class="c"> they are very likely already in memory, unless the operating system&#39;s memory</span>
+	<span class="c">///</span><span class="c"> is very low and has paged part of this process out to disk. Therefore copying</span>
+	<span class="c">///</span><span class="c"> bytes from a window is very inexpensive.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>internal abstract class</b> <a id="a3d1436e943589e3" href="R/a3d1436e943589e3.html" target="n" data-glyph="2,0" class="t t">ByteWindow</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+	{
+		<b>protected static readonly byte</b>[] <a id="4e86880fd2944387" href="R/4e86880fd2944387.html" target="n" data-glyph="45,1" class="i field">VerifyGarbageBuffer</a> = <b>new</b> <b>byte</b>[2048];
+
+		<b>private readonly</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <a id="2b086f0b04c7781a" href="R/2b086f0b04c7781a.html" target="n" data-glyph="46,1" class="i field">_pack</a>;
+		<b>private readonly long</b> <a id="04d16797dc57f40a" href="R/04d16797dc57f40a.html" target="n" data-glyph="46,1" class="i field">_start</a>;
+		<b>private readonly long</b> <a id="51faf1b78ef581da" href="R/51faf1b78ef581da.html" target="n" data-glyph="46,1" class="i field">_end</a>;
+
+		<b>protected</b> <a id="97fed53e06c92ae0" href="R/97fed53e06c92ae0.html" target="n" data-glyph="75,1" class="i constructor">ByteWindow</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r0 rd" class="r0 r">p</span>, <b>long</b> <span id="r1 rd" class="r1 r">s</span>, <b>long</b> <span id="r2 rd" class="r2 r">n</span>)
+		{
+			<a href="#2b086f0b04c7781a" class="i field">_pack</a> = <span class="r0 r">p</span>;
+			<a href="#04d16797dc57f40a" class="i field">_start</a> = <span class="r1 r">s</span>;
+			<a href="#51faf1b78ef581da" class="i field">_end</a> = <a href="#04d16797dc57f40a" class="i field">_start</a> + <span class="r2 r">n</span>;
+		}
+
+		<b>internal bool</b> <a id="7cfd8b9379a3b028" href="R/7cfd8b9379a3b028.html" target="n" data-glyph="74,1" class="i method">contains</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r3 rd" class="r3 r">neededFile</span>, <b>long</b> <span id="r4 rd" class="r4 r">neededPos</span>)
+		{
+			<b>return</b> <a href="#2b086f0b04c7781a" class="i field">_pack</a> == <span class="r3 r">neededFile</span> &amp;&amp; <a href="#04d16797dc57f40a" class="i field">_start</a> &lt;= <span class="r4 r">neededPos</span> &amp;&amp; <span class="r4 r">neededPos</span> &lt; <a href="#51faf1b78ef581da" class="i field">_end</a>;
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c"> * Copy bytes from the window to a caller supplied buffer.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">pos</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">offset within the file to start copying from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">dstbuf</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">destination buffer to copy into. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">dstoff</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to start copying into.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">cnt</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes to copy. This value may exceed the number of</span>
+		<span class="c">///</span><span class="c"> bytes remaining in the window starting at offset</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">pos</span><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of bytes actually copied; this may be less than</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">cnt</span><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> if </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">cnt</span><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> exceeded the number of</span>
+		<span class="c">///</span><span class="c"> bytes available. </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>internal int</b> <a id="344bb5ba9eb7597d" href="R/344bb5ba9eb7597d.html" target="n" data-glyph="74,1" class="i method">copy</a>(<b>long</b> <span id="r5 rd" class="r5 r">pos</span>, <b>byte</b>[] <span id="r6 rd" class="r6 r">dstbuf</span>, <b>int</b> <span id="r7 rd" class="r7 r">dstoff</span>, <b>int</b> <span id="r8 rd" class="r8 r">cnt</span>)
+		{
+			<b>return</b> <a href="#8bdf80cb38f95855" class="i method">copy</a>((<b>int</b>)(<span class="r5 r">pos</span> - <a href="#04d16797dc57f40a" class="i field">_start</a>), <span class="r6 r">dstbuf</span>, <span class="r7 r">dstoff</span>, <span class="r8 r">cnt</span>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Copy bytes from the window to a caller supplied buffer.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">pos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> offset within the window to start copying from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">dstbuf</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">destination buffer to copy into.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r11 r">dstoff</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to start copying into.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">cnt</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of bytes to copy. This value may exceed the number of</span>
+		<span class="c">///</span><span class="c"> bytes remaining in the window starting at offset</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">pos</span><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> Number of bytes actually copied; this may be less than</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">cnt</span><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> if </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r12 r">cnt</span><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span><span class="c"> exceeded </span>
+		<span class="c">///</span><span class="c"> the number of bytes available.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>protected abstract int</b> <a id="8bdf80cb38f95855" href="R/8bdf80cb38f95855.html" target="n" data-glyph="75,1" class="i method">copy</a>(<b>int</b> <span id="r9 rd" class="r9 r">pos</span>, <b>byte</b>[] <span id="r10 rd" class="r10 r">dstbuf</span>, <b>int</b> <span id="r11 rd" class="r11 r">dstoff</span>, <b>int</b> <span id="r12 rd" class="r12 r">cnt</span>);
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Pump bytes into the supplied inflater as input.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">pos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> offset within the file to start supplying input from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">dstbuf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> destination buffer the inflater should output decompressed</span>
+		<span class="c">///</span><span class="c"> data to.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">dstoff</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> current offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to inflate into.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">inf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the inflater to feed input to. The caller is responsible for</span>
+		<span class="c">///</span><span class="c"> initializing the inflater as multiple windows may need to</span>
+		<span class="c">///</span><span class="c"> supply data to the same inflater to completely decompress</span>
+		<span class="c">///</span><span class="c"> something.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Updated </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r15 r">dstoff</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> based on the number of bytes</span>
+		<span class="c">///</span><span class="c"> successfully copied into </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">inf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">. If the inflater is not yet finished then</span>
+		<span class="c">///</span><span class="c"> another window&#39;s data must still be supplied as input to finish</span>
+		<span class="c">///</span><span class="c"> decompression.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the inflater encountered an invalid chunk of data. Data</span>
+		<span class="c">///</span><span class="c"> stream corruption is likely.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal int</b> <a id="b75125d87668ad0f" href="R/b75125d87668ad0f.html" target="n" data-glyph="74,1" class="i method">Inflate</a>(<b>long</b> <span id="r13 rd" class="r13 r">pos</span>, <b>byte</b>[] <span id="r14 rd" class="r14 r">dstbuf</span>, <b>int</b> <span id="r15 rd" class="r15 r">dstoff</span>, <span class="t t">Inflater</span> <span id="r16 rd" class="r16 r">inf</span>)
+		{
+			<b>return</b> <a href="#318d351b6c491674" class="i method">Inflate</a>((<b>int</b>)(<span class="r13 r">pos</span> - <a href="#04d16797dc57f40a" class="i field">_start</a>), <span class="r14 r">dstbuf</span>, <span class="r15 r">dstoff</span>, <span class="r16 r">inf</span>);
+		}
+
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Pump bytes into the supplied inflater as input.</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">pos</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> offset within the file to start supplying input from.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">dstbuf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> destination buffer the inflater should output decompressed</span>
+		<span class="c">///</span><span class="c"> data to.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">dstoff</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> current offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to inflate into.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">inf</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the inflater to feed input to. The caller is responsible for</span>
+		<span class="c">///</span><span class="c"> initializing the inflater as multiple windows may need to</span>
+		<span class="c">///</span><span class="c"> supply data to the same inflater to completely decompress</span>
+		<span class="c">///</span><span class="c"> something.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Updated </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">dstoff</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> based on the number of bytes</span>
+		<span class="c">///</span><span class="c"> successfully copied into </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">dstbuf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">inf</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">. If the inflater is not yet finished then</span>
+		<span class="c">///</span><span class="c"> another window&#39;s data must still be supplied as input to finish</span>
+		<span class="c">///</span><span class="c"> decompression.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#beac22dfca574cd4" class="t t">InvalidOperationException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the inflater encountered an invalid chunk of data. Data</span>
+		<span class="c">///</span><span class="c"> stream corruption is likely.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>protected abstract int</b> <a id="318d351b6c491674" href="R/318d351b6c491674.html" target="n" data-glyph="75,1" class="i method">Inflate</a>(<b>int</b> <span id="r17 rd" class="r17 r">pos</span>, <b>byte</b>[] <span id="r18 rd" class="r18 r">dstbuf</span>, <b>int</b> <span id="r19 rd" class="r19 r">dstoff</span>, <span class="t t">Inflater</span> <span id="r20 rd" class="r20 r">inf</span>);
+
+		<b>internal void</b> <a id="ca956ab97b9805f3" href="R/ca956ab97b9805f3.html" target="n" data-glyph="74,1" class="i method">inflateVerify</a>(<b>long</b> <span id="r21 rd" class="r21 r">pos</span>, <span class="t t">Inflater</span> <span id="r22 rd" class="r22 r">inf</span>)
+		{
+			<a href="#0f283b0d0400da88" class="i method">inflateVerify</a>((<b>int</b>)(<span class="r21 r">pos</span> - <a href="#04d16797dc57f40a" class="i field">_start</a>), <span class="r22 r">inf</span>);
+		}
+
+		<b>protected abstract void</b> <a id="0f283b0d0400da88" href="R/0f283b0d0400da88.html" target="n" data-glyph="75,1" class="i method">inflateVerify</a>(<b>int</b> <span id="r23 rd" class="r23 r">pos</span>, <span class="t t">Inflater</span> <span id="r24 rd" class="r24 r">inf</span>);
+
+		<b>public long</b> <a id="d0a6bd440e6f83ef" href="R/d0a6bd440e6f83ef.html" target="n" data-glyph="102,1" class="i property">End</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#51faf1b78ef581da" class="i field">_end</a>; }
+		}
+
+		<b>public long</b> <a id="ff17f39ebd85e5df" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">Start</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#04d16797dc57f40a" class="i field">_start</a>; }
+		}
+
+		<b>public</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <a id="effcbc3a2045d397" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">Pack</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#2b086f0b04c7781a" class="i field">_pack</a>; }
+		}
+
+		<b>internal int</b> <a id="ee45a032ba6ef5d5" href="R/ee45a032ba6ef5d5.html" target="n" data-glyph="104,1" class="i property">Size</a>
+		{
+			<b>get</b> { <b>return</b> (<b>int</b>)(<a href="#51faf1b78ef581da" class="i field">_end</a> - <a href="#04d16797dc57f40a" class="i field">_start</a>); }
+		}
+		
+		<b>public virtual void</b> <a id="7a41b9a317b48a9b" href="R/7a41b9a317b48a9b.html" target="n" data-glyph="72,1" class="i method">Dispose</a> ()
+		{
+			<a href="#2b086f0b04c7781a" class="i field">_pack</a>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+		}
+		
+	}
+}</pre></td></tr></table></div></body></html>

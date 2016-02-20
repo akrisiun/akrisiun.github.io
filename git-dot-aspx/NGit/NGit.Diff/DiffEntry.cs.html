@@ -1,0 +1,489 @@
+﻿<!DOCTYPE html>
+<html><head><title>DiffEntry.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(480);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/DiffEntry.cs" target="_top">NGit.Diff\DiffEntry.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Text</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">A value class representing a change to a file</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="78ca7e0a475bf414" href="../R/78ca7e0a475bf414.html" target="n" data-glyph="0,0" class="t t">DiffEntry</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Magical SHA1 used for file adds or deletes</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>internal static readonly</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="af5c5a3b3e1d57b5" href="../R/af5c5a3b3e1d57b5.html" target="n" data-glyph="44,1" class="i field">A_ZERO</a> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>
+			(<a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a>.<a href="../NGit/ObjectId.cs.html#4bf89de0a081155a" class="i property">ZeroId</a>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Magical file name used for file adds or deletes.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Magical file name used for file adds or deletes.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public static readonly string</b> <a id="1ca1bfafe427a4ff" href="../R/1ca1bfafe427a4ff.html" target="n" data-glyph="42,1" class="i field">DEV_NULL</a> = <span class="s">&quot;/dev/null&quot;</span>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">General type of change a single file-level patch describes.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">General type of change a single file-level patch describes.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public enum</b> <a id="30cb481f8e051298" href="../R/30cb481f8e051298.html" target="n" data-glyph="18,1" class="t t"><span id="1b9d53bd77f86954">ChangeType</span></a>
+		{
+			<a id="c69c68c8c2e98cfc" href="../R/c69c68c8c2e98cfc.html" target="n" data-glyph="24,2" class="i field">ADD</a>,
+			<a id="fb632a2f2bba88cc" href="../R/fb632a2f2bba88cc.html" target="n" data-glyph="24,2" class="i field">MODIFY</a>,
+			<a id="e4a021b81ce9499a" href="../R/e4a021b81ce9499a.html" target="n" data-glyph="24,2" class="i field">DELETE</a>,
+			<a id="0ea2ec551f0fa71c" href="../R/0ea2ec551f0fa71c.html" target="n" data-glyph="24,2" class="i field">RENAME</a>,
+			<a id="92f05c1e04cf35a9" href="../R/92f05c1e04cf35a9.html" target="n" data-glyph="24,2" class="i field">COPY</a>
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Specify the old or new side for more generalized access.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Specify the old or new side for more generalized access.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public enum</b> <a id="4ccef35036b86b08" href="../R/4ccef35036b86b08.html" target="n" data-glyph="18,1" class="t t"><span id="40f87a6482f37e74">Side</span></a>
+		{
+			<a id="38f00091a91f0b33" href="../R/38f00091a91f0b33.html" target="n" data-glyph="24,2" class="i field">OLD</a>,
+			<a id="a60d5923793294e6" href="../R/a60d5923793294e6.html" target="n" data-glyph="24,2" class="i field">NEW</a>
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Create an empty DiffEntry</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public</b> <a id="65c608fcd3d27f18" href="../R/65c608fcd3d27f18.html" target="n" data-glyph="72,1" class="i constructor">DiffEntry</a>()
+		{
+		}
+
+		<span class="c">// reduce the visibility of the default constructor</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Convert the TreeWalk into DiffEntry headers.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Convert the TreeWalk into DiffEntry headers.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">walk</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the TreeWalk to walk through. Must have exactly two trees.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">headers describing the changed files.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#109b3ef6299ef9df" class="t t">ArgumentException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">When given TreeWalk doesn&#39;t have exactly two trees.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="fabe1f8a939fc63f" href="../R/fabe1f8a939fc63f.html" target="n" data-glyph="72,1" class="i method">Scan</a>(<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r0 rd" class="r0 r">walk</span>)
+		{
+			<b>return</b> <a href="#b95e4d730ba9bb74" class="i method">Scan</a>(<span class="r0 r">walk</span>, <b>false</b>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Convert the TreeWalk into DiffEntry headers, depending on</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">includeTrees</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> it will add tree objects into result or not.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">walk</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the TreeWalk to walk through. Must have exactly two trees and</span>
+		<span class="c">///</span><span class="c"> when</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">includeTrees</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> parameter is</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> it can&#39;t</span>
+		<span class="c">///</span><span class="c"> be recursive.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">includeTrees</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">include tree object&#39;s.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">headers describing the changed files.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the repository cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<a href="@0@mscorlib/A.html#109b3ef6299ef9df" class="t t">ArgumentException</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> when</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">includeTrees</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is true and given TreeWalk is</span>
+		<span class="c">///</span><span class="c"> recursive. Or when given TreeWalk doesn&#39;t have exactly two</span>
+		<span class="c">///</span><span class="c"> trees</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="b95e4d730ba9bb74" href="../R/b95e4d730ba9bb74.html" target="n" data-glyph="72,1" class="i method">Scan</a>(<a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <span id="r1 rd" class="r1 r">walk</span>, <b>bool</b> <span id="r2 rd" class="r2 r">includeTrees</span>)
+		{
+			<b>if</b> (<span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#a699e5436cb09872" class="i property">TreeCount</a> != 2)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#058d92c028afbb91" class="i field">treeWalkMustHaveExactlyTwoTrees</a>);
+			}
+			<b>if</b> (<span class="r2 r">includeTrees</span> &amp;&amp; <span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#ab072218116d325c" class="i property">Recursive</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#59539370da59a376" class="i field">cannotBeRecursiveWhenTreesAreIncluded</a>);
+			}
+			<a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <span id="r3 rd" class="r3 r">r</span> = <b>new</b> <a href="/Sharpen/A.html#e41285721af1fd4a" class="t constructor">AList</a>&lt;<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt;();
+			<a href="../NGit/MutableObjectId.cs.html#9f3282f0781f567b" class="t t">MutableObjectId</a> <span id="r4 rd" class="r4 r">idBuf</span> = <b>new</b> <a href="../NGit/MutableObjectId.cs.html#14defa0e460f95e9" class="t constructor">MutableObjectId</a>();
+			<b>while</b> (<span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+			{
+				<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r5 rd" class="r5 r">entry</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+				<span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#675c3b09413e01b4" class="i method">GetObjectId</a>(<span class="r4 r">idBuf</span>, 0);
+				<span class="r5 r">entry</span>.<a href="#007119dd64e3133d" class="i field">oldId</a> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>(<span class="r4 r">idBuf</span>);
+				<span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#675c3b09413e01b4" class="i method">GetObjectId</a>(<span class="r4 r">idBuf</span>, 1);
+				<span class="r5 r">entry</span>.<a href="#f19303f70c845c7f" class="i field">newId</a> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>(<span class="r4 r">idBuf</span>);
+				<span class="r5 r">entry</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#b1724a1eb4d8d6ac" class="i method">GetFileMode</a>(0);
+				<span class="r5 r">entry</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#b1724a1eb4d8d6ac" class="i method">GetFileMode</a>(1);
+				<span class="r5 r">entry</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="r5 r">entry</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#dd05ec12978bb7f5" class="i property">PathString</a>;
+				<b>if</b> (<span class="r5 r">entry</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>)
+				{
+					<span class="r5 r">entry</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+					<span class="r5 r">entry</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#c69c68c8c2e98cfc" class="i field">ADD</a>;
+					<span class="r3 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r5 r">entry</span>);
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r5 r">entry</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> == <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>)
+					{
+						<span class="r5 r">entry</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+						<span class="r5 r">entry</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#e4a021b81ce9499a" class="i field">DELETE</a>;
+						<span class="r3 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r5 r">entry</span>);
+					}
+					<b>else</b>
+					{
+						<b>if</b> (!<span class="r5 r">entry</span>.<a href="#007119dd64e3133d" class="i field">oldId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#547cb63503a94024" class="i method">Equals</a>(<span class="r5 r">entry</span>.<a href="#f19303f70c845c7f" class="i field">newId</a>))
+						{
+							<span class="r5 r">entry</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#fb632a2f2bba88cc" class="i field">MODIFY</a>;
+							<b>if</b> (<a href="RenameDetector.cs.html#0820a1e6b993bdc8" class="t t">RenameDetector</a>.<a href="RenameDetector.cs.html#b573d07e77de23b1" class="i method">SameType</a>(<span class="r5 r">entry</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a>, <span class="r5 r">entry</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a>))
+							{
+								<span class="r3 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r5 r">entry</span>);
+							}
+							<b>else</b>
+							{
+								<span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#108f8e45f204ed4e" class="t t">Collections</a>.<a href="/Sharpen/A.html#ed1a68471fa5c973" class="i method">AddAll</a>(<span class="r3 r">r</span>, <a href="#2dd8c7ae4a331135" class="i method">BreakModify</a>(<span class="r5 r">entry</span>));
+							}
+						}
+						<b>else</b>
+						{
+							<b>if</b> (<span class="r5 r">entry</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> != <span class="r5 r">entry</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a>)
+							{
+								<span class="r5 r">entry</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#fb632a2f2bba88cc" class="i field">MODIFY</a>;
+								<span class="r3 r">r</span>.<a href="/Sharpen/A.html#4124f80bc8b559d6" class="i method">AddItem</a>(<span class="r5 r">entry</span>);
+							}
+						}
+					}
+				}
+				<b>if</b> (<span class="r2 r">includeTrees</span> &amp;&amp; <span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#49a66eb4418994dd" class="i property">IsSubtree</a>)
+				{
+					<span class="r1 r">walk</span>.<a href="../NGit.Treewalk/TreeWalk.cs.html#3f320d61dd0fe634" class="i method">EnterSubtree</a>();
+				}
+			}
+			<b>return</b> <span class="r3 r">r</span>;
+		}
+
+		<b>internal static</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <a id="03ecb7ff8226f401" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">Add</a>(<b>string</b> <span id="r6 rd" class="r6 r">path</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r7 rd" class="r7 r">id</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r8 rd" class="r8 r">e</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+			<span class="r8 r">e</span>.<a href="#007119dd64e3133d" class="i field">oldId</a> = <a href="#af5c5a3b3e1d57b5" class="i field">A_ZERO</a>;
+			<span class="r8 r">e</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>;
+			<span class="r8 r">e</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <a href="#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+			<span class="r8 r">e</span>.<a href="#f19303f70c845c7f" class="i field">newId</a> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>(<span class="r7 r">id</span>);
+			<span class="r8 r">e</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>;
+			<span class="r8 r">e</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="r6 r">path</span>;
+			<span class="r8 r">e</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#c69c68c8c2e98cfc" class="i field">ADD</a>;
+			<b>return</b> <span class="r8 r">e</span>;
+		}
+
+		<b>internal static</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <a id="bf2e36503f3bca18" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">Delete</a>(<b>string</b> <span id="r9 rd" class="r9 r">path</span>, <a href="../NGit/AnyObjectId.cs.html#648f486449087471" class="t t">AnyObjectId</a> <span id="r10 rd" class="r10 r">id</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r11 rd" class="r11 r">e</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+			<span class="r11 r">e</span>.<a href="#007119dd64e3133d" class="i field">oldId</a> = <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#4ee9d06138c27fe5" class="i method">FromObjectId</a>(<span class="r10 r">id</span>);
+			<span class="r11 r">e</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>;
+			<span class="r11 r">e</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="r9 r">path</span>;
+			<span class="r11 r">e</span>.<a href="#f19303f70c845c7f" class="i field">newId</a> = <a href="#af5c5a3b3e1d57b5" class="i field">A_ZERO</a>;
+			<span class="r11 r">e</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>;
+			<span class="r11 r">e</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <a href="#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+			<span class="r11 r">e</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#e4a021b81ce9499a" class="i field">DELETE</a>;
+			<b>return</b> <span class="r11 r">e</span>;
+		}
+
+		<b>internal static</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <a id="011b2a94a1d7f999" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">Modify</a>(<b>string</b> <span id="r12 rd" class="r12 r">path</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r13 rd" class="r13 r">e</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+			<span class="r13 r">e</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>;
+			<span class="r13 r">e</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="r12 r">path</span>;
+			<span class="r13 r">e</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#92c800a5367ca772" class="i field">REGULAR_FILE</a>;
+			<span class="r13 r">e</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="r12 r">path</span>;
+			<span class="r13 r">e</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#fb632a2f2bba88cc" class="i field">MODIFY</a>;
+			<b>return</b> <span class="r13 r">e</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Breaks apart a DiffEntry into two entries, one DELETE and one ADD.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Breaks apart a DiffEntry into two entries, one DELETE and one ADD.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r14 r">entry</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the DiffEntry to break apart.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a list containing two entries. Calling</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#09360514268bbbb2" class="i method">GetChangeType</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetChangeType()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> on the first entry will return ChangeType.DELETE. Calling it on</span>
+		<span class="c">///</span><span class="c"> the second entry will return ChangeType.ADD.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>internal static</b> <a href="@0@mscorlib/A.html#b19f71a84062554b" class="t t">IList</a>&lt;<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>&gt; <a id="2dd8c7ae4a331135" href="../R/2dd8c7ae4a331135.html" target="n" data-glyph="74,1" class="i method">BreakModify</a>(<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r14 rd" class="r14 r">entry</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r15 rd" class="r15 r">del</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+			<span class="r15 r">del</span>.<a href="#007119dd64e3133d" class="i field">oldId</a> = <span class="r14 r">entry</span>.<a href="#39f057d95f2f7c79" class="i method">GetOldId</a>();
+			<span class="r15 r">del</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <span class="r14 r">entry</span>.<a href="#fd38cfdc89447f45" class="i method">GetOldMode</a>();
+			<span class="r15 r">del</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="r14 r">entry</span>.<a href="#e1182df862c423a7" class="i method">GetOldPath</a>();
+			<span class="r15 r">del</span>.<a href="#f19303f70c845c7f" class="i field">newId</a> = <a href="#af5c5a3b3e1d57b5" class="i field">A_ZERO</a>;
+			<span class="r15 r">del</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>;
+			<span class="r15 r">del</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+			<span class="r15 r">del</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#e4a021b81ce9499a" class="i field">DELETE</a>;
+			<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r16 rd" class="r16 r">add</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+			<span class="r16 r">add</span>.<a href="#007119dd64e3133d" class="i field">oldId</a> = <a href="#af5c5a3b3e1d57b5" class="i field">A_ZERO</a>;
+			<span class="r16 r">add</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a>.<a href="../NGit/FileMode.cs.html#3c42f634b9af9fe4" class="i field">MISSING</a>;
+			<span class="r16 r">add</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#1ca1bfafe427a4ff" class="i field">DEV_NULL</a>;
+			<span class="r16 r">add</span>.<a href="#f19303f70c845c7f" class="i field">newId</a> = <span class="r14 r">entry</span>.<a href="#246e6c0fce9bfeba" class="i method">GetNewId</a>();
+			<span class="r16 r">add</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <span class="r14 r">entry</span>.<a href="#6d7e8ad6f7d85625" class="i method">GetNewMode</a>();
+			<span class="r16 r">add</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="r14 r">entry</span>.<a href="#e15ba056919bec45" class="i method">GetNewPath</a>();
+			<span class="r16 r">add</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#c69c68c8c2e98cfc" class="i field">ADD</a>;
+			<b>return</b> <a href="/Sharpen/A.html#7342d8d23595dd8e" class="t t">Arrays</a>.<a href="/Sharpen/A.html#18670a37be3c4a08" class="i method">AsList</a>(<span class="r15 r">del</span>, <span class="r16 r">add</span>);
+		}
+
+		<b>internal static</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <a id="9009f72169493076" href="../R/9009f72169493076.html" target="n" data-glyph="74,1" class="i method">Pair</a>(<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a> <span id="r17 rd" class="r17 r">changeType</span>, <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>
+			 <span id="r18 rd" class="r18 r">src</span>, <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r19 rd" class="r19 r">dst</span>, <b>int</b> <span id="r20 rd" class="r20 r">score</span>)
+		{
+			<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r21 rd" class="r21 r">r</span> = <b>new</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#65c608fcd3d27f18" class="t constructor">DiffEntry</a>();
+			<span class="r21 r">r</span>.<a href="#007119dd64e3133d" class="i field">oldId</a> = <span class="r18 r">src</span>.<a href="#007119dd64e3133d" class="i field">oldId</a>;
+			<span class="r21 r">r</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a> = <span class="r18 r">src</span>.<a href="#12896af0c15e848e" class="i field">oldMode</a>;
+			<span class="r21 r">r</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> = <span class="r18 r">src</span>.<a href="#0b9c4f7911a74c05" class="i field">oldPath</a>;
+			<span class="r21 r">r</span>.<a href="#f19303f70c845c7f" class="i field">newId</a> = <span class="r19 r">dst</span>.<a href="#f19303f70c845c7f" class="i field">newId</a>;
+			<span class="r21 r">r</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a> = <span class="r19 r">dst</span>.<a href="#b7fb9cbc08befc4d" class="i field">newMode</a>;
+			<span class="r21 r">r</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a> = <span class="r19 r">dst</span>.<a href="#4a16b475fb9dbec1" class="i field">newPath</a>;
+			<span class="r21 r">r</span>.<a href="#0f2a7f8f62ece815" class="i field">changeType</a> = <span class="r17 r">changeType</span>;
+			<span class="r21 r">r</span>.<a href="#cb8e215479c67b34" class="i field">score</a> = <span class="r20 r">score</span>;
+			<b>return</b> <span class="r21 r">r</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">File name of the old (pre-image).</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">File name of the old (pre-image).</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal string</b> <a id="0b9c4f7911a74c05" href="../R/0b9c4f7911a74c05.html" target="n" data-glyph="45,1" class="i field">oldPath</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">File name of the new (post-image).</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">File name of the new (post-image).</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal string</b> <a id="4a16b475fb9dbec1" href="../R/4a16b475fb9dbec1.html" target="n" data-glyph="45,1" class="i field">newPath</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Old mode of the file, if described by the patch, else null.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Old mode of the file, if described by the patch, else null.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="12896af0c15e848e" href="../R/12896af0c15e848e.html" target="n" data-glyph="45,1" class="i field">oldMode</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">New mode of the file, if described by the patch, else null.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">New mode of the file, if described by the patch, else null.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="b7fb9cbc08befc4d" href="../R/b7fb9cbc08befc4d.html" target="n" data-glyph="45,1" class="i field">newMode</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">General type of change indicated by the patch.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">General type of change indicated by the patch.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a> <a id="0f2a7f8f62ece815" href="../R/0f2a7f8f62ece815.html" target="n" data-glyph="45,1" class="i field">changeType</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Similarity score if</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#0f2a7f8f62ece815" class="i field">changeType</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">changeType</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is a copy or rename.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>protected internal int</b> <a id="cb8e215479c67b34" href="../R/cb8e215479c67b34.html" target="n" data-glyph="45,1" class="i field">score</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">ObjectId listed on the index line for the old (pre-image)</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="007119dd64e3133d" href="../R/007119dd64e3133d.html" target="n" data-glyph="45,1" class="i field">oldId</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">ObjectId listed on the index line for the new (post-image)</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>protected internal</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="f19303f70c845c7f" href="../R/f19303f70c845c7f.html" target="n" data-glyph="45,1" class="i field">newId</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the old name associated with this file.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the old name associated with this file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The meaning of the old name can differ depending on the semantic meaning</span>
+		<span class="c">///</span><span class="c"> of this patch:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file add</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: always </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">/dev/null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file modify</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: always</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e15ba056919bec45" class="i method">GetNewPath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetNewPath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file delete</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: always the file being deleted</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file copy</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: source file the copy originates from</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file rename</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: source file the rename originates from</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">old name for this file.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="e1182df862c423a7" href="../R/e1182df862c423a7.html" target="n" data-glyph="72,1" class="i method">GetOldPath</a>()
+		{
+			<b>return</b> <a href="#0b9c4f7911a74c05" class="i field">oldPath</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the new name associated with this file.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Get the new name associated with this file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The meaning of the new name can differ depending on the semantic meaning</span>
+		<span class="c">///</span><span class="c"> of this patch:</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file add</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: always the file being created</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file modify</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: always</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e1182df862c423a7" class="i method">GetOldPath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetOldPath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file delete</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: always </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">/dev/null</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file copy</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: destination file the copy ends up at</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">i</span><span class="c">&gt;</span><span class="c">file rename</span><span class="c">&lt;/</span><span class="c">i</span><span class="c">&gt;</span><span class="c">: destination file the rename ends up at/li</span><span class="c">&amp;gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">new name for this file.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="e15ba056919bec45" href="../R/e15ba056919bec45.html" target="n" data-glyph="72,1" class="i method">GetNewPath</a>()
+		{
+			<b>return</b> <a href="#4a16b475fb9dbec1" class="i field">newPath</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the path associated with this file.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the path associated with this file.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r22 r">side</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">which path to obtain.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">name for this file.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual string</b> <a id="e6e85e1d6b2c2ead" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">GetPath</a>(<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#4ccef35036b86b08" class="t t">Side</a> <span id="r22 rd" class="r22 r">side</span>)
+		{
+			<b>return</b> <span class="r22 r">side</span> == <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#4ccef35036b86b08" class="t t">Side</a>.<a href="#38f00091a91f0b33" class="i field">OLD</a> ? <a href="#e1182df862c423a7" class="i method">GetOldPath</a>() : <a href="#e15ba056919bec45" class="i method">GetNewPath</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the old file mode, if described in the patch</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="fd38cfdc89447f45" href="../R/fd38cfdc89447f45.html" target="n" data-glyph="72,1" class="i method">GetOldMode</a>()
+		{
+			<b>return</b> <a href="#12896af0c15e848e" class="i field">oldMode</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the new file mode, if described in the patch</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="6d7e8ad6f7d85625" href="../R/6d7e8ad6f7d85625.html" target="n" data-glyph="72,1" class="i method">GetNewMode</a>()
+		{
+			<b>return</b> <a href="#b7fb9cbc08befc4d" class="i field">newMode</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the mode associated with this file.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the mode associated with this file.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">side</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">which mode to obtain.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the mode.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/FileMode.cs.html#a0031993291e3c39" class="t t">FileMode</a> <a id="f097a0f2bf12ae20" href="../R/f097a0f2bf12ae20.html" target="n" data-glyph="72,1" class="i method">GetMode</a>(<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#4ccef35036b86b08" class="t t">Side</a> <span id="r23 rd" class="r23 r">side</span>)
+		{
+			<b>return</b> <span class="r23 r">side</span> == <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#4ccef35036b86b08" class="t t">Side</a>.<a href="#38f00091a91f0b33" class="i field">OLD</a> ? <a href="#fd38cfdc89447f45" class="i method">GetOldMode</a>() : <a href="#6d7e8ad6f7d85625" class="i method">GetNewMode</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the type of change this patch makes on</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e15ba056919bec45" class="i method">GetNewPath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetNewPath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a> <a id="09360514268bbbb2" href="../R/09360514268bbbb2.html" target="n" data-glyph="72,1" class="i method">GetChangeType</a>()
+		{
+			<b>return</b> <a href="#0f2a7f8f62ece815" class="i field">changeType</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> similarity score between</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e1182df862c423a7" class="i method">GetOldPath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetOldPath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> and</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e15ba056919bec45" class="i method">GetNewPath</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetNewPath()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> if</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#09360514268bbbb2" class="i method">GetChangeType</a>()<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GetChangeType()</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> is</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#92f05c1e04cf35a9" class="i field">COPY</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ChangeType.COPY</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> or</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#0ea2ec551f0fa71c" class="i field">RENAME</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">ChangeType.RENAME</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="2bd3a1af985042ed" href="../R/2bd3a1af985042ed.html" target="n" data-glyph="72,1" class="i method">GetScore</a>()
+		{
+			<b>return</b> <a href="#cb8e215479c67b34" class="i field">score</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the old object id from the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">index</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the old object id from the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">index</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the object id; null if there is no index line</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="39f057d95f2f7c79" href="../R/39f057d95f2f7c79.html" target="n" data-glyph="72,1" class="i method">GetOldId</a>()
+		{
+			<b>return</b> <a href="#007119dd64e3133d" class="i field">oldId</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the new object id from the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">index</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the new object id from the </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">index</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the object id; null if there is no index line</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="246e6c0fce9bfeba" href="../R/246e6c0fce9bfeba.html" target="n" data-glyph="72,1" class="i method">GetNewId</a>()
+		{
+			<b>return</b> <a href="#f19303f70c845c7f" class="i field">newId</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Get the object id.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Get the object id.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">side</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the side of the id to get.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the object id; null if there is no index line</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual</b> <a href="../NGit/AbbreviatedObjectId.cs.html#02b1ab7cb2ff27f8" class="t t">AbbreviatedObjectId</a> <a id="0b86d8914d5b156b" href="../R/0b86d8914d5b156b.html" target="n" data-glyph="72,1" class="i method">GetId</a>(<a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#4ccef35036b86b08" class="t t">Side</a> <span id="r24 rd" class="r24 r">side</span>)
+		{
+			<b>return</b> <span class="r24 r">side</span> == <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#4ccef35036b86b08" class="t t">Side</a>.<a href="#38f00091a91f0b33" class="i field">OLD</a> ? <a href="#39f057d95f2f7c79" class="i method">GetOldId</a>() : <a href="#246e6c0fce9bfeba" class="i method">GetNewId</a>();
+		}
+
+		<b>public override string</b> <a id="e22c6f8b4efd346f" href="../R/e22c6f8b4efd346f.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+		{
+			<a href="@0@mscorlib/A.html#adf60ee46ebd299f" class="t t">StringBuilder</a> <span id="r25 rd" class="r25 r">buf</span> = <b>new</b> <a href="@0@mscorlib/A.html#6e631639c1e2746b" class="t constructor">StringBuilder</a>();
+			<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;DiffEntry[&quot;</span>);
+			<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#7685cb28f3648166" class="i method">Append</a>(<a href="#0f2a7f8f62ece815" class="i field">changeType</a>);
+			<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot; &quot;</span>);
+			<b>switch</b> (<a href="#0f2a7f8f62ece815" class="i field">changeType</a>)
+			{
+				<b>case</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#c69c68c8c2e98cfc" class="i field">ADD</a>:
+				{
+					<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#4a16b475fb9dbec1" class="i field">newPath</a>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#92f05c1e04cf35a9" class="i field">COPY</a>:
+				{
+					<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> + <span class="s">&quot;-&gt;&quot;</span> + <a href="#4a16b475fb9dbec1" class="i field">newPath</a>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#e4a021b81ce9499a" class="i field">DELETE</a>:
+				{
+					<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#0b9c4f7911a74c05" class="i field">oldPath</a>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#fb632a2f2bba88cc" class="i field">MODIFY</a>:
+				{
+					<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#0b9c4f7911a74c05" class="i field">oldPath</a>);
+					<b>break</b>;
+				}
+
+				<b>case</b> <a href="#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="#30cb481f8e051298" class="t t">ChangeType</a>.<a href="#0ea2ec551f0fa71c" class="i field">RENAME</a>:
+				{
+					<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<a href="#0b9c4f7911a74c05" class="i field">oldPath</a> + <span class="s">&quot;-&gt;&quot;</span> + <a href="#4a16b475fb9dbec1" class="i field">newPath</a>);
+					<b>break</b>;
+				}
+			}
+			<span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#e8eaef3c361184bc" class="i method">Append</a>(<span class="s">&quot;]&quot;</span>);
+			<b>return</b> <span class="r25 r">buf</span>.<a href="@0@mscorlib/A.html#5a97da49a158a3c9" class="i method">ToString</a>();
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,648 @@
+﻿<!DOCTYPE html>
+<html><head><title>PackWriter.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(639);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/PackWriter.cs" target="_top">PackWriter.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Marek Zawirski &lt;marek.zawirski@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">RevWalk</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Transport</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<b>public class</b> <a id="429811b6eaaf0171" href="R/429811b6eaaf0171.html" target="n" data-glyph="0,0" class="t t">PackWriter</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+	{
+		<b>public const string</b> <a id="b856c7ca5bb82026" href="R/b856c7ca5bb82026.html" target="n" data-glyph="6,1" class="i field">COUNTING_OBJECTS_PROGRESS</a> = <span class="s">&quot;Counting objects&quot;</span>;
+		<b>public const string</b> <a id="38bf29f993a1bd2c" href="R/38bf29f993a1bd2c.html" target="n" data-glyph="6,1" class="i field">SEARCHING_REUSE_PROGRESS</a> = <span class="s">&quot;Compressing objects&quot;</span>;
+		<b>public const string</b> <a id="a2184d8ee7808b74" href="R/a2184d8ee7808b74.html" target="n" data-glyph="6,1" class="i field">WRITING_OBJECTS_PROGRESS</a> = <span class="s">&quot;Writing objects&quot;</span>;
+		<b>public const bool</b> <a id="87c6db3f85d23ba7" href="R/87c6db3f85d23ba7.html" target="n" data-glyph="6,1" class="i field">DEFAULT_REUSE_DELTAS</a> = <b>true</b>;
+		<b>public const bool</b> <a id="eb80b5e9e8da8edd" href="R/eb80b5e9e8da8edd.html" target="n" data-glyph="6,1" class="i field">DEFAULT_REUSE_OBJECTS</a> = <b>true</b>;
+		<b>public const bool</b> <a id="35a51477c3beb877" href="R/35a51477c3beb877.html" target="n" data-glyph="6,1" class="i field">DEFAULT_DELTA_BASE_AS_OFFSET</a> = <b>false</b>;
+		<b>public const int</b> <a id="af002dbb320caf25" href="R/af002dbb320caf25.html" target="n" data-glyph="6,1" class="i field">DEFAULT_MAX_DELTA_DEPTH</a> = 50;
+
+		<b>private const int</b> <a id="bdde7a5c830d02d8" href="R/bdde7a5c830d02d8.html" target="n" data-glyph="10,1" class="i field">PackVersionGenerated</a> = 2;
+		
+		<b>private static</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;[] <a id="eb6c674b6770dcb7" href="R/eb6c674b6770dcb7.html" target="n" data-glyph="76,1" class="i method">CreateObjectsLists</a>()
+		{
+			<b>var</b> <span id="r0 rd" class="r0 r">ret</span> = <b>new</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;[<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#026685641201f5d3" class="i field">OBJ_TAG</a> + 1];
+			<span class="r0 r">ret</span>[0] = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;();
+			<span class="r0 r">ret</span>[<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#5dc47817ed87c51e" class="i field">OBJ_COMMIT</a>] = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;();
+			<span class="r0 r">ret</span>[<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#301cc4bea7313e0f" class="i field">OBJ_TREE</a>] = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;();
+			<span class="r0 r">ret</span>[<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#ead52388c5739865" class="i field">OBJ_BLOB</a>] = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;();
+			<span class="r0 r">ret</span>[<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#026685641201f5d3" class="i field">OBJ_TAG</a>] = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;();
+			<b>return</b> <span class="r0 r">ret</span>;
+		}
+
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;[] <a id="639a3ada37f7dbb4" href="R/639a3ada37f7dbb4.html" target="n" data-glyph="46,1" class="i field">_objectsLists</a>;
+		<b>private readonly</b> <a href="ObjectIdSubclassMap.cs.html#d91c18ecb5d8b27a" class="t t">ObjectIdSubclassMap</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <a id="85b696d372704790" href="R/85b696d372704790.html" target="n" data-glyph="46,1" class="i field">_objectsMap</a>;
+		<b>private readonly</b> <a href="ObjectIdSubclassMap.cs.html#d91c18ecb5d8b27a" class="t t">ObjectIdSubclassMap</a>&lt;<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>&gt; <a id="f02760aa1464a200" href="R/f02760aa1464a200.html" target="n" data-glyph="46,1" class="i field">_edgeObjects</a>;
+		<b>private readonly byte</b>[] <a id="c0a79705697cfa7e" href="R/c0a79705697cfa7e.html" target="n" data-glyph="46,1" class="i field">_buf</a>;
+		<b>private readonly</b> <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <a id="e86414af389aad9b" href="R/e86414af389aad9b.html" target="n" data-glyph="46,1" class="i field">_windowCursor</a>;
+		<b>private readonly</b> <a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <a id="aeffa1df6714289c" href="R/aeffa1df6714289c.html" target="n" data-glyph="46,1" class="i field">_db</a>;
+		<b>private</b> <a href="PackOutputStream.cs.html#d3564481d72d9810" class="t t">PackOutputStream</a> <a id="b2da3051bc1cbd8d" href="R/b2da3051bc1cbd8d.html" target="n" data-glyph="46,1" class="i field">_pos</a>;
+		<b>private readonly</b> <span class="t t">Deflater</span> <a id="468132bad2b28bc6" href="R/468132bad2b28bc6.html" target="n" data-glyph="46,1" class="i field">_deflater</a>;
+		<b>private readonly</b> <a href="ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <a id="974db95502266976" href="R/974db95502266976.html" target="n" data-glyph="46,1" class="i field">_initMonitor</a>;
+		<b>private readonly</b> <a href="ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <a id="93ba9a75403d8e55" href="R/93ba9a75403d8e55.html" target="n" data-glyph="46,1" class="i field">_writeMonitor</a>;
+		<b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <a id="b9b6dce870850dd7" href="R/b9b6dce870850dd7.html" target="n" data-glyph="46,1" class="i field">_sortedByName</a>;
+		<b>private byte</b>[] <a id="f31920d8b5c23763" href="R/f31920d8b5c23763.html" target="n" data-glyph="46,1" class="i field">_packChecksum</a>;
+		<b>private int</b> <a id="306bab4211c52503" href="R/306bab4211c52503.html" target="n" data-glyph="46,1" class="i field">_outputVersion</a>;
+
+		<b>public</b> <a id="bfd4bf3434ae63a7" href="R/bfd4bf3434ae63a7.html" target="n" data-glyph="72,1" class="i constructor">PackWriter</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r1 rd" class="r1 r">repo</span>, <a href="ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <span id="r2 rd" class="r2 r">monitor</span>)
+			: <a href="#8da9c4ef059217db" class="k">this</a>(<span class="r1 r">repo</span>, <span class="r2 r">monitor</span>, <span class="r2 r">monitor</span>)
+		{
+		}
+
+		<b>public</b> <a id="8da9c4ef059217db" href="R/8da9c4ef059217db.html" target="n" data-glyph="72,1" class="i constructor">PackWriter</a>(<a href="Repository.cs.html#a967877e73d4cc25" class="t t">Repository</a> <span id="r3 rd" class="r3 r">repo</span>, <a href="ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <span id="r4 rd" class="r4 r">imonitor</span>, <a href="ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <span id="r5 rd" class="r5 r">wmonitor</span>)
+		{
+			<a href="#639a3ada37f7dbb4" class="i field">_objectsLists</a> = <a href="#eb6c674b6770dcb7" class="i method">CreateObjectsLists</a>();
+			<a href="#85b696d372704790" class="i field">_objectsMap</a> = <b>new</b> <a href="ObjectIdSubclassMap.cs.html#f4863f0c44aaf5ed" class="t constructor">ObjectIdSubclassMap</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;();
+			<a href="#f02760aa1464a200" class="i field">_edgeObjects</a> = <b>new</b> <a href="ObjectIdSubclassMap.cs.html#f4863f0c44aaf5ed" class="t constructor">ObjectIdSubclassMap</a>&lt;<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>&gt;();
+			<a href="#c0a79705697cfa7e" class="i field">_buf</a> = <b>new</b> <b>byte</b>[16384]; <span class="c">// 16 KB</span>
+			<a href="#e86414af389aad9b" class="i field">_windowCursor</a> = <b>new</b> <a href="WindowCursor.cs.html#8cb7e36e619a1307" class="t constructor">WindowCursor</a>();
+
+			<a href="#5f42dbf1d67ee493" class="i property">IgnoreMissingUninteresting</a> = <b>true</b>;
+			<a href="#a24fb989353adeae" class="i property">MaxDeltaDepth</a> = <a href="#af002dbb320caf25" class="i field">DEFAULT_MAX_DELTA_DEPTH</a>;
+			<a href="#f0f6353289fb1586" class="i property">DeltaBaseAsOffset</a> = <a href="#35a51477c3beb877" class="i field">DEFAULT_DELTA_BASE_AS_OFFSET</a>;
+			<a href="#f321c22386c6e5cf" class="i property">ReuseObjects</a> = <a href="#eb80b5e9e8da8edd" class="i field">DEFAULT_REUSE_OBJECTS</a>;
+			<a href="#42ce69bda1c7c203" class="i property">ReuseDeltas</a> = <a href="#87c6db3f85d23ba7" class="i field">DEFAULT_REUSE_DELTAS</a>;
+			<a href="#aeffa1df6714289c" class="i field">_db</a> = <span class="r3 r">repo</span>;
+			<a href="#974db95502266976" class="i field">_initMonitor</a> = <span class="r4 r">imonitor</span>;
+			<a href="#93ba9a75403d8e55" class="i field">_writeMonitor</a> = <span class="r5 r">wmonitor</span>;
+			<a href="#468132bad2b28bc6" class="i field">_deflater</a> = <b>new</b> <span class="t constructor">Deflater</span>(<a href="#aeffa1df6714289c" class="i field">_db</a>.<a href="Repository.cs.html#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="RepositoryConfig.cs.html#288eed24ede43959" class="i method">getCore</a>().<a href="CoreConfig.cs.html#21944de5f6bbd54f" class="i method">getCompression</a>());
+			<a href="#306bab4211c52503" class="i field">_outputVersion</a> = <span class="r3 r">repo</span>.<a href="Repository.cs.html#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="RepositoryConfig.cs.html#288eed24ede43959" class="i method">getCore</a>().<a href="CoreConfig.cs.html#61e6c9742036c6d1" class="i method">getPackIndexVersion</a>();
+		}
+
+		<b>public bool</b> <a id="42ce69bda1c7c203" href="R/42ce69bda1c7c203.html" target="n" data-glyph="102,1" class="i property">ReuseDeltas</a> { <b>get</b>; <b>set</b>; }
+		<b>public bool</b> <a id="f321c22386c6e5cf" href="R/f321c22386c6e5cf.html" target="n" data-glyph="102,1" class="i property">ReuseObjects</a> { <b>get</b>; <b>set</b>; }
+		<b>public bool</b> <a id="f0f6353289fb1586" href="R/f0f6353289fb1586.html" target="n" data-glyph="102,1" class="i property">DeltaBaseAsOffset</a> { <b>get</b>; <b>set</b>; }
+		<b>public int</b> <a id="a24fb989353adeae" href="R/a24fb989353adeae.html" target="n" data-glyph="102,1" class="i property">MaxDeltaDepth</a> { <b>get</b>; <b>set</b>; }
+		<b>public bool</b> <a id="07c779dbef66603c" href="R/07c779dbef66603c.html" target="n" data-glyph="102,1" class="i property">Thin</a> { <b>get</b>; <b>set</b>; }
+		<b>public bool</b> <a id="5f42dbf1d67ee493" href="R/5f42dbf1d67ee493.html" target="n" data-glyph="102,1" class="i property">IgnoreMissingUninteresting</a> { <b>get</b>; <b>set</b>; }
+
+		<b>public void</b> <a id="a3a9089ffe8cf9a5" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">setIndexVersion</a>(<b>int</b> <span id="r6 rd" class="r6 r">version</span>)
+		{
+			<a href="#306bab4211c52503" class="i field">_outputVersion</a> = <span class="r6 r">version</span>;
+		}
+
+		<b>public int</b> <a id="34ed5badeb6d653f" href="R/34ed5badeb6d653f.html" target="n" data-glyph="72,1" class="i method">getObjectsNumber</a>()
+		{
+			<b>return</b> <a href="#85b696d372704790" class="i field">_objectsMap</a>.<a href="@0@System.Core/A.html#905bec8c22644c82" class="i property">Count</a>;
+		}
+
+		<b>public void</b> <a id="3bc7048e16e6058d" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">preparePack</a>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a>&gt; <span id="r7 rd" class="r7 r">objectsSource</span>)
+		{
+			<b>foreach</b> (<a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a> <span id="r8 rd" class="r8 r">obj</span> <b>in</b> <span class="r7 r">objectsSource</span>)
+			{
+				<a href="#70f0090c736c56b0" class="i method">addObject</a>(<span class="r8 r">obj</span>);
+			}
+		}
+
+		<b>public void</b> <a id="7545eb424216a1f4" href="R/7545eb424216a1f4.html" target="n" data-glyph="72,1" class="i method">preparePack</a>&lt;<span id="r9 rd t" class="r9 r t">T</span>&gt;(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<span class="r9 r t">T</span>&gt; <span id="r10 rd" class="r10 r">interestingObjects</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<span class="r9 r t">T</span>&gt; <span id="r11 rd" class="r11 r">uninterestingObjects</span>)
+			<b>where</b> <span class="r9 r t">T</span> : <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>
+		{
+			<b>using</b> (<a href="RevWalk/ObjectWalk.cs.html#9ca3f1996153c649" class="t t">ObjectWalk</a> <span id="r12 rd" class="r12 r">walker</span> = <a href="#8a1beda2050bff2d" class="i method">SetUpWalker</a>(<span class="r10 r">interestingObjects</span>, <span class="r11 r">uninterestingObjects</span>))
+			{
+			<a href="#8e377e4834fb42f3" class="i method">FindObjectsToPack</a>(<span class="r12 r">walker</span>);
+			}
+		}
+
+		<b>public bool</b> <a id="2d799cb491153e4a" href="R/2d799cb491153e4a.html" target="n" data-glyph="72,1" class="i method">willInclude</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r13 rd" class="r13 r">id</span>)
+		{
+			<b>return</b> <a href="#85b696d372704790" class="i field">_objectsMap</a>.<a href="ObjectIdSubclassMap.cs.html#be4ade8ba6bf2e4f" class="i method">Get</a>(<span class="r13 r">id</span>) != <b>null</b>;
+		}
+
+		<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="883e2cc2dcc0a8e2" href="R/883e2cc2dcc0a8e2.html" target="n" data-glyph="72,1" class="i method">computeName</a>()
+		{
+			<a href="Util/MessageDigest.cs.html#789cc66c6385fd34" class="t t">MessageDigest</a> <span id="r14 rd" class="r14 r">md</span> = <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#c3b287d96df31211" class="i method">newMessageDigest</a>();
+			<b>foreach</b> (<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r15 rd" class="r15 r">otp</span> <b>in</b> <a href="#ab914c377327f426" class="i method">sortByName</a>())
+			{
+				<span class="r15 r">otp</span>.<a href="AnyObjectId.cs.html#b2599f05e8f4ca38" class="i method">copyRawTo</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0);
+				<span class="r14 r">md</span>.<a href="Util/MessageDigest.cs.html#fb3ba0834b54b062" class="i method">Update</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>);
+			}
+			<b>return</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a84de848edbd5661" class="i method">FromRaw</a>(<span class="r14 r">md</span>.<a href="Util/MessageDigest.cs.html#032ba42f3411690d" class="i method">Digest</a>());
+		}
+
+		<b>public void</b> <a id="48cd6388a844b471" href="R/48cd6388a844b471.html" target="n" data-glyph="72,1" class="i method">writeIndex</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r16 rd" class="r16 r">indexStream</span>)
+		{
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <span id="r17 rd" class="r17 r">list</span> = <a href="#ab914c377327f426" class="i method">sortByName</a>();
+
+			<a href="PackIndexWriter.cs.html#6afaa2ef08158b4a" class="t t">PackIndexWriter</a> <span id="r18 rd" class="r18 r">iw</span> = <a href="#306bab4211c52503" class="i field">_outputVersion</a> &lt;= 0 ?
+				<a href="PackIndexWriter.cs.html#6afaa2ef08158b4a" class="t t">PackIndexWriter</a>.<a href="PackIndexWriter.cs.html#272b1070032f9575" class="i method">CreateOldestPossible</a>(<span class="r16 r">indexStream</span>, <span class="r17 r">list</span>) :
+				<a href="PackIndexWriter.cs.html#6afaa2ef08158b4a" class="t t">PackIndexWriter</a>.<a href="PackIndexWriter.cs.html#4315bc29786f8e88" class="i method">CreateVersion</a>(<span class="r16 r">indexStream</span>, <a href="#306bab4211c52503" class="i field">_outputVersion</a>);
+
+			<span class="r18 r">iw</span>.<a href="PackIndexWriter.cs.html#f95eb831362eeb77" class="i method">Write</a>(<span class="r17 r">list</span>, <a href="#f31920d8b5c23763" class="i field">_packChecksum</a>);
+		}
+
+		<b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <a id="ab914c377327f426" href="R/ab914c377327f426.html" target="n" data-glyph="76,1" class="i method">sortByName</a>()
+		{
+			<b>if</b> (<a href="#b9b6dce870850dd7" class="i field">_sortedByName</a> == <b>null</b>)
+			{
+				<a href="#b9b6dce870850dd7" class="i field">_sortedByName</a> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt;(<a href="#85b696d372704790" class="i field">_objectsMap</a>.<a href="@0@System.Core/A.html#905bec8c22644c82" class="i property">Count</a>);
+
+				<b>foreach</b> (<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <span id="r19 rd" class="r19 r">list</span> <b>in</b> <a href="#639a3ada37f7dbb4" class="i field">_objectsLists</a>)
+				{
+					<b>foreach</b> (<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r20 rd" class="r20 r">otp</span> <b>in</b> <span class="r19 r">list</span>)
+					{
+						<a href="#b9b6dce870850dd7" class="i field">_sortedByName</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r20 r">otp</span>);
+					}
+				}
+
+				<a href="#b9b6dce870850dd7" class="i field">_sortedByName</a>.<a href="@0@mscorlib/A.html#2f4bb2904365726f" class="i method">Sort</a>();
+			}
+
+			<b>return</b> <a href="#b9b6dce870850dd7" class="i field">_sortedByName</a>;
+		}
+
+		<b>public void</b> <a id="5710219e6fb73584" href="R/5710219e6fb73584.html" target="n" data-glyph="72,1" class="i method">writePack</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r21 rd" class="r21 r">packStream</span>)
+		{
+			<b>if</b> (<a href="#42ce69bda1c7c203" class="i property">ReuseDeltas</a> || <a href="#f321c22386c6e5cf" class="i property">ReuseObjects</a>)
+			{
+				<a href="#b4ca698b949f27f2" class="i method">SearchForReuse</a>();
+			}
+
+			<b>if</b> (!(<span class="r21 r">packStream</span> <b>is</b> <a href="@0@mscorlib/A.html#7ee3b8c340d71eb3" class="t t">BufferedStream</a>))
+			{
+				<span class="r21 r">packStream</span> = <b>new</b> <a href="@0@mscorlib/A.html#7446e2bc9a83f8de" class="t constructor">BufferedStream</a>(<span class="r21 r">packStream</span>);
+			}
+
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a> = <b>new</b> <a href="PackOutputStream.cs.html#94d28217e7eb7f29" class="t constructor">PackOutputStream</a>(<span class="r21 r">packStream</span>);
+
+			<a href="#93ba9a75403d8e55" class="i field">_writeMonitor</a>.<a href="ProgressMonitor.cs.html#5c57570b766094d8" class="i method">BeginTask</a>(<a href="#a2184d8ee7808b74" class="i field">WRITING_OBJECTS_PROGRESS</a>, <a href="#34ed5badeb6d653f" class="i method">getObjectsNumber</a>());
+			<a href="#f945c8ae0f99270f" class="i method">WriteHeader</a>();
+			<a href="#d3faeb98296920e1" class="i method">WriteObjects</a>();
+			<a href="#2fb5b6cbc989349b" class="i method">WriteChecksum</a>();
+
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#be882bf5de17a3d8" class="i method">Flush</a>();
+			<a href="#e86414af389aad9b" class="i field">_windowCursor</a>.<a href="WindowCursor.cs.html#5fc4aebb06ba157d" class="i method">Release</a>();
+			<a href="#93ba9a75403d8e55" class="i field">_writeMonitor</a>.<a href="ProgressMonitor.cs.html#144e268cbf915708" class="i method">EndTask</a>();
+		}
+
+		<b>private void</b> <a id="b4ca698b949f27f2" href="R/b4ca698b949f27f2.html" target="n" data-glyph="76,1" class="i method">SearchForReuse</a>()
+		{
+			<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#5c57570b766094d8" class="i method">BeginTask</a>(<a href="#38bf29f993a1bd2c" class="i field">SEARCHING_REUSE_PROGRESS</a>, <a href="#34ed5badeb6d653f" class="i method">getObjectsNumber</a>());
+			<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r22 rd" class="r22 r">reuseLoaders</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt;();
+			<b>foreach</b> (<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <span id="r23 rd" class="r23 r">list</span> <b>in</b> <a href="#639a3ada37f7dbb4" class="i field">_objectsLists</a>)
+			{
+				<b>foreach</b> (<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r24 rd" class="r24 r">otp</span> <b>in</b> <span class="r23 r">list</span>)
+				{
+					<b>if</b> (<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#713c5e05abf06e21" class="i property">IsCancelled</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Packing cancelled during objects writing.&quot;</span>);
+					}
+					<span class="r22 r">reuseLoaders</span>.<a href="@0@mscorlib/A.html#ca7bce81a50b0aeb" class="i method">Clear</a>();
+					<a href="#12528f4352662bba" class="i method">SearchForReuse</a>(<span class="r22 r">reuseLoaders</span>, <span class="r24 r">otp</span>);
+					<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#3eb9c628ee7d320c" class="i method">Update</a>(1);
+				}
+			}
+
+			<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#144e268cbf915708" class="i method">EndTask</a>();
+		}
+
+		<b>private void</b> <a id="12528f4352662bba" href="R/12528f4352662bba.html" target="n" data-glyph="76,1" class="i method">SearchForReuse</a>(<a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt; <span id="r25 rd" class="r25 r">reuseLoaders</span>, <a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r26 rd" class="r26 r">otp</span>)
+		{
+			<a href="#aeffa1df6714289c" class="i field">_db</a>.<a href="Repository.cs.html#33c33e6237056fcc" class="i method">OpenObjectInAllPacks</a>(<span class="r26 r">otp</span>, <span class="r25 r">reuseLoaders</span>, <a href="#e86414af389aad9b" class="i field">_windowCursor</a>);
+
+			<b>if</b> (<a href="#42ce69bda1c7c203" class="i property">ReuseDeltas</a>)
+			{
+				<a href="#6c2a0ac22f8b000a" class="i method">SelectDeltaReuseForObject</a>(<span class="r26 r">otp</span>, <span class="r25 r">reuseLoaders</span>);
+			}
+
+			<b>if</b> (<a href="#f321c22386c6e5cf" class="i property">ReuseObjects</a> &amp;&amp; !<span class="r26 r">otp</span>.<a href="#dfa19bbcc6d600f8" class="i property">HasReuseLoader</a>)
+			{
+				<a href="#a62786be1d215283" class="i method">SelectObjectReuseForObject</a>(<span class="r26 r">otp</span>, <span class="r25 r">reuseLoaders</span>);
+			}
+		}
+
+		<b>private void</b> <a id="6c2a0ac22f8b000a" href="R/6c2a0ac22f8b000a.html" target="n" data-glyph="76,1" class="i method">SelectDeltaReuseForObject</a>(<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r27 rd" class="r27 r">otp</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt; <span id="r28 rd" class="r28 r">loaders</span>)
+		{
+			<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r29 rd" class="r29 r">bestLoader</span> = <b>null</b>;
+			<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r30 rd" class="r30 r">bestBase</span> = <b>null</b>;
+
+			<b>foreach</b> (<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r31 rd" class="r31 r">loader</span> <b>in</b> <span class="r28 r">loaders</span>)
+			{
+				<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r32 rd" class="r32 r">idBase</span> = <span class="r31 r">loader</span>.<a href="PackedObjectLoader.cs.html#1a003876f35bf04a" class="i property">DeltaBase</a>;
+				<b>if</b> (<span class="r32 r">idBase</span> == <b>null</b>) <b>continue</b>;
+				<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r33 rd" class="r33 r">otpBase</span> = <a href="#85b696d372704790" class="i field">_objectsMap</a>.<a href="ObjectIdSubclassMap.cs.html#be4ade8ba6bf2e4f" class="i method">Get</a>(<span class="r32 r">idBase</span>);
+
+				<b>if</b> ((<span class="r33 r">otpBase</span> != <b>null</b> || (<a href="#07c779dbef66603c" class="i property">Thin</a> &amp;&amp; <a href="#f02760aa1464a200" class="i field">_edgeObjects</a>.<a href="ObjectIdSubclassMap.cs.html#be4ade8ba6bf2e4f" class="i method">Get</a>(<span class="r32 r">idBase</span>) != <b>null</b>)) &amp;&amp; <a href="#60834c1694be5932" class="i method">IsBetterDeltaReuseLoader</a>(<span class="r29 r">bestLoader</span>, <span class="r31 r">loader</span>))
+				{
+					<span class="r29 r">bestLoader</span> = <span class="r31 r">loader</span>;
+					<span class="r30 r">bestBase</span> = (<span class="r33 r">otpBase</span> ?? <span class="r32 r">idBase</span>);
+				}
+			}
+
+			<b>if</b> (<span class="r29 r">bestLoader</span> == <b>null</b>) <b>return</b>;
+
+			<span class="r27 r">otp</span>.<a href="#06c0a3f1e3cd4528" class="i method">SetReuseLoader</a>(<span class="r29 r">bestLoader</span>);
+			<span class="r27 r">otp</span>.<a href="#b72911108f758ff3" class="i property">DeltaBaseId</a> = <span class="r30 r">bestBase</span>;
+		}
+
+		<b>private static bool</b> <a id="60834c1694be5932" href="R/60834c1694be5932.html" target="n" data-glyph="76,1" class="i method">IsBetterDeltaReuseLoader</a>(<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r34 rd" class="r34 r">currentLoader</span>, <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r35 rd" class="r35 r">loader</span>)
+		{
+			<b>if</b> (<span class="r34 r">currentLoader</span> == <b>null</b>) <b>return true</b>;
+
+			<b>if</b> (<span class="r35 r">loader</span>.<a href="ObjectLoader.cs.html#e8ce1a9d33aa348e" class="i property">RawSize</a> &lt; <span class="r34 r">currentLoader</span>.<a href="ObjectLoader.cs.html#e8ce1a9d33aa348e" class="i property">RawSize</a>) <b>return true</b>;
+
+			<b>return</b> <span class="r35 r">loader</span>.<a href="ObjectLoader.cs.html#e8ce1a9d33aa348e" class="i property">RawSize</a> == <span class="r34 r">currentLoader</span>.<a href="ObjectLoader.cs.html#e8ce1a9d33aa348e" class="i property">RawSize</a> &amp;&amp;
+				<span class="r35 r">loader</span>.<a href="PackedObjectLoader.cs.html#4cd2b915516a55f9" class="i property">SupportsFastCopyRawData</a> &amp;&amp;
+				!<span class="r34 r">currentLoader</span>.<a href="PackedObjectLoader.cs.html#4cd2b915516a55f9" class="i property">SupportsFastCopyRawData</a>;
+		}
+
+		<b>private static void</b> <a id="a62786be1d215283" href="R/a62786be1d215283.html" target="n" data-glyph="76,1" class="i method">SelectObjectReuseForObject</a>(<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r36 rd" class="r36 r">otp</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt; <span id="r37 rd" class="r37 r">loaders</span>)
+		{
+			<b>foreach</b> (<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r38 rd" class="r38 r">loader</span> <b>in</b> <span class="r37 r">loaders</span>)
+			{
+				<b>if</b> (!(<span class="r38 r">loader</span> <b>is</b> <a href="WholePackedObjectLoader.cs.html#5e581be05ca435e5" class="t t">WholePackedObjectLoader</a>)) <b>continue</b>;
+
+				<span class="r36 r">otp</span>.<a href="#06c0a3f1e3cd4528" class="i method">SetReuseLoader</a>(<span class="r38 r">loader</span>);
+				<b>return</b>;
+			}
+		}
+
+		<b>private void</b> <a id="f945c8ae0f99270f" href="R/f945c8ae0f99270f.html" target="n" data-glyph="76,1" class="i method">WriteHeader</a>()
+		{
+			<a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#ee41808fd43d4e74" class="i field">PACK_SIGNATURE</a>, 0, <a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, 4);
+			<a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 4, <a href="#bdde7a5c830d02d8" class="i field">PackVersionGenerated</a>);
+			<a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#15e48b913a13dd05" class="i method">encodeInt32</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 8, <a href="#34ed5badeb6d653f" class="i method">getObjectsNumber</a>());
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#eeff9b5a6d289c0d" class="i method">Write</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, 12);
+		}
+
+		<b>private void</b> <a id="d3faeb98296920e1" href="R/d3faeb98296920e1.html" target="n" data-glyph="76,1" class="i method">WriteObjects</a>()
+		{
+			<b>foreach</b> (<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>&gt; <span id="r39 rd" class="r39 r">list</span> <b>in</b> <a href="#639a3ada37f7dbb4" class="i field">_objectsLists</a>)
+			{
+				<b>foreach</b> (<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r40 rd" class="r40 r">otp</span> <b>in</b> <span class="r39 r">list</span>)
+				{
+					<b>if</b> (<a href="#93ba9a75403d8e55" class="i field">_writeMonitor</a>.<a href="ProgressMonitor.cs.html#713c5e05abf06e21" class="i property">IsCancelled</a>)
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Packing cancelled during objects writing&quot;</span>);
+					}
+
+					<b>if</b> (!<span class="r40 r">otp</span>.<a href="#1e9ab2cb93039c49" class="i property">IsWritten</a>)
+					{
+						<a href="#2b184a10fd1bcd71" class="i method">WriteObject</a>(<span class="r40 r">otp</span>);
+					}
+				}
+			}
+		}
+
+		<b>private void</b> <a id="2b184a10fd1bcd71" href="R/2b184a10fd1bcd71.html" target="n" data-glyph="76,1" class="i method">WriteObject</a>(<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r41 rd" class="r41 r">otp</span>)
+		{
+			<span class="r41 r">otp</span>.<a href="#e597ecdd2c94aca4" class="i method">MarkWantWrite</a>();
+			<b>if</b> (<span class="r41 r">otp</span>.<a href="#bb5467955e867b4e" class="i property">IsDeltaRepresentation</a>)
+			{
+				<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r42 rd" class="r42 r">deltaBase</span> = <span class="r41 r">otp</span>.<a href="#0531e32a328380f4" class="i property">DeltaBase</a>;
+				<a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#74ae7c85c0e36e34" class="i method">Assert</a>(<span class="r42 r">deltaBase</span> != <b>null</b> || <a href="#07c779dbef66603c" class="i property">Thin</a>);
+				<b>if</b> (<span class="r42 r">deltaBase</span> != <b>null</b> &amp;&amp; !<span class="r42 r">deltaBase</span>.<a href="#1e9ab2cb93039c49" class="i property">IsWritten</a>)
+				{
+					<b>if</b> (<span class="r42 r">deltaBase</span>.<a href="#a8662fdb83851e7a" class="i property">WantWrite</a>)
+					{
+						<span class="r41 r">otp</span>.<a href="#f770b6e2ada4fad4" class="i method">ClearDeltaBase</a>();
+						<span class="r41 r">otp</span>.<a href="#bb99f2cdd37c106a" class="i method">DisposeLoader</a>();
+					}
+					<b>else</b>
+					{
+						<a href="#2b184a10fd1bcd71" class="i method">WriteObject</a>(<span class="r42 r">deltaBase</span>);
+					}
+				}
+			}
+
+			<a href="@0@System/A.html#632c6da37ce825df" class="t t">Debug</a>.<a href="@0@System/A.html#74ae7c85c0e36e34" class="i method">Assert</a>(!<span class="r41 r">otp</span>.<a href="#1e9ab2cb93039c49" class="i property">IsWritten</a>);
+
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#a2c5b60ae3ae9ec1" class="i method">resetCRC32</a>();
+			<span class="r41 r">otp</span>.<a href="Transport/PackedObjectInfo.cs.html#9710d066f86a32eb" class="i property">Offset</a> = <a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#ddcd59fedf4f7a33" class="i property">Length</a>;
+
+			<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r43 rd" class="r43 r">reuse</span> = <a href="#bd920f0932172809" class="i method">Open</a>(<span class="r41 r">otp</span>);
+			<b>if</b> (<span class="r43 r">reuse</span> != <b>null</b>)
+			{
+				<b>try</b>
+				{
+					<b>if</b> (<span class="r41 r">otp</span>.<a href="#bb5467955e867b4e" class="i property">IsDeltaRepresentation</a>)
+					{
+						<a href="#cb9fb06314ed4160" class="i method">WriteDeltaObjectReuse</a>(<span class="r41 r">otp</span>, <span class="r43 r">reuse</span>);
+					}
+					<b>else</b>
+					{
+						<a href="#4b76b9761ee22f82" class="i method">WriteObjectHeader</a>(<span class="r41 r">otp</span>.<a href="#31a3b91bd6e97781" class="i property">Type</a>, <span class="r43 r">reuse</span>.<a href="PackedObjectLoader.cs.html#a16c87f0f7d1e023" class="i property">Size</a>);
+						<span class="r43 r">reuse</span>.<a href="PackedObjectLoader.cs.html#ab72b0e0661a2e98" class="i method">CopyRawData</a>(<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>, <a href="#c0a79705697cfa7e" class="i field">_buf</a>, <a href="#e86414af389aad9b" class="i field">_windowCursor</a>);
+					}
+				}
+				<b>finally</b>
+				{
+					<span class="r43 r">reuse</span>.<a href="PackedObjectLoader.cs.html#0e3cb5b8c28d5d8c" class="i method">endCopyRawData</a>();
+				}
+			}
+			<b>else if</b> (<span class="r41 r">otp</span>.<a href="#bb5467955e867b4e" class="i property">IsDeltaRepresentation</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;creating deltas is not implemented&quot;</span>);
+			}
+			<b>else</b>
+			{
+				<a href="#9fff462822010cda" class="i method">WriteWholeObjectDeflate</a>(<span class="r41 r">otp</span>);
+			}
+
+			<span class="r41 r">otp</span>.<a href="Transport/PackedObjectInfo.cs.html#797c172b23c9d903" class="i property">CRC</a> = <a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#ff133e41472a9cae" class="i method">getCRC32</a>();
+			<a href="#93ba9a75403d8e55" class="i field">_writeMonitor</a>.<a href="ProgressMonitor.cs.html#3eb9c628ee7d320c" class="i method">Update</a>(1);
+		}
+
+		<b>private</b> <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <a id="bd920f0932172809" href="R/bd920f0932172809.html" target="n" data-glyph="76,1" class="i method">Open</a>(<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r44 rd" class="r44 r">otp</span>)
+		{
+			<b>while</b> (<b>true</b>)
+			{
+				<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r45 rd" class="r45 r">reuse</span> = <span class="r44 r">otp</span>.<a href="#7888cf7699b5559f" class="i method">UseLoader</a>();
+				<b>if</b> (<span class="r45 r">reuse</span> == <b>null</b>) <b>return null</b>;
+
+				<b>try</b>
+				{
+					<span class="r45 r">reuse</span>.<a href="PackedObjectLoader.cs.html#e9f33a86d160aff9" class="i method">beginCopyRawData</a>();
+					<b>return</b> <span class="r45 r">reuse</span>;
+				}
+				<b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+				{
+					<span class="r44 r">otp</span>.<a href="#f770b6e2ada4fad4" class="i method">ClearDeltaBase</a>();
+					<a href="#12528f4352662bba" class="i method">SearchForReuse</a>(<b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt;(), <span class="r44 r">otp</span>);
+					<b>continue</b>;
+				}
+			}
+		}
+
+		<b>private void</b> <a id="9fff462822010cda" href="R/9fff462822010cda.html" target="n" data-glyph="76,1" class="i method">WriteWholeObjectDeflate</a>(<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r46 rd" class="r46 r">otp</span>)
+		{
+			<a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r47 rd" class="r47 r">loader</span> = <a href="#aeffa1df6714289c" class="i field">_db</a>.<a href="Repository.cs.html#0a6ee5a14a08d1df" class="i method">OpenObject</a>(<a href="#e86414af389aad9b" class="i field">_windowCursor</a>, <span class="r46 r">otp</span>);
+			<b>byte</b>[] <span id="r48 rd" class="r48 r">data</span> = <span class="r47 r">loader</span>.<a href="ObjectLoader.cs.html#d966b6feaeaf6880" class="i property">CachedBytes</a>;
+			<a href="#4b76b9761ee22f82" class="i method">WriteObjectHeader</a>(<span class="r46 r">otp</span>.<a href="#31a3b91bd6e97781" class="i property">Type</a>, <span class="r48 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			<a href="#468132bad2b28bc6" class="i field">_deflater</a>.<span class="i method">Reset</span>();
+			<a href="#468132bad2b28bc6" class="i field">_deflater</a>.<span class="i method">SetInput</span>(<span class="r48 r">data</span>, 0, <span class="r48 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			<a href="#468132bad2b28bc6" class="i field">_deflater</a>.<span class="i method">Finish</span>();
+			<b>do</b>
+			{
+				<b>int</b> <span id="r49 rd" class="r49 r">n</span> = <a href="#468132bad2b28bc6" class="i field">_deflater</a>.<span class="i method">Deflate</span>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, <a href="#c0a79705697cfa7e" class="i field">_buf</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<b>if</b> (<span class="r49 r">n</span> &gt; 0)
+				{
+					<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#eeff9b5a6d289c0d" class="i method">Write</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, <span class="r49 r">n</span>);
+				}
+			} <b>while</b> (!<a href="#468132bad2b28bc6" class="i field">_deflater</a>.<span class="i property">IsFinished</span>);
+		}
+
+		<b>private void</b> <a id="cb9fb06314ed4160" href="R/cb9fb06314ed4160.html" target="n" data-glyph="76,1" class="i method">WriteDeltaObjectReuse</a>(<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r50 rd" class="r50 r">otp</span>, <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r51 rd" class="r51 r">reuse</span>)
+		{
+			<b>if</b> (<a href="#f0f6353289fb1586" class="i property">DeltaBaseAsOffset</a> &amp;&amp; <span class="r50 r">otp</span>.<a href="#0531e32a328380f4" class="i property">DeltaBase</a> != <b>null</b>)
+			{
+				<a href="#4b76b9761ee22f82" class="i method">WriteObjectHeader</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#d06b272457af2ba5" class="i field">OBJ_OFS_DELTA</a>, <span class="r51 r">reuse</span>.<a href="ObjectLoader.cs.html#e8ce1a9d33aa348e" class="i property">RawSize</a>);
+
+				<a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <span id="r52 rd" class="r52 r">deltaBase</span> = <span class="r50 r">otp</span>.<a href="#0531e32a328380f4" class="i property">DeltaBase</a>;
+				<b>long</b> <span id="r53 rd" class="r53 r">offsetDiff</span> = <span class="r50 r">otp</span>.<a href="Transport/PackedObjectInfo.cs.html#9710d066f86a32eb" class="i property">Offset</a> - <span class="r52 r">deltaBase</span>.<a href="Transport/PackedObjectInfo.cs.html#9710d066f86a32eb" class="i property">Offset</a>;
+				<b>int</b> <span id="r54 rd" class="r54 r">localPos</span> = <a href="#c0a79705697cfa7e" class="i field">_buf</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - 1;
+				<a href="#c0a79705697cfa7e" class="i field">_buf</a>[<span class="r54 r">localPos</span>] = (<b>byte</b>)(<span class="r53 r">offsetDiff</span> &amp; 0x7F);
+				<b>while</b> ((<span class="r53 r">offsetDiff</span> &gt;&gt;= 7) &gt; 0)
+				{
+					<a href="#c0a79705697cfa7e" class="i field">_buf</a>[--<span class="r54 r">localPos</span>] = (<b>byte</b>)(0x80 | (--<span class="r53 r">offsetDiff</span> &amp; 0x7F));
+				}
+
+				<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#eeff9b5a6d289c0d" class="i method">Write</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, <span class="r54 r">localPos</span>, <a href="#c0a79705697cfa7e" class="i field">_buf</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <span class="r54 r">localPos</span>);
+			}
+			<b>else</b>
+			{
+				<a href="#4b76b9761ee22f82" class="i method">WriteObjectHeader</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#5fbd8eb84cff6850" class="i field">OBJ_REF_DELTA</a>, <span class="r51 r">reuse</span>.<a href="ObjectLoader.cs.html#e8ce1a9d33aa348e" class="i property">RawSize</a>);
+				<span class="r50 r">otp</span>.<a href="#b72911108f758ff3" class="i property">DeltaBaseId</a>.<a href="AnyObjectId.cs.html#b2599f05e8f4ca38" class="i method">copyRawTo</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0);
+				<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#eeff9b5a6d289c0d" class="i method">Write</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>);
+			}
+
+			<span class="r51 r">reuse</span>.<a href="PackedObjectLoader.cs.html#ab72b0e0661a2e98" class="i method">CopyRawData</a>(<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>, <a href="#c0a79705697cfa7e" class="i field">_buf</a>, <a href="#e86414af389aad9b" class="i field">_windowCursor</a>);
+		}
+
+		<b>private void</b> <a id="4b76b9761ee22f82" href="R/4b76b9761ee22f82.html" target="n" data-glyph="76,1" class="i method">WriteObjectHeader</a>(<b>int</b> <span id="r55 rd" class="r55 r">objectType</span>, <b>long</b> <span id="r56 rd" class="r56 r">dataLength</span>)
+		{
+			<a href="@0@mscorlib/A.html#e566178cce890c36" class="k">var</a> <span id="r57 rd" class="r57 r">nextLength</span> = (<b>long</b>)(((<b>ulong</b>)<span class="r56 r">dataLength</span>) &gt;&gt; 4);
+			<b>int</b> <span id="r58 rd" class="r58 r">size</span> = 0;
+			<a href="#c0a79705697cfa7e" class="i field">_buf</a>[<span class="r58 r">size</span>++] = (<b>byte</b>)((<span class="r57 r">nextLength</span> &gt; 0 ? (<b>byte</b>)0x80 : (<b>byte</b>)0x00) | (<b>byte</b>)(<span class="r55 r">objectType</span> &lt;&lt; 4) | (<b>byte</b>)(<span class="r56 r">dataLength</span> &amp; 0x0F));
+			<span class="r56 r">dataLength</span> = <span class="r57 r">nextLength</span>;
+
+			<b>while</b> (<span class="r56 r">dataLength</span> &gt; 0)
+			{
+				<span class="r57 r">nextLength</span> = (<b>long</b>)(((<b>ulong</b>)<span class="r57 r">nextLength</span>) &gt;&gt; 7);
+				<a href="#c0a79705697cfa7e" class="i field">_buf</a>[<span class="r58 r">size</span>++] = (<b>byte</b>)((<span class="r57 r">nextLength</span> &gt; 0 ? (<b>byte</b>)0x80 : (<b>byte</b>)0x00) | (<b>byte</b>)(<span class="r56 r">dataLength</span> &amp; 0x7F));
+				<span class="r56 r">dataLength</span> = <span class="r57 r">nextLength</span>;
+			}
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#eeff9b5a6d289c0d" class="i method">Write</a>(<a href="#c0a79705697cfa7e" class="i field">_buf</a>, 0, <span class="r58 r">size</span>);
+		}
+
+		<b>private void</b> <a id="2fb5b6cbc989349b" href="R/2fb5b6cbc989349b.html" target="n" data-glyph="76,1" class="i method">WriteChecksum</a>()
+		{
+			<a href="#f31920d8b5c23763" class="i field">_packChecksum</a> = <a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#a7e07370ef092ab5" class="i method">getDigest</a>();
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="PackOutputStream.cs.html#eeff9b5a6d289c0d" class="i method">Write</a>(<a href="#f31920d8b5c23763" class="i field">_packChecksum</a>, 0, <a href="#f31920d8b5c23763" class="i field">_packChecksum</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<b>private</b> <a href="RevWalk/ObjectWalk.cs.html#9ca3f1996153c649" class="t t">ObjectWalk</a> <a id="8a1beda2050bff2d" href="R/8a1beda2050bff2d.html" target="n" data-glyph="76,1" class="i method">SetUpWalker</a>&lt;<span id="r59 rd t" class="r59 r t">T</span>&gt;(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<span class="r59 r t">T</span>&gt; <span id="r60 rd" class="r60 r">interestingObjects</span>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<span class="r59 r t">T</span>&gt; <span id="r61 rd" class="r61 r">uninterestingObjects</span>)
+			<b>where</b> <span class="r59 r t">T</span> : <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>
+		{
+			<a href="RevWalk/ObjectWalk.cs.html#9ca3f1996153c649" class="k">var</a> <span id="r62 rd" class="r62 r">walker</span> = <b>new</b> <a href="RevWalk/ObjectWalk.cs.html#bd88cb1298a6883c" class="t constructor">ObjectWalk</a>(<a href="#aeffa1df6714289c" class="i field">_db</a>);
+			<span class="r62 r">walker</span>.<a href="RevWalk/RevWalk.cs.html#e759808ce0e0b173" class="i method">sort</a>(<a href="RevWalk/RevSort.cs.html#f228bf051f1b6130" class="t t">RevSort</a>.<a href="RevWalk/RevSort.cs.html#396d0dbb0ab88892" class="t t">Strategy</a>.<a href="RevWalk/RevSort.cs.html#80de755be850fe07" class="i field">TOPO</a>);
+			<span class="r62 r">walker</span>.<a href="RevWalk/RevWalk.cs.html#1e00d72f6e031924" class="i method">sort</a>(<a href="RevWalk/RevSort.cs.html#f228bf051f1b6130" class="t t">RevSort</a>.<a href="RevWalk/RevSort.cs.html#396d0dbb0ab88892" class="t t">Strategy</a>.<a href="RevWalk/RevSort.cs.html#375ec85fa4b4e965" class="i field">COMMIT_TIME_DESC</a>, <b>true</b>);
+
+			<b>if</b> (<a href="#07c779dbef66603c" class="i property">Thin</a>)
+			{
+				<span class="r62 r">walker</span>.<a href="RevWalk/RevWalk.cs.html#1e00d72f6e031924" class="i method">sort</a>(<a href="RevWalk/RevSort.cs.html#f228bf051f1b6130" class="t t">RevSort</a>.<a href="RevWalk/RevSort.cs.html#396d0dbb0ab88892" class="t t">Strategy</a>.<a href="RevWalk/RevSort.cs.html#96f64dc16f2f6aee" class="i field">BOUNDARY</a>, <b>true</b>);
+			}
+
+			<b>foreach</b> (<span class="r59 r t">T</span> <span id="r63 rd" class="r63 r">id</span> <b>in</b> <span class="r60 r">interestingObjects</span>)
+			{
+				<a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a> <span id="r64 rd" class="r64 r">o</span> = <span class="r62 r">walker</span>.<a href="RevWalk/RevWalk.cs.html#01c1336e57a2cf0a" class="i method">parseAny</a>(<span class="r63 r">id</span>);
+				<span class="r62 r">walker</span>.<a href="RevWalk/ObjectWalk.cs.html#49be84c9824cae93" class="i method">markStart</a>(<span class="r64 r">o</span>);
+			}
+
+			<b>if</b> (<span class="r61 r">uninterestingObjects</span> != <b>null</b>)
+			{
+				<b>foreach</b> (<span class="r59 r t">T</span> <span id="r65 rd" class="r65 r">id</span> <b>in</b> <span class="r61 r">uninterestingObjects</span>)
+				{
+					<a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a> <span id="r66 rd" class="r66 r">o</span>;
+
+					<b>try</b>
+					{
+						<span class="r66 r">o</span> = <span class="r62 r">walker</span>.<a href="RevWalk/RevWalk.cs.html#01c1336e57a2cf0a" class="i method">parseAny</a>(<span class="r65 r">id</span>);
+					}
+					<b>catch</b> (<a href="Exceptions/MissingObjectException.cs.html#66628c45a09b4683" class="t t">MissingObjectException</a>)
+					{
+						<b>if</b> (<a href="#5f42dbf1d67ee493" class="i property">IgnoreMissingUninteresting</a>) <b>continue</b>;
+						<b>throw</b>;
+					}
+
+					<span class="r62 r">walker</span>.<a href="RevWalk/ObjectWalk.cs.html#3d243141665d6aa4" class="i method">markUninteresting</a>(<span class="r66 r">o</span>);
+				}
+			}
+
+			<b>return</b> <span class="r62 r">walker</span>;
+		}
+
+		<b>private void</b> <a id="8e377e4834fb42f3" href="R/8e377e4834fb42f3.html" target="n" data-glyph="76,1" class="i method">FindObjectsToPack</a>(<a href="RevWalk/ObjectWalk.cs.html#9ca3f1996153c649" class="t t">ObjectWalk</a> <span id="r67 rd" class="r67 r">walker</span>)
+		{
+			<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#5c57570b766094d8" class="i method">BeginTask</a>(<a href="#b856c7ca5bb82026" class="i field">COUNTING_OBJECTS_PROGRESS</a>, <a href="ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a>.<a href="ProgressMonitor.cs.html#103ea222fbb7f63a" class="i field">UNKNOWN</a>);
+			<a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a> <span id="r68 rd" class="r68 r">o</span>;
+
+			<b>while</b> ((<span class="r68 r">o</span> = <span class="r67 r">walker</span>.<a href="RevWalk/ObjectWalk.cs.html#1ec1f2839f0404db" class="i method">next</a>()) != <b>null</b>)
+			{
+				<a href="#70f0090c736c56b0" class="i method">addObject</a>(<span class="r68 r">o</span>);
+				<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#3eb9c628ee7d320c" class="i method">Update</a>(1);
+			}
+
+			<b>while</b> ((<span class="r68 r">o</span> = <span class="r67 r">walker</span>.<a href="RevWalk/ObjectWalk.cs.html#1efbe2c1125a8ec9" class="i method">nextObject</a>()) != <b>null</b>)
+			{
+				<a href="#70f0090c736c56b0" class="i method">addObject</a>(<span class="r68 r">o</span>);
+				<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#3eb9c628ee7d320c" class="i method">Update</a>(1);
+			}
+			<a href="#974db95502266976" class="i field">_initMonitor</a>.<a href="ProgressMonitor.cs.html#144e268cbf915708" class="i method">EndTask</a>();
+		}
+
+		<b>public void</b> <a id="70f0090c736c56b0" href="R/70f0090c736c56b0.html" target="n" data-glyph="72,1" class="i method">addObject</a>(<a href="RevWalk/RevObject.cs.html#658e4f2ce605af6f" class="t t">RevObject</a> <span id="r69 rd" class="r69 r">robject</span>)
+		{
+			<b>if</b> (<span class="r69 r">robject</span>.<a href="RevWalk/RevObject.cs.html#94993bb45b87d086" class="i method">has</a>(<a href="RevWalk/RevFlag.cs.html#71f625ed5134424a" class="t t">RevFlag</a>.<a href="RevWalk/RevFlag.cs.html#5155285860139080" class="i field">UNINTERESTING</a>))
+			{
+				<a href="#f02760aa1464a200" class="i field">_edgeObjects</a>.<a href="@0@System.Core/A.html#43a2b651926474a7" class="i method">Add</a>(<span class="r69 r">robject</span>);
+				<a href="#07c779dbef66603c" class="i property">Thin</a> = <b>true</b>;
+				<b>return</b>;
+			}
+
+			<a href="#54063a7d125952d2" class="k">var</a> <span id="r70 rd" class="r70 r">otp</span> = <b>new</b> <a href="#5dc462e2a567c426" class="t constructor">ObjectToPack</a>(<span class="r69 r">robject</span>, <span class="r69 r">robject</span>.<a href="RevWalk/RevObject.cs.html#4d8992963b46c2f1" class="i property">Type</a>);
+			<b>try</b>
+			{
+				<a href="#639a3ada37f7dbb4" class="i field">_objectsLists</a>[<span class="r69 r">robject</span>.<a href="RevWalk/RevObject.cs.html#4d8992963b46c2f1" class="i property">Type</a>].<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r70 r">otp</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#acba961d918b2408" class="t t">IndexOutOfRangeException</a>)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#f8a1d5919dc8c7af" class="t constructor">IncorrectObjectTypeException</a>(<span class="r69 r">robject</span>, <span class="s">&quot;COMMIT nor TREE nor BLOB nor TAG&quot;</span>);
+			}
+			<a href="#85b696d372704790" class="i field">_objectsMap</a>.<a href="@0@System.Core/A.html#43a2b651926474a7" class="i method">Add</a>(<span class="r70 r">otp</span>);
+		}
+		
+		<b>public void</b> <a id="a8b3219630b90d90" href="R/a8b3219630b90d90.html" target="n" data-glyph="72,1" class="i method">Dispose</a> ()
+		{
+			<a href="#b2da3051bc1cbd8d" class="i field">_pos</a>.<a href="@0@mscorlib/A.html#f1b4285950a82354" class="i method">Dispose</a>();
+		}
+		
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+		<b>class</b> <a id="54063a7d125952d2" href="R/54063a7d125952d2.html" target="n" data-glyph="4,1" class="t t">ObjectToPack</a> : <a href="Transport/PackedObjectInfo.cs.html#4404f4a9d8f8fa0f" class="t t">PackedObjectInfo</a>
+		{
+			<b>private</b> <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <a id="6ba33536432e3590" href="R/6ba33536432e3590.html" target="n" data-glyph="46,2" class="i field">_reuseLoader</a>;
+			<b>private int</b> <a id="5c3d16eda8de7e72" href="R/5c3d16eda8de7e72.html" target="n" data-glyph="46,2" class="i field">_flags</a>;
+
+			<b>public</b> <a id="5dc462e2a567c426" href="R/5dc462e2a567c426.html" target="n" data-glyph="72,2" class="i constructor">ObjectToPack</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r71 rd" class="r71 r">src</span>, <b>int</b> <span id="r72 rd" class="r72 r">type</span>)
+				: <a href="Transport/PackedObjectInfo.cs.html#44df76db72cd0d39" class="k">base</a>(<span class="r71 r">src</span>)
+			{
+				<a href="#5c3d16eda8de7e72" class="i field">_flags</a> |= <span class="r72 r">type</span> &lt;&lt; 1;
+			}
+
+			<b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="b72911108f758ff3" href="R/b72911108f758ff3.html" target="n" data-glyph="102,2" class="i property">DeltaBaseId</a> { <b>get</b>; <b>set</b>; }
+
+			<b>public</b> <a href="#54063a7d125952d2" class="t t">ObjectToPack</a> <a id="0531e32a328380f4" href="R/0531e32a328380f4.html" target="n" data-glyph="102,2" class="i property">DeltaBase</a>
+			{
+				<b>get</b>
+				{
+					<b>if</b> (<a href="#b72911108f758ff3" class="i property">DeltaBaseId</a> <b>is</b> <a href="#54063a7d125952d2" class="t t">ObjectToPack</a>) <b>return</b> (<a href="#54063a7d125952d2" class="t t">ObjectToPack</a>)<a href="#b72911108f758ff3" class="i property">DeltaBaseId</a>;
+					<b>return null</b>;
+				}
+			}
+
+			<b>public bool</b> <a id="bb5467955e867b4e" href="R/bb5467955e867b4e.html" target="n" data-glyph="102,2" class="i property">IsDeltaRepresentation</a>
+			{
+				<b>get</b> { <b>return</b> <a href="#b72911108f758ff3" class="i property">DeltaBaseId</a> != <b>null</b>; }
+			}
+
+			<b>public bool</b> <a id="1e9ab2cb93039c49" href="R/1e9ab2cb93039c49.html" target="n" data-glyph="102,2" class="i property">IsWritten</a>
+			{
+				<b>get</b> { <b>return</b> <a href="Transport/PackedObjectInfo.cs.html#9710d066f86a32eb" class="i property">Offset</a> != 0; }
+			}
+
+			<b>public bool</b> <a id="dfa19bbcc6d600f8" href="R/dfa19bbcc6d600f8.html" target="n" data-glyph="102,2" class="i property">HasReuseLoader</a>
+			{
+				<b>get</b> { <b>return</b> <a href="#6ba33536432e3590" class="i field">_reuseLoader</a> != <b>null</b>; }
+			}
+
+			<b>public int</b> <a id="31a3b91bd6e97781" href="R/31a3b91bd6e97781.html" target="n" data-glyph="102,2" class="i property">Type</a>
+			{
+				<b>get</b> { <b>return</b> (<a href="#5c3d16eda8de7e72" class="i field">_flags</a> &gt;&gt; 1) &amp; 0x7; }
+			}
+
+			<b>public bool</b> <a id="a8662fdb83851e7a" href="R/a8662fdb83851e7a.html" target="n" data-glyph="102,2" class="i property">WantWrite</a>
+			{
+				<b>get</b> { <b>return</b> (<a href="#5c3d16eda8de7e72" class="i field">_flags</a> &amp; 1) == 1; }
+			}
+
+			<b>public void</b> <a id="bb99f2cdd37c106a" href="R/bb99f2cdd37c106a.html" target="n" data-glyph="72,2" class="i method">DisposeLoader</a>()
+			{
+				<a href="#6ba33536432e3590" class="i field">_reuseLoader</a> = <b>null</b>;
+			}
+
+			<b>public void</b> <a id="f770b6e2ada4fad4" href="R/f770b6e2ada4fad4.html" target="n" data-glyph="72,2" class="i method">ClearDeltaBase</a>()
+			{
+				<a href="#b72911108f758ff3" class="i property">DeltaBaseId</a> = <b>null</b>;
+			}
+
+			<b>public</b> <a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <a id="7888cf7699b5559f" href="R/7888cf7699b5559f.html" target="n" data-glyph="72,2" class="i method">UseLoader</a>()
+			{
+				<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r73 rd" class="r73 r">r</span> = <a href="#6ba33536432e3590" class="i field">_reuseLoader</a>;
+				<a href="#6ba33536432e3590" class="i field">_reuseLoader</a> = <b>null</b>;
+				<b>return</b> <span class="r73 r">r</span>;
+			}
+
+			<b>public void</b> <a id="06c0a3f1e3cd4528" href="R/06c0a3f1e3cd4528.html" target="n" data-glyph="72,2" class="i method">SetReuseLoader</a>(<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a> <span id="r74 rd" class="r74 r">reuseLoader</span>)
+			{
+				<a href="#6ba33536432e3590" class="i field">_reuseLoader</a> = <span class="r74 r">reuseLoader</span>;
+			}
+
+			<b>public void</b> <a id="e597ecdd2c94aca4" href="R/e597ecdd2c94aca4.html" target="n" data-glyph="72,2" class="i method">MarkWantWrite</a>()
+			{
+				<a href="#5c3d16eda8de7e72" class="i field">_flags</a> |= 1;
+			}
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+}</pre></td></tr></table></div></body></html>

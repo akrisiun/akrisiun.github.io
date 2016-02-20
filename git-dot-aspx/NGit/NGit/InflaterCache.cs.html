@@ -1,0 +1,141 @@
+﻿<!DOCTYPE html>
+<html><head><title>InflaterCache.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(132);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit/InflaterCache.cs" target="_top">NGit\InflaterCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Creates zlib based inflaters as necessary for object decompression.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Creates zlib based inflaters as necessary for object decompression.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="7b93b6e12cee3991" href="../R/7b93b6e12cee3991.html" target="n" data-glyph="0,0" class="t t">InflaterCache</a>
+	{
+		<b>private const int</b> <a id="aa47a4b458877201" href="../R/aa47a4b458877201.html" target="n" data-glyph="10,1" class="i field">SZ</a> = 4;
+
+		<b>private static readonly</b> <span class="t t">Inflater</span>[] <a id="1c65ddec43c1c6bf" href="../R/1c65ddec43c1c6bf.html" target="n" data-glyph="46,1" class="i field">inflaterCache</a>;
+
+		<b>private static int</b> <a id="99e06af7562f9f2d" href="../R/99e06af7562f9f2d.html" target="n" data-glyph="46,1" class="i field">openInflaterCount</a>;
+
+		<b>static</b> <a id="67f8477293c32976" href="../R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">InflaterCache</a>()
+		{
+			<a href="#1c65ddec43c1c6bf" class="i field">inflaterCache</a> = <b>new</b> <span class="t t">Inflater</span>[<a href="#aa47a4b458877201" class="i field">SZ</a>];
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Obtain an Inflater for decompression.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Obtain an Inflater for decompression.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Inflaters obtained through this cache should be returned (if possible) by</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e4c7b6c486a4e1ca" class="i method">Release</a>(<span class="i n">ICSharpCode</span>.<span class="i n">SharpZipLib</span>.<span class="i n">Zip</span>.<span class="i n">Compression</span>.<span class="t t">Inflater</span>)<span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Release(ICSharpCode.SharpZipLib.Zip.Compression.Inflater)</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to avoid garbage collection and reallocation.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">an available inflater. Never null.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static</b> <span class="t t">Inflater</span> <a id="a068c30bee4b6997" href="../R/a068c30bee4b6997.html" target="n" data-glyph="72,1" class="i method">Get</a>()
+		{
+			<span class="t t">Inflater</span> <span id="r0 rd" class="r0 r">r</span> = <a href="#3b143c5ce7993ff8" class="i method">GetImpl</a>();
+			<b>return</b> <span class="r0 r">r</span> != <b>null</b> ? <span class="r0 r">r</span> : <b>new</b> <span class="t constructor">Inflater</span>(<b>false</b>);
+		}
+
+		<b>private static</b> <span class="t t">Inflater</span> <a id="3b143c5ce7993ff8" href="../R/3b143c5ce7993ff8.html" target="n" data-glyph="76,1" class="i method">GetImpl</a>()
+		{
+			<b>lock</b> (<b>typeof</b>(<a href="#7b93b6e12cee3991" class="t t">InflaterCache</a>))
+			{
+				<b>if</b> (<a href="#99e06af7562f9f2d" class="i field">openInflaterCount</a> &gt; 0)
+				{
+					<span class="t t">Inflater</span> <span id="r1 rd" class="r1 r">r</span> = <a href="#1c65ddec43c1c6bf" class="i field">inflaterCache</a>[--<a href="#99e06af7562f9f2d" class="i field">openInflaterCount</a>];
+					<a href="#1c65ddec43c1c6bf" class="i field">inflaterCache</a>[<a href="#99e06af7562f9f2d" class="i field">openInflaterCount</a>] = <b>null</b>;
+					<b>return</b> <span class="r1 r">r</span>;
+				}
+				<b>return null</b>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Release an inflater previously obtained from this cache.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Release an inflater previously obtained from this cache.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">i</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the inflater to return. May be null, in which case this method</span>
+		<span class="c">///</span><span class="c"> does nothing.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public static void</b> <a id="e4c7b6c486a4e1ca" href="../R/e4c7b6c486a4e1ca.html" target="n" data-glyph="72,1" class="i method">Release</a>(<span class="t t">Inflater</span> <span id="r2 rd" class="r2 r">i</span>)
+		{
+			<b>if</b> (<span class="r2 r">i</span> != <b>null</b>)
+			{
+				<span class="r2 r">i</span>.<span class="i method">Reset</span>();
+				<b>if</b> (<a href="#61cd2d229b7eea45" class="i method">ReleaseImpl</a>(<span class="r2 r">i</span>))
+				{
+					<span class="r2 r">i</span>.<a href="/Sharpen/A.html#3f8dc9281a8dea8e" class="i method">Finish</a>();
+				}
+			}
+		}
+
+		<b>private static bool</b> <a id="61cd2d229b7eea45" href="../R/61cd2d229b7eea45.html" target="n" data-glyph="76,1" class="i method">ReleaseImpl</a>(<span class="t t">Inflater</span> <span id="r3 rd" class="r3 r">i</span>)
+		{
+			<b>lock</b> (<b>typeof</b>(<a href="#7b93b6e12cee3991" class="t t">InflaterCache</a>))
+			{
+				<b>if</b> (<a href="#99e06af7562f9f2d" class="i field">openInflaterCount</a> &lt; <a href="#aa47a4b458877201" class="i field">SZ</a>)
+				{
+					<a href="#1c65ddec43c1c6bf" class="i field">inflaterCache</a>[<a href="#99e06af7562f9f2d" class="i field">openInflaterCount</a>++] = <span class="r3 r">i</span>;
+					<b>return false</b>;
+				}
+				<b>return true</b>;
+			}
+		}
+
+		<b>public</b> <a id="02d6de0e42694d62" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">InflaterCache</a>()
+		{
+			<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#ab0acd5f99886747" class="t constructor">NotSupportedException</a>();
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

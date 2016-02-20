@@ -1,0 +1,387 @@
+﻿<!DOCTYPE html>
+<html><head><title>ContentSource.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(378);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/ContentSource.cs" target="_top">NGit.Diff\ContentSource.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Errors</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<span class="i n">Filter</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Supplies the content of a file for</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="DiffFormatter.cs.html#0a3fb36519ef5a5f" class="t t">DiffFormatter</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">DiffFormatter</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> .</span>
+	<span class="c">///</span><span class="c"> A content source is not thread-safe. Sources may contain state, including</span>
+	<span class="c">///</span><span class="c"> information about the last ObjectLoader they returned. Callers must be</span>
+	<span class="c">///</span><span class="c"> careful to ensure there is no more than one ObjectLoader pending on any</span>
+	<span class="c">///</span><span class="c"> source, at any time.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public abstract class</b> <a id="01f540beecc5f454" href="../R/01f540beecc5f454.html" target="n" data-glyph="0,0" class="t t"><span id="3a31d01db9d8955e">ContentSource</span></a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a content source for an ObjectReader.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Construct a content source for an ObjectReader.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">reader</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the reader to obtain blobs from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a source wrapping the reader.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a> <a id="172ca22e0797bd92" href="../R/172ca22e0797bd92.html" target="n" data-glyph="72,1" class="i method">Create</a>(<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r0 rd" class="r0 r">reader</span>)
+		{
+			<b>return</b> <b>new</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a>.<a href="#f261e75890275d95" class="t constructor">ObjectReaderSource</a>(<span class="r0 r">reader</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a content source for a working directory.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a content source for a working directory.</span>
+		<span class="c">///</span><span class="c"> If the iterator is a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Treewalk</span>.<a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Treewalk.FileTreeIterator</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> an optimized version is</span>
+		<span class="c">///</span><span class="c"> used that doesn&#39;t require seeking through a TreeWalk.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">iterator</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the iterator to obtain source files through.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a content source wrapping the iterator.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public static</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a> <a id="d5a028a651a0ade1" href="../R/d5a028a651a0ade1.html" target="n" data-glyph="72,1" class="i method">Create</a>(<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <span id="r1 rd" class="r1 r">iterator</span>)
+		{
+			<b>if</b> (<span class="r1 r">iterator</span> <b>is</b> <a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a>)
+			{
+				<a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a> <span id="r2 rd" class="r2 r">i</span> = (<a href="../NGit.Treewalk/FileTreeIterator.cs.html#68047ec2d25dd433" class="t t">FileTreeIterator</a>)<span class="r1 r">iterator</span>;
+				<b>return</b> <b>new</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a>.<a href="#4938d5ff62060253" class="t constructor">FileSource</a>(<span class="r2 r">i</span>.<a href="../NGit.Treewalk/FileTreeIterator.cs.html#87b43bfdfd5bcaee" class="i method">GetDirectory</a>());
+			}
+			<b>return</b> <b>new</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a>.<a href="#9a7bf7cd9bd5d2fe" class="t constructor">WorkingTreeSource</a>(<span class="r1 r">iterator</span>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Determine the size of the object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Determine the size of the object.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the path of the file, relative to the root of the repository.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">blob id of the file, if known.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the size in bytes.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract long</b> <a id="062d4d1950940ccc" href="../R/062d4d1950940ccc.html" target="n" data-glyph="72,1" class="i method">Size</a>(<b>string</b> <span id="r3 rd" class="r3 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r4 rd" class="r4 r">id</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Open the object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Open the object.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">path</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the path of the file, relative to the root of the repository.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">blob id of the file, if known.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> a loader that can supply the content of the file. The loader must</span>
+		<span class="c">///</span><span class="c"> be used before another loader can be obtained from this same</span>
+		<span class="c">///</span><span class="c"> source.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public abstract</b> <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="4f50a6a68a74c905" href="../R/4f50a6a68a74c905.html" target="n" data-glyph="72,1" class="i method">Open</a>(<b>string</b> <span id="r5 rd" class="r5 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r6 rd" class="r6 r">id</span>);
+
+		<b>private class</b> <a id="e1cd542f33bea31e" href="../R/e1cd542f33bea31e.html" target="n" data-glyph="4,1" class="t t">ObjectReaderSource</a> : <a href="#01f540beecc5f454" class="t t">ContentSource</a>
+		{
+			<b>private readonly</b> <a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <a id="5457f9c3d82118a7" href="../R/5457f9c3d82118a7.html" target="n" data-glyph="46,2" class="i field">reader</a>;
+
+			<b>internal</b> <a id="f261e75890275d95" href="../R/f261e75890275d95.html" target="n" data-glyph="74,2" class="i constructor">ObjectReaderSource</a>(<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a> <span id="r7 rd" class="r7 r">reader</span>)
+			{
+				<a href="#e1cd542f33bea31e" class="k">this</a>.<a href="#5457f9c3d82118a7" class="i field">reader</a> = <span class="r7 r">reader</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override long</b> <a id="43e084510d74314f" href="../R/43e084510d74314f.html" target="n" data-glyph="72,2" class="i method">Size</a>(<b>string</b> <span id="r8 rd" class="r8 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r9 rd" class="r9 r">id</span>)
+			{
+				<b>return</b> <a href="#5457f9c3d82118a7" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#56825eeee0b9c4f1" class="i method">GetObjectSize</a>(<span class="r9 r">id</span>, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>);
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="d828960397ea4e49" href="../R/d828960397ea4e49.html" target="n" data-glyph="72,2" class="i method">Open</a>(<b>string</b> <span id="r10 rd" class="r10 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r11 rd" class="r11 r">id</span>)
+			{
+				<b>return</b> <a href="#5457f9c3d82118a7" class="i field">reader</a>.<a href="../NGit/ObjectReader.cs.html#6f8fb17381cd3a38" class="i method">Open</a>(<span class="r11 r">id</span>, <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>);
+			}
+		}
+
+		<b>private class</b> <a id="e109ce44cc83e31c" href="../R/e109ce44cc83e31c.html" target="n" data-glyph="4,1" class="t t">WorkingTreeSource</a> : <a href="#01f540beecc5f454" class="t t">ContentSource</a>
+		{
+			<b>private readonly</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#f75117730acb69f2" class="t t">TreeWalk</a> <a id="3c314f9ef9288b65" href="../R/3c314f9ef9288b65.html" target="n" data-glyph="46,2" class="i field">tw</a>;
+
+			<b>private readonly</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <a id="071cdb6df537c80c" href="../R/071cdb6df537c80c.html" target="n" data-glyph="46,2" class="i field">iterator</a>;
+
+			<b>private string</b> <a id="03cdca9d87781d82" href="../R/03cdca9d87781d82.html" target="n" data-glyph="46,2" class="i field">current</a>;
+
+			<b>private</b> <a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <a id="81cadff304f18dcd" href="../R/81cadff304f18dcd.html" target="n" data-glyph="46,2" class="i field">ptr</a>;
+
+			<b>internal</b> <a id="9a7bf7cd9bd5d2fe" href="../R/9a7bf7cd9bd5d2fe.html" target="n" data-glyph="74,2" class="i constructor">WorkingTreeSource</a>(<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a> <span id="r12 rd" class="r12 r">iterator</span>)
+			{
+				<a href="#e109ce44cc83e31c" class="k">this</a>.<a href="#3c314f9ef9288b65" class="i field">tw</a> = <b>new</b> <a href="../NGit.Treewalk/TreeWalk.cs.html#e1052f13476153ef" class="t constructor">TreeWalk</a>((<a href="../NGit/ObjectReader.cs.html#c7891701ba17c6fc" class="t t">ObjectReader</a>)<b>null</b>);
+				<a href="#e109ce44cc83e31c" class="k">this</a>.<a href="#071cdb6df537c80c" class="i field">iterator</a> = <span class="r12 r">iterator</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override long</b> <a id="9b1e987f182d0dc8" href="../R/9b1e987f182d0dc8.html" target="n" data-glyph="72,2" class="i method">Size</a>(<b>string</b> <span id="r13 rd" class="r13 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r14 rd" class="r14 r">id</span>)
+			{
+				<a href="#fb980becd263d07d" class="i method">Seek</a>(<span class="r13 r">path</span>);
+				<b>return</b> <a href="#81cadff304f18dcd" class="i field">ptr</a>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#091c53974861272d" class="i method">GetEntryLength</a>();
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="75ce37c949767faf" href="../R/75ce37c949767faf.html" target="n" data-glyph="72,2" class="i method">Open</a>(<b>string</b> <span id="r15 rd" class="r15 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r16 rd" class="r16 r">id</span>)
+			{
+				<a href="#fb980becd263d07d" class="i method">Seek</a>(<span class="r15 r">path</span>);
+				<b>return</b> <b>new</b> <a href="#05f3b39705edef4b" class="t constructor">_ObjectLoader_173</a>(<a href="#e109ce44cc83e31c" class="k">this</a>);
+			}
+
+			<b>private sealed class</b> <a id="54ad9b6e43661aa0" href="../R/54ad9b6e43661aa0.html" target="n" data-glyph="4,2" class="t t">_ObjectLoader_173</a> : <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a>
+			{
+				<b>public</b> <a id="05f3b39705edef4b" href="../R/05f3b39705edef4b.html" target="n" data-glyph="72,3" class="i constructor">_ObjectLoader_173</a>(<a href="#e109ce44cc83e31c" class="t t">WorkingTreeSource</a> <span id="r17 rd" class="r17 r">_enclosing</span>)
+				{
+					<a href="#54ad9b6e43661aa0" class="k">this</a>.<a href="#85cc63cbdec16c9c" class="i field">_enclosing</a> = <span class="r17 r">_enclosing</span>;
+				}
+
+				<b>public override long</b> <a id="b9060b17a191dc1a" href="../R/b9060b17a191dc1a.html" target="n" data-glyph="72,3" class="i method">GetSize</a>()
+				{
+					<b>return</b> <a href="#54ad9b6e43661aa0" class="k">this</a>.<a href="#85cc63cbdec16c9c" class="i field">_enclosing</a>.<a href="#81cadff304f18dcd" class="i field">ptr</a>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#091c53974861272d" class="i method">GetEntryLength</a>();
+				}
+
+				<b>public override int</b> <a id="7af43353e01fa306" href="../R/7af43353e01fa306.html" target="n" data-glyph="72,3" class="i method">GetType</a>()
+				{
+					<b>return</b> <a href="#54ad9b6e43661aa0" class="k">this</a>.<a href="#85cc63cbdec16c9c" class="i field">_enclosing</a>.<a href="#81cadff304f18dcd" class="i field">ptr</a>.<a href="../NGit.Treewalk/AbstractTreeIterator.cs.html#5f740308b516a2ae" class="i property">EntryFileMode</a>.<a href="../NGit/FileMode.cs.html#6d8835bb81f9e7ef" class="i method">GetObjectType</a>();
+				}
+
+				<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+				<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+				<b>public override</b> <a href="../NGit/ObjectStream.cs.html#8382d037187c2c47" class="t t">ObjectStream</a> <a id="f8e6d107e7b31683" href="../R/f8e6d107e7b31683.html" target="n" data-glyph="72,3" class="i method">OpenStream</a>()
+				{
+					<b>long</b> <span id="r18 rd" class="r18 r">contentLength</span> = <a href="#54ad9b6e43661aa0" class="k">this</a>.<a href="#85cc63cbdec16c9c" class="i field">_enclosing</a>.<a href="#81cadff304f18dcd" class="i field">ptr</a>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#9625f8a5883ab2be" class="i method">GetEntryContentLength</a>();
+					<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r19 rd" class="r19 r">@in</span> = <a href="#54ad9b6e43661aa0" class="k">this</a>.<a href="#85cc63cbdec16c9c" class="i field">_enclosing</a>.<a href="#81cadff304f18dcd" class="i field">ptr</a>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#2c615e03b3256b3d" class="i method">OpenEntryStream</a>();
+					<span class="r19 r">@in</span> = <b>new</b> <a href="/Sharpen/A.html#409f029494ef096a" class="t constructor">BufferedInputStream</a>(<span class="r19 r">@in</span>);
+					<b>return</b> <b>new</b> <a href="../NGit/ObjectStream.cs.html#8382d037187c2c47" class="t t">ObjectStream</a>.<a href="../NGit/ObjectStream.cs.html#0d1b911e87c21a59" class="t constructor">Filter</a>(<a href="#54ad9b6e43661aa0" class="k">this</a>.<a href="#7af43353e01fa306" class="i method">GetType</a>(), <span class="r18 r">contentLength</span>, <span class="r19 r">@in</span>);
+				}
+
+				<b>public override bool</b> <a id="0dadc83de5cf3ba4" href="../R/0dadc83de5cf3ba4.html" target="n" data-glyph="72,3" class="i method">IsLarge</a>()
+				{
+					<b>return true</b>;
+				}
+
+				<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/LargeObjectException.cs.html#b54c3fbbaa6f8286" class="t t">LargeObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+				<b>public override byte</b>[] <a id="aacef6248dd06386" href="../R/aacef6248dd06386.html" target="n" data-glyph="72,3" class="i method">GetCachedBytes</a>()
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Errors/LargeObjectException.cs.html#c86580e79dfbaa75" class="t constructor">LargeObjectException</a>();
+				}
+
+				<b>private readonly</b> <a href="#e109ce44cc83e31c" class="t t">WorkingTreeSource</a> <a id="85cc63cbdec16c9c" href="../R/85cc63cbdec16c9c.html" target="n" data-glyph="46,3" class="i field">_enclosing</a>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>private void</b> <a id="fb980becd263d07d" href="../R/fb980becd263d07d.html" target="n" data-glyph="76,2" class="i method">Seek</a>(<b>string</b> <span id="r20 rd" class="r20 r">path</span>)
+			{
+				<b>if</b> (!<span class="r20 r">path</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<a href="#03cdca9d87781d82" class="i field">current</a>))
+				{
+					<a href="#071cdb6df537c80c" class="i field">iterator</a>.<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#54608ae6426e1b68" class="i method">Reset</a>();
+					<a href="#3c314f9ef9288b65" class="i field">tw</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#8374b8406d09f7d4" class="i method">Reset</a>();
+					<a href="#3c314f9ef9288b65" class="i field">tw</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7046272bdca6bb5a" class="i method">AddTree</a>(<a href="#071cdb6df537c80c" class="i field">iterator</a>);
+					<a href="#3c314f9ef9288b65" class="i field">tw</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#7451797570d7a695" class="i property">Filter</a> = <a href="../NGit.Treewalk.Filter/PathFilter.cs.html#8716e39fb575a81f" class="t t">PathFilter</a>.<a href="../NGit.Treewalk.Filter/PathFilter.cs.html#b150a697491aab23" class="i method">Create</a>(<span class="r20 r">path</span>);
+					<a href="#03cdca9d87781d82" class="i field">current</a> = <span class="r20 r">path</span>;
+					<b>if</b> (!<a href="#3c314f9ef9288b65" class="i field">tw</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#4b08ccec9813aa20" class="i method">Next</a>())
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#15a723847ffcc0c8" class="t constructor">FileNotFoundException</a>(<span class="r20 r">path</span>);
+					}
+					<a href="#81cadff304f18dcd" class="i field">ptr</a> = <a href="#3c314f9ef9288b65" class="i field">tw</a>.<a href="../NGit.Treewalk/TreeWalk.cs.html#89a61db84f3efb5e" class="i method">GetTree</a>&lt;<a href="../NGit.Treewalk/WorkingTreeIterator.cs.html#c8c8b1fc21f94969" class="t t">WorkingTreeIterator</a>&gt;(0);
+					<b>if</b> (<a href="#81cadff304f18dcd" class="i field">ptr</a> == <b>null</b>)
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#15a723847ffcc0c8" class="t constructor">FileNotFoundException</a>(<span class="r20 r">path</span>);
+					}
+				}
+			}
+		}
+
+		<b>private class</b> <a id="af6c9e5fe7d27fef" href="../R/af6c9e5fe7d27fef.html" target="n" data-glyph="4,1" class="t t">FileSource</a> : <a href="#01f540beecc5f454" class="t t">ContentSource</a>
+		{
+			<b>private readonly</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="91f3bcd101397df4" href="../R/91f3bcd101397df4.html" target="n" data-glyph="46,2" class="i field">root</a>;
+
+			<b>internal</b> <a id="4938d5ff62060253" href="../R/4938d5ff62060253.html" target="n" data-glyph="74,2" class="i constructor">FileSource</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r21 rd" class="r21 r">root</span>)
+			{
+				<a href="#af6c9e5fe7d27fef" class="k">this</a>.<a href="#91f3bcd101397df4" class="i field">root</a> = <span class="r21 r">root</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override long</b> <a id="7d2002ab7b906b4b" href="../R/7d2002ab7b906b4b.html" target="n" data-glyph="72,2" class="i method">Size</a>(<b>string</b> <span id="r22 rd" class="r22 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r23 rd" class="r23 r">id</span>)
+			{
+				<b>return</b> <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#91f3bcd101397df4" class="i field">root</a>, <span class="r22 r">path</span>).<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>();
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public override</b> <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="a62123dc2b030e5f" href="../R/a62123dc2b030e5f.html" target="n" data-glyph="72,2" class="i method">Open</a>(<b>string</b> <span id="r24 rd" class="r24 r">path</span>, <a href="../NGit/ObjectId.cs.html#96e3af3718f0610d" class="t t">ObjectId</a> <span id="r25 rd" class="r25 r">id</span>)
+			{
+				<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r26 rd" class="r26 r">p</span> = <b>new</b> <a href="/Sharpen/A.html#47b5b21ff9287dc0" class="t constructor">FilePath</a>(<a href="#91f3bcd101397df4" class="i field">root</a>, <span class="r24 r">path</span>);
+				<b>if</b> (!<span class="r26 r">p</span>.<a href="/Sharpen/A.html#5032aa11e3992b76" class="i method">IsFile</a>())
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#15a723847ffcc0c8" class="t constructor">FileNotFoundException</a>(<span class="r24 r">path</span>);
+				}
+				<b>return</b> <b>new</b> <a href="#b115979854b4ca36" class="t constructor">_ObjectLoader_238</a>(<span class="r26 r">p</span>);
+			}
+
+			<b>private sealed class</b> <a id="2abe9566975e01b2" href="../R/2abe9566975e01b2.html" target="n" data-glyph="4,2" class="t t">_ObjectLoader_238</a> : <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a>
+			{
+				<b>public</b> <a id="b115979854b4ca36" href="../R/b115979854b4ca36.html" target="n" data-glyph="72,3" class="i constructor">_ObjectLoader_238</a>(<a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <span id="r27 rd" class="r27 r">p</span>)
+				{
+					<a href="#2abe9566975e01b2" class="k">this</a>.<a href="#e5ea34e57c413b2e" class="i field">p</a> = <span class="r27 r">p</span>;
+				}
+
+				<b>public override long</b> <a id="36c1e0ae028433a8" href="../R/36c1e0ae028433a8.html" target="n" data-glyph="72,3" class="i method">GetSize</a>()
+				{
+					<b>return</b> <a href="#e5ea34e57c413b2e" class="i field">p</a>.<a href="/Sharpen/A.html#08fb59ce48135c14" class="i method">Length</a>();
+				}
+
+				<b>public override int</b> <a id="4d9052413af16254" href="../R/4d9052413af16254.html" target="n" data-glyph="72,3" class="i method">GetType</a>()
+				{
+					<b>return</b> <a href="../NGit/Constants.cs.html#71c965f28a6bcd51" class="t t">Constants</a>.<a href="../NGit/Constants.cs.html#d7f396ecaef3929b" class="i field">OBJ_BLOB</a>;
+				}
+
+				<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+				<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+				<b>public override</b> <a href="../NGit/ObjectStream.cs.html#8382d037187c2c47" class="t t">ObjectStream</a> <a id="dddc3a49f3a09725" href="../R/dddc3a49f3a09725.html" target="n" data-glyph="72,3" class="i method">OpenStream</a>()
+				{
+					<a href="/Sharpen/A.html#41a29015dc0506f0" class="t t">FileInputStream</a> <span id="r28 rd" class="r28 r">@in</span> = <b>new</b> <a href="/Sharpen/A.html#fbe94cc94976c1b1" class="t constructor">FileInputStream</a>(<a href="#e5ea34e57c413b2e" class="i field">p</a>);
+					<b>long</b> <span id="r29 rd" class="r29 r">sz</span> = <span class="r28 r">@in</span>.<a href="/Sharpen/A.html#aa5d70c9c1711234" class="i method">GetChannel</a>().<a href="/Sharpen/A.html#c9b93d65324aa3eb" class="i method">Size</a>();
+					<b>int</b> <span id="r30 rd" class="r30 r">type</span> = <a href="#2abe9566975e01b2" class="k">this</a>.<a href="#4d9052413af16254" class="i method">GetType</a>();
+					<a href="/Sharpen/A.html#bffc36d7ec51940f" class="t t">BufferedInputStream</a> <span id="r31 rd" class="r31 r">b</span> = <b>new</b> <a href="/Sharpen/A.html#409f029494ef096a" class="t constructor">BufferedInputStream</a>(<span class="r28 r">@in</span>);
+					<b>return</b> <b>new</b> <a href="../NGit/ObjectStream.cs.html#8382d037187c2c47" class="t t">ObjectStream</a>.<a href="../NGit/ObjectStream.cs.html#0d1b911e87c21a59" class="t constructor">Filter</a>(<span class="r30 r">type</span>, <span class="r29 r">sz</span>, <span class="r31 r">b</span>);
+				}
+
+				<b>public override bool</b> <a id="a9272bac3f428742" href="../R/a9272bac3f428742.html" target="n" data-glyph="72,3" class="i method">IsLarge</a>()
+				{
+					<b>return true</b>;
+				}
+
+				<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/LargeObjectException.cs.html#b54c3fbbaa6f8286" class="t t">LargeObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+				<b>public override byte</b>[] <a id="e6b5714fb0ba0f06" href="../R/e6b5714fb0ba0f06.html" target="n" data-glyph="72,3" class="i method">GetCachedBytes</a>()
+				{
+					<b>throw</b> <b>new</b> <a href="../NGit.Errors/LargeObjectException.cs.html#c86580e79dfbaa75" class="t constructor">LargeObjectException</a>();
+				}
+
+				<b>private readonly</b> <a href="/Sharpen/A.html#576a1e6f183e15dd" class="t t">FilePath</a> <a id="e5ea34e57c413b2e" href="../R/e5ea34e57c413b2e.html" target="n" data-glyph="46,3" class="i field">p</a>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">A pair of sources to access the old and new sides of a DiffEntry.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">A pair of sources to access the old and new sides of a DiffEntry.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>public sealed class</b> <a id="be15a30e291f823d" href="../R/be15a30e291f823d.html" target="n" data-glyph="0,1" class="t t">Pair</a>
+		{
+			<b>private readonly</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a> <a id="a7abbb168501c0d5" href="../R/a7abbb168501c0d5.html" target="n" data-glyph="46,2" class="i field">oldSource</a>;
+
+			<b>private readonly</b> <a href="#01f540beecc5f454" class="t t">ContentSource</a> <a id="beeeeb1bd1d17e84" href="../R/beeeeb1bd1d17e84.html" target="n" data-glyph="46,2" class="i field">newSource</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Construct a pair of sources.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Construct a pair of sources.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r32 r">oldSource</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">source to read the old side of a DiffEntry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">newSource</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">source to read the new side of a DiffEntry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<b>public</b> <a id="3bfdd77ab343d914" href="../R/3bfdd77ab343d914.html" target="n" data-glyph="72,2" class="i constructor">Pair</a>(<a href="#01f540beecc5f454" class="t t">ContentSource</a> <span id="r32 rd" class="r32 r">oldSource</span>, <a href="#01f540beecc5f454" class="t t">ContentSource</a> <span id="r33 rd" class="r33 r">newSource</span>)
+			{
+				<a href="#be15a30e291f823d" class="k">this</a>.<a href="#a7abbb168501c0d5" class="i field">oldSource</a> = <span class="r32 r">oldSource</span>;
+				<a href="#be15a30e291f823d" class="k">this</a>.<a href="#beeeeb1bd1d17e84" class="i field">newSource</a> = <span class="r33 r">newSource</span>;
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Determine the size of the object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Determine the size of the object.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r34 r">side</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">which side of the entry to read (OLD or NEW).</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">ent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the entry to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the size in bytes.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public long</b> <a id="27fe397e860924b8" href="../R/27fe397e860924b8.html" target="n" data-glyph="72,2" class="i method">Size</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a> <span id="r34 rd" class="r34 r">side</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r35 rd" class="r35 r">ent</span>)
+			{
+				<b>switch</b> (<span class="r34 r">side</span>)
+				{
+					<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#38f00091a91f0b33" class="i field">OLD</a>:
+					{
+						<b>return</b> <a href="#a7abbb168501c0d5" class="i field">oldSource</a>.<a href="#062d4d1950940ccc" class="i method">Size</a>(<span class="r35 r">ent</span>.<a href="DiffEntry.cs.html#0b9c4f7911a74c05" class="i field">oldPath</a>, <span class="r35 r">ent</span>.<a href="DiffEntry.cs.html#007119dd64e3133d" class="i field">oldId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>());
+					}
+
+					<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#a60d5923793294e6" class="i field">NEW</a>:
+					{
+						<b>return</b> <a href="#beeeeb1bd1d17e84" class="i field">newSource</a>.<a href="#062d4d1950940ccc" class="i method">Size</a>(<span class="r35 r">ent</span>.<a href="DiffEntry.cs.html#4a16b475fb9dbec1" class="i field">newPath</a>, <span class="r35 r">ent</span>.<a href="DiffEntry.cs.html#f19303f70c845c7f" class="i field">newId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>());
+					}
+
+					<b>default</b>:
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#71d200dcf0047f8b" class="t constructor">ArgumentException</a>();
+					}
+				}
+			}
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Open the object.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Open the object.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">side</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">which side of the entry to read (OLD or NEW).</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">ent</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the entry to examine.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> a loader that can supply the content of the file. The loader</span>
+			<span class="c">///</span><span class="c"> must be used before another loader can be obtained from this</span>
+			<span class="c">///</span><span class="c"> same source.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file cannot be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+			<b>public</b> <a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <a id="e388ef2f5ef92f16" href="../R/e388ef2f5ef92f16.html" target="n" data-glyph="72,2" class="i method">Open</a>(<a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a> <span id="r36 rd" class="r36 r">side</span>, <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a> <span id="r37 rd" class="r37 r">ent</span>)
+			{
+				<b>switch</b> (<span class="r36 r">side</span>)
+				{
+					<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#38f00091a91f0b33" class="i field">OLD</a>:
+					{
+						<b>return</b> <a href="#a7abbb168501c0d5" class="i field">oldSource</a>.<a href="#4f50a6a68a74c905" class="i method">Open</a>(<span class="r37 r">ent</span>.<a href="DiffEntry.cs.html#0b9c4f7911a74c05" class="i field">oldPath</a>, <span class="r37 r">ent</span>.<a href="DiffEntry.cs.html#007119dd64e3133d" class="i field">oldId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>());
+					}
+
+					<b>case</b> <a href="DiffEntry.cs.html#78ca7e0a475bf414" class="t t">DiffEntry</a>.<a href="DiffEntry.cs.html#4ccef35036b86b08" class="t t">Side</a>.<a href="DiffEntry.cs.html#a60d5923793294e6" class="i field">NEW</a>:
+					{
+						<b>return</b> <a href="#beeeeb1bd1d17e84" class="i field">newSource</a>.<a href="#4f50a6a68a74c905" class="i method">Open</a>(<span class="r37 r">ent</span>.<a href="DiffEntry.cs.html#4a16b475fb9dbec1" class="i field">newPath</a>, <span class="r37 r">ent</span>.<a href="DiffEntry.cs.html#f19303f70c845c7f" class="i field">newId</a>.<a href="../NGit/AbbreviatedObjectId.cs.html#6926fbfdea832229" class="i method">ToObjectId</a>());
+					}
+
+					<b>default</b>:
+					{
+						<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#71d200dcf0047f8b" class="t constructor">ArgumentException</a>();
+					}
+				}
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

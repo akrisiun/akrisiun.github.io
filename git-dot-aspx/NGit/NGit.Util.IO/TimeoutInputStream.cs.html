@@ -1,0 +1,175 @@
+﻿<!DOCTYPE html>
+<html><head><title>TimeoutInputStream.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(166);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Util.IO/TimeoutInputStream.cs" target="_top">NGit.Util.IO\TimeoutInputStream.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Internal</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">InputStream with a configurable timeout.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">InputStream with a configurable timeout.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="f85c4a6880b8b37c" href="../R/f85c4a6880b8b37c.html" target="n" data-glyph="0,0" class="t t">TimeoutInputStream</a> : <a href="/Sharpen/A.html#6e6728feff98183a" class="t t">FilterInputStream</a>
+	{
+		<b>private readonly</b> <a href="InterruptTimer.cs.html#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a> <a id="301e8d36b2243edd" href="../R/301e8d36b2243edd.html" target="n" data-glyph="46,1" class="i field">myTimer</a>;
+
+		<b>private int</b> <a id="e02e3f94d43fe850" href="../R/e02e3f94d43fe850.html" target="n" data-glyph="46,1" class="i field">timeout</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Wrap an input stream with a timeout on all read operations.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Wrap an input stream with a timeout on all read operations.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">src</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> base input stream (to read from). The stream must be</span>
+		<span class="c">///</span><span class="c"> interruptible (most socket streams are).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">timer</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">timer to manage the timeouts during reads.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="b52c006a245f0d98" href="../R/b52c006a245f0d98.html" target="n" data-glyph="72,1" class="i constructor">TimeoutInputStream</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r0 rd" class="r0 r">src</span>, <a href="InterruptTimer.cs.html#50c7b6b6cb0fa59e" class="t t">InterruptTimer</a> <span id="r1 rd" class="r1 r">timer</span>) : <a href="/Sharpen/A.html#20338ccef7e0d696" class="k">base</a>(<span class="r0 r">src</span>)
+		{
+			<a href="#301e8d36b2243edd" class="i field">myTimer</a> = <span class="r1 r">timer</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">number of milliseconds before aborting a read.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>public virtual int</b> <a id="00d1f7f93f2f4603" href="../R/00d1f7f93f2f4603.html" target="n" data-glyph="72,1" class="i method">GetTimeout</a>()
+		{
+			<b>return</b> <a href="#e02e3f94d43fe850" class="i field">timeout</a>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">millis</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number of milliseconds before aborting a read. Must be </span><span class="c">&amp;gt;</span><span class="c"> 0.</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public virtual void</b> <a id="6b4a4cfe3c3c422f" href="../R/6b4a4cfe3c3c422f.html" target="n" data-glyph="72,1" class="i method">SetTimeout</a>(<b>int</b> <span id="r2 rd" class="r2 r">millis</span>)
+		{
+			<b>if</b> (<span class="r2 r">millis</span> &lt; 0)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="/Sharpen/A.html#3e0180daae7cce22" class="t t">MessageFormat</a>.<a href="/Sharpen/A.html#098513126779efa0" class="i method">Format</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#08ae71e68a937bd3" class="i field">invalidTimeout</a>, <span class="i n">Sharpen</span>.<a href="/Sharpen/A.html#229d48bbca3d4b45" class="t t">Extensions</a>.<a href="/Sharpen/A.html#5690e9d8ca4114df" class="i method">ValueOf</a>
+					(<span class="r2 r">millis</span>)));
+			}
+			<a href="#e02e3f94d43fe850" class="i field">timeout</a> = <span class="r2 r">millis</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override int</b> <a id="43e4e6ae1d2557e0" href="../R/43e4e6ae1d2557e0.html" target="n" data-glyph="72,1" class="i method">Read</a>()
+		{
+			<b>try</b>
+			{
+				<a href="#d7c8ac0f3f5b695f" class="i method">BeginRead</a>();
+				<b>return</b> <a href="/Sharpen/A.html#6e6728feff98183a" class="k">base</a>.<a href="/Sharpen/A.html#81089baf9a4a1004" class="i method">Read</a>();
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#c832bfca8785698a" class="t t">ThreadInterruptedException</a>)
+			{
+				<b>throw</b> <a href="#e04b658eb8a986b3" class="i method">ReadTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#a00ce2ae32260c42" class="i method">EndRead</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override int</b> <a id="bd63e7ddef26b620" href="../R/bd63e7ddef26b620.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r3 rd" class="r3 r">buf</span>)
+		{
+			<b>return</b> <a href="#14593cca5c223973" class="i method">Read</a>(<span class="r3 r">buf</span>, 0, <span class="r3 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override int</b> <a id="14593cca5c223973" href="../R/14593cca5c223973.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r4 rd" class="r4 r">buf</span>, <b>int</b> <span id="r5 rd" class="r5 r">off</span>, <b>int</b> <span id="r6 rd" class="r6 r">cnt</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#d7c8ac0f3f5b695f" class="i method">BeginRead</a>();
+				<b>return</b> <a href="/Sharpen/A.html#6e6728feff98183a" class="k">base</a>.<a href="/Sharpen/A.html#8f47dbf976adf117" class="i method">Read</a>(<span class="r4 r">buf</span>, <span class="r5 r">off</span>, <span class="r6 r">cnt</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#c832bfca8785698a" class="t t">ThreadInterruptedException</a>)
+			{
+				<b>throw</b> <a href="#e04b658eb8a986b3" class="i method">ReadTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#a00ce2ae32260c42" class="i method">EndRead</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="2c9896e5840066a4" href="../R/2c9896e5840066a4.html" target="n" data-glyph="72,1" class="i method">Skip</a>(<b>long</b> <span id="r7 rd" class="r7 r">cnt</span>)
+		{
+			<b>try</b>
+			{
+				<a href="#d7c8ac0f3f5b695f" class="i method">BeginRead</a>();
+				<b>return</b> <a href="/Sharpen/A.html#6e6728feff98183a" class="k">base</a>.<a href="/Sharpen/A.html#d6a163f18754fb11" class="i method">Skip</a>(<span class="r7 r">cnt</span>);
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#c832bfca8785698a" class="t t">ThreadInterruptedException</a>)
+			{
+				<b>throw</b> <a href="#e04b658eb8a986b3" class="i method">ReadTimedOut</a>();
+			}
+			<b>finally</b>
+			{
+				<a href="#a00ce2ae32260c42" class="i method">EndRead</a>();
+			}
+		}
+
+		<b>private void</b> <a id="d7c8ac0f3f5b695f" href="../R/d7c8ac0f3f5b695f.html" target="n" data-glyph="76,1" class="i method">BeginRead</a>()
+		{
+			<a href="#301e8d36b2243edd" class="i field">myTimer</a>.<a href="InterruptTimer.cs.html#f5f4ef4ed7953a8a" class="i method">Begin</a>(<a href="#e02e3f94d43fe850" class="i field">timeout</a>);
+		}
+
+		<b>private void</b> <a id="a00ce2ae32260c42" href="../R/a00ce2ae32260c42.html" target="n" data-glyph="76,1" class="i method">EndRead</a>()
+		{
+			<a href="#301e8d36b2243edd" class="i field">myTimer</a>.<a href="InterruptTimer.cs.html#8e1259ea12c32586" class="i method">End</a>();
+		}
+
+		<b>private static</b> <a href="@0@mscorlib/A.html#c832bfca8785698a" class="t t">ThreadInterruptedException</a> <a id="e04b658eb8a986b3" href="../R/e04b658eb8a986b3.html" target="n" data-glyph="76,1" class="i method">ReadTimedOut</a>()
+		{
+			<b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#b7973048aa0b7a60" class="t constructor">ThreadInterruptedException</a>(<a href="../NGit.Internal/JGitText.cs.html#fefe8ca61d5ca061" class="t t">JGitText</a>.<a href="../NGit.Internal/JGitText.cs.html#bebeb4d881f868d0" class="i method">Get</a>().<a href="../NGit.Internal/JGitText.cs.html#325fd54183f7d585" class="i field">readTimedOut</a>);
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

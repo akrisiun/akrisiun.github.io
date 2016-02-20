@@ -1,0 +1,229 @@
+﻿<!DOCTYPE html>
+<html><head><title>ScheduledThreadPoolExecutor.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(220);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#Sharpen/Sharpen/ScheduledThreadPoolExecutor.cs" target="_top">Sharpen\ScheduledThreadPoolExecutor.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#Sharpen" target="_top">lib\NGit\Sharpen\Sharpen.csproj</a> (Sharpen)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i">ST</span> = <span class="i n">System</span>.<span class="i n">Threading</span>;
+
+<b>namespace</b> <span class="i n">Sharpen</span>
+{
+	<b>internal class</b> <a id="4af9f41a466c0c57" href="../R/4af9f41a466c0c57.html" target="n" data-glyph="2,0" class="t t">ScheduledThreadPoolExecutor</a>: <a href="ThreadPoolExecutor.cs.html#ceec47087afac80c" class="t t">ThreadPoolExecutor</a>
+	{
+		<b>bool</b> <a id="e0e97a39efe4480e" href="../R/e0e97a39efe4480e.html" target="n" data-glyph="46,1" class="i field">continueExistingPeriodicTasksAfterShutdownPolicy</a>;
+		<b>bool</b> <a id="9d960c89397541e2" href="../R/9d960c89397541e2.html" target="n" data-glyph="46,1" class="i field">executeExistingDelayedTasksAfterShutdownPolicy</a> = <b>true</b>;
+		
+		<b>class</b> <a id="68a70d776596c3d4" href="../R/68a70d776596c3d4.html" target="n" data-glyph="4,1" class="t t"><span id="d08748ff0601abb9">Task</span></a>&lt;<span id="r0 rd t" class="r0 r t">T</span>&gt;: <a href="Runnable.cs.html#f045ac791f6c522f" class="t t">Runnable</a>, <a href="Future.cs.html#65cc1a0fba37b273" class="t t">Future</a>&lt;<span class="r0 r t">T</span>&gt;, <a href="#b1bb11081c96612d" class="t t">IScheduledITask</a>
+		{
+			<a href="Thread.cs.html#13a16ee813b75f98" class="t t">Thread</a> <a id="c0b7d9720cbc1379" href="../R/c0b7d9720cbc1379.html" target="n" data-glyph="46,2" class="i field">thread</a>;
+			<b>bool</b> <a id="d010e8c40f99ea59" href="../R/d010e8c40f99ea59.html" target="n" data-glyph="46,2" class="i field">canceled</a>;
+			<b>bool</b> <a id="8b7999847de2daac" href="../R/8b7999847de2daac.html" target="n" data-glyph="46,2" class="i field">completed</a>;
+			<span class="i n">ST</span>.<a href="@0@mscorlib/A.html#797f9a2c1f6fe76f" class="t t">ManualResetEvent</a> <a id="a54972b66d81750a" href="../R/a54972b66d81750a.html" target="n" data-glyph="46,2" class="i field">doneEvent</a> = <b>new</b> <span class="i n">ST</span>.<a href="@0@mscorlib/A.html#3f1e8fec681dd775" class="t constructor">ManualResetEvent</a> (<b>false</b>);
+			
+			<b>public</b> <a href="Runnable.cs.html#f045ac791f6c522f" class="t t">Runnable</a> <a id="4b7acfb582d5c43f" href="../R/4b7acfb582d5c43f.html" target="n" data-glyph="42,2" class="i field">Action</a>;
+			<b>public</b> <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <a id="769733f46aec9b58" href="../R/769733f46aec9b58.html" target="n" data-glyph="102,2" class="i property">DueTime</a> { <b>get</b>; <b>set</b>; }
+			
+			<b>public</b> <a href="#4af9f41a466c0c57" class="t t">ScheduledThreadPoolExecutor</a> <a id="4b4967d4a5af5ec3" href="../R/4b4967d4a5af5ec3.html" target="n" data-glyph="102,2" class="i property">Executor</a> { <b>get</b>; <b>set</b>; }
+			
+			<b>public object</b> <a id="954bebc49755ef55" href="../R/954bebc49755ef55.html" target="n" data-glyph="102,2" class="i property">Owner</a> {
+				<b>get</b> { <b>return</b> <a href="#4b4967d4a5af5ec3" class="i property">Executor</a>; }
+			}
+			
+			<b>public void</b> <a id="eeeb19fee9736d1e" href="../R/eeeb19fee9736d1e.html" target="n" data-glyph="72,2" class="i method">Start</a> ()
+			{
+				<b>lock</b> (<a href="#68a70d776596c3d4" class="k">this</a>) {
+					<b>if</b> (<a href="#d010e8c40f99ea59" class="i field">canceled</a>)
+						<b>return</b>;
+					<a href="#4b4967d4a5af5ec3" class="i property">Executor</a>.<a href="ThreadPoolExecutor.cs.html#07c42d328b9779bc" class="i method">InternalExecute</a> (<a href="#68a70d776596c3d4" class="k">this</a>, <b>false</b>);
+				}
+			}
+			
+			<b>public void</b> <a id="edcc83cd618be31e" href="../R/edcc83cd618be31e.html" target="n" data-glyph="72,2" class="i method">Run</a> ()
+			{
+				<b>lock</b> (<a href="#68a70d776596c3d4" class="k">this</a>) {
+					<a href="#c0b7d9720cbc1379" class="i field">thread</a> = <a href="Thread.cs.html#13a16ee813b75f98" class="t t">Thread</a>.<a href="Thread.cs.html#9c18f268284a4c54" class="i method">CurrentThread</a>();
+				}
+				<b>try</b> {
+					<b>if</b> (!<a href="#d010e8c40f99ea59" class="i field">canceled</a>)
+						<a href="#4b7acfb582d5c43f" class="i field">Action</a>.<a href="Runnable.cs.html#98cc63d1270bd392" class="i method">Run</a> ();
+				} <b>finally</b> {
+					<b>lock</b> (<a href="#68a70d776596c3d4" class="k">this</a>) {
+						<a href="#c0b7d9720cbc1379" class="i field">thread</a> = <b>null</b>;
+						<a href="#a54972b66d81750a" class="i field">doneEvent</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+						<a href="#8b7999847de2daac" class="i field">completed</a> = <b>true</b>;
+					}
+				}
+			}
+			
+			<b>public bool</b> <a id="ff142f2c490e9a2c" href="../R/ff142f2c490e9a2c.html" target="n" data-glyph="72,2" class="i method">Cancel</a> (<b>bool</b> <span id="r1 rd" class="r1 r">mayInterruptIfRunning</span>)
+			{
+				<b>lock</b> (<a href="#68a70d776596c3d4" class="k">this</a>) {
+					<b>if</b> (<a href="#d010e8c40f99ea59" class="i field">canceled</a> || <a href="#8b7999847de2daac" class="i field">completed</a>)
+						<b>return false</b>;
+					<a href="#d010e8c40f99ea59" class="i field">canceled</a> = <a href="#8b7999847de2daac" class="i field">completed</a> = <b>true</b>;
+					<b>if</b> (<span class="r1 r">mayInterruptIfRunning</span> &amp;&amp; <a href="#c0b7d9720cbc1379" class="i field">thread</a> != <b>null</b>) {
+						<b>try</b> {
+							<a href="#c0b7d9720cbc1379" class="i field">thread</a>.<a href="Thread.cs.html#54d4cebd40872cb8" class="i method">Abort</a> ();
+						} <b>catch</b> {}
+						<a href="#c0b7d9720cbc1379" class="i field">thread</a> = <b>null</b>;
+					}
+					<a href="#a54972b66d81750a" class="i field">doneEvent</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+					<b>return true</b>;
+				}
+			}
+			
+			<b>public</b> <span class="r0 r t">T</span> <a id="b1e0efaa09c18f0e" href="../R/b1e0efaa09c18f0e.html" target="n" data-glyph="72,2" class="i method">Get</a> ()
+			{
+				<a href="#a54972b66d81750a" class="i field">doneEvent</a>.<a href="@0@mscorlib/A.html#8f366147dd3f5f63" class="i method">WaitOne</a> ();
+				<b>return default</b>(<span class="r0 r t">T</span>);
+			}
+		}
+		
+		<b>public</b> <a id="b6d1652992efee33" href="../R/b6d1652992efee33.html" target="n" data-glyph="72,1" class="i constructor">ScheduledThreadPoolExecutor</a> (<b>int</b> <span id="r2 rd" class="r2 r">corePoolSize</span>, <a href="ThreadFactory.cs.html#826905dece848729" class="t t">ThreadFactory</a> <span id="r3 rd" class="r3 r">factory</span>): <a href="ThreadPoolExecutor.cs.html#56b9e6f639b0a831" class="k">base</a> (<span class="r2 r">corePoolSize</span>, <span class="r3 r">factory</span>)
+		{
+		}
+		
+		<b>public override</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Runnable.cs.html#f045ac791f6c522f" class="t t">Runnable</a>&gt; <a id="431b4adcd583be1c" href="../R/431b4adcd583be1c.html" target="n" data-glyph="72,1" class="i method">ShutdownNow</a> ()
+		{
+			<b>lock</b> (<a href="#4af9f41a466c0c57" class="k">this</a>) {
+				<a href="#6df4d4c176422609" class="t t">Scheduler</a>.<a href="#84b482b515909245" class="i field">Instance</a>.<a href="#fe9495f2234ff259" class="i method">Shutdown</a> (<a href="#4af9f41a466c0c57" class="k">this</a>, <b>false</b>, <b>false</b>);
+				<b>return</b> <a href="ThreadPoolExecutor.cs.html#ceec47087afac80c" class="k">base</a>.<a href="ThreadPoolExecutor.cs.html#b65a12c5fb7500b0" class="i method">ShutdownNow</a> ();
+			}
+		}
+		
+		<b>public override void</b> <a id="f7339b19609d64cf" href="../R/f7339b19609d64cf.html" target="n" data-glyph="72,1" class="i method">Shutdown</a> ()
+		{
+			<b>lock</b> (<a href="#4af9f41a466c0c57" class="k">this</a>) {
+				<b>if</b> (!<a href="#e0e97a39efe4480e" class="i field">continueExistingPeriodicTasksAfterShutdownPolicy</a> || !<a href="#9d960c89397541e2" class="i field">executeExistingDelayedTasksAfterShutdownPolicy</a>)
+					<a href="#6df4d4c176422609" class="t t">Scheduler</a>.<a href="#84b482b515909245" class="i field">Instance</a>.<a href="#fe9495f2234ff259" class="i method">Shutdown</a> (<a href="#4af9f41a466c0c57" class="k">this</a>, <a href="#e0e97a39efe4480e" class="i field">continueExistingPeriodicTasksAfterShutdownPolicy</a>, <a href="#9d960c89397541e2" class="i field">executeExistingDelayedTasksAfterShutdownPolicy</a>);
+				<a href="ThreadPoolExecutor.cs.html#ceec47087afac80c" class="k">base</a>.<a href="ThreadPoolExecutor.cs.html#167a4ea76ca1aa43" class="i method">Shutdown</a> ();
+			}
+		}
+		
+		<b>public override bool</b> <a id="5cce4c946e79498c" href="../R/5cce4c946e79498c.html" target="n" data-glyph="72,1" class="i method">IsTerminated</a> ()
+		{
+			<b>return</b> <a href="ThreadPoolExecutor.cs.html#ceec47087afac80c" class="k">base</a>.<a href="ThreadPoolExecutor.cs.html#c3dd49e094e7bd16" class="i method">IsTerminated</a> () &amp;&amp; !<a href="#6df4d4c176422609" class="t t">Scheduler</a>.<a href="#84b482b515909245" class="i field">Instance</a>.<a href="#eb6754b0ada2d581" class="i method">HasTasks</a> (<a href="#4af9f41a466c0c57" class="k">this</a>);
+		}
+		
+		<b>public void</b> <a id="d382c5c373167514" href="../R/d382c5c373167514.html" target="n" data-glyph="72,1" class="i method">SetContinueExistingPeriodicTasksAfterShutdownPolicy</a> (<b>bool</b> <span id="r4 rd" class="r4 r">cont</span>)
+		{
+			<a href="#e0e97a39efe4480e" class="i field">continueExistingPeriodicTasksAfterShutdownPolicy</a> = <span class="r4 r">cont</span>;
+		}
+		
+		<b>public void</b> <a id="1f36a23007be5e8b" href="../R/1f36a23007be5e8b.html" target="n" data-glyph="72,1" class="i method">SetExecuteExistingDelayedTasksAfterShutdownPolicy</a> (<b>bool</b> <span id="r5 rd" class="r5 r">exec</span>)
+		{
+			<a href="#9d960c89397541e2" class="i field">executeExistingDelayedTasksAfterShutdownPolicy</a> = <span class="r5 r">exec</span>;
+		}
+		
+		<b>public</b> <a href="Future.cs.html#65cc1a0fba37b273" class="t t">Future</a>&lt;<b>object</b>&gt; <a id="bd87c13525330b8b" href="../R/bd87c13525330b8b.html" target="n" data-glyph="72,1" class="i method">Schedule</a> (<a href="Runnable.cs.html#f045ac791f6c522f" class="t t">Runnable</a> <span id="r6 rd" class="r6 r">r</span>, <b>long</b> <span id="r7 rd" class="r7 r">delay</span>, <a href="TimeUnit.cs.html#133e16eab76e8aea" class="t t">TimeUnit</a> <span id="r8 rd" class="r8 r">unit</span>)
+		{
+			<b>return</b> <a href="#b17369c039cd8518" class="i method">Schedule</a>&lt;<b>object</b>&gt; (<span class="r6 r">r</span>, <span class="r7 r">delay</span>, <span class="r8 r">unit</span>);
+		}
+		
+		<b>public</b> <a href="Future.cs.html#65cc1a0fba37b273" class="t t">Future</a>&lt;<span class="r9 r t">T</span>&gt; <a id="b17369c039cd8518" href="../R/b17369c039cd8518.html" target="n" data-glyph="72,1" class="i method">Schedule</a>&lt;<span id="r9 rd t" class="r9 r t">T</span>&gt; (<a href="Runnable.cs.html#f045ac791f6c522f" class="t t">Runnable</a> <span id="r10 rd" class="r10 r">r</span>, <b>long</b> <span id="r11 rd" class="r11 r">delay</span>, <a href="TimeUnit.cs.html#133e16eab76e8aea" class="t t">TimeUnit</a> <span id="r12 rd" class="r12 r">unit</span>)
+		{
+			<a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <span id="r13 rd" class="r13 r">now</span> = <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>;
+			<b>lock</b> (<a href="#4af9f41a466c0c57" class="k">this</a>) {
+				<b>if</b> (<a href="ThreadPoolExecutor.cs.html#3c711ec30059d8cd" class="i method">IsShutdown</a> ())
+					<b>return null</b>;
+				<a href="#68a70d776596c3d4" class="t t">Task</a>&lt;<span class="r9 r t">T</span>&gt; <span id="r14 rd" class="r14 r">t</span> = <b>new</b> <a href="#68a70d776596c3d4" class="t constructor">Task</a>&lt;<span class="r9 r t">T</span>&gt; () {
+					<a href="#4b4967d4a5af5ec3" class="i property">Executor</a> = <a href="#4af9f41a466c0c57" class="k">this</a>,
+					<a href="#4b7acfb582d5c43f" class="i field">Action</a> = <span class="r10 r">r</span>,
+					<a href="#769733f46aec9b58" class="i property">DueTime</a> = <span class="r13 r">now</span> + <a href="@0@mscorlib/A.html#865ef7b89f41b632" class="t t">TimeSpan</a>.<a href="@0@mscorlib/A.html#668d91d771bce54b" class="i method">FromMilliseconds</a> (<span class="r12 r">unit</span>.<a href="TimeUnit.cs.html#10a9bebab3e9bec3" class="i method">Convert</a> (<span class="r11 r">delay</span>, <a href="TimeUnit.cs.html#133e16eab76e8aea" class="t t">TimeUnit</a>.<a href="TimeUnit.cs.html#861a58be3521111a" class="i field">MILLISECONDS</a>))
+				};
+				<a href="#6df4d4c176422609" class="t t">Scheduler</a>.<a href="#84b482b515909245" class="i field">Instance</a>.<a href="#954889880e9508cd" class="i method">AddTask</a> (<span class="r14 r">t</span>);
+				<b>return</b> <span class="r14 r">t</span>;
+			}
+		}
+	}
+	
+	<b>interface</b> <a id="b1bb11081c96612d" href="../R/b1bb11081c96612d.html" target="n" data-glyph="50,0" class="t t">IScheduledITask</a>
+	{
+		<b>void</b> <a id="9efcc32cf48fffbd" href="../R/9efcc32cf48fffbd.html" target="n" data-glyph="72,1" class="i method">Start</a> ();
+		<a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <a id="81873289d47d3116" href="../R/81873289d47d3116.html" target="n" data-glyph="102,1" class="i property">DueTime</a> { <b>get</b>; <b>set</b>; }
+		<b>object</b> <a id="e79fad7baa1b6699" href="../R/e79fad7baa1b6699.html" target="n" data-glyph="102,1" class="i property">Owner</a> { <b>get</b>; }
+		<b>bool</b> <a id="4052293ccc9fdfa0" href="../R/4052293ccc9fdfa0.html" target="n" data-glyph="72,1" class="i method">Cancel</a> (<b>bool</b> <span id="r15 rd" class="r15 r">mayInterruptIfRunning</span>);
+	}
+		
+	<b>class</b> <a id="6df4d4c176422609" href="../R/6df4d4c176422609.html" target="n" data-glyph="2,0" class="t t"><span id="b6c8eee6b2e2daf5">Scheduler</span></a>
+	{
+		<b>internal static</b> <a href="#6df4d4c176422609" class="t t">Scheduler</a> <a id="84b482b515909245" href="../R/84b482b515909245.html" target="n" data-glyph="44,1" class="i field">Instance</a> = <b>new</b> <a href="#6df4d4c176422609" class="t constructor">Scheduler</a> ();
+		
+		<a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#b1bb11081c96612d" class="t t">IScheduledITask</a>&gt; <a id="8200db415432aa8c" href="../R/8200db415432aa8c.html" target="n" data-glyph="46,1" class="i field">tasks</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="#b1bb11081c96612d" class="t t">IScheduledITask</a>&gt; ();
+		<span class="i n">ST</span>.<a href="@0@mscorlib/A.html#3980e012bae82e96" class="t t">Thread</a> <a id="7c59ef34fa68febb" href="../R/7c59ef34fa68febb.html" target="n" data-glyph="46,1" class="i field">scheduler</a>;
+		<span class="i n">ST</span>.<a href="@0@mscorlib/A.html#b5d828778d2b9227" class="t t">AutoResetEvent</a> <a id="d8e049bef8d7bd1d" href="../R/d8e049bef8d7bd1d.html" target="n" data-glyph="46,1" class="i field">newTask</a> = <b>new</b> <span class="i n">ST</span>.<a href="@0@mscorlib/A.html#3fceb706cf6c61c6" class="t constructor">AutoResetEvent</a> (<b>false</b>);
+		
+		<b>public void</b> <a id="fe9495f2234ff259" href="../R/fe9495f2234ff259.html" target="n" data-glyph="72,1" class="i method">Shutdown</a> (<b>object</b> <span id="r16 rd" class="r16 r">owner</span>, <b>bool</b> <span id="r17 rd" class="r17 r">continueExistingPeriodicTasks</span>, <b>bool</b> <span id="r18 rd" class="r18 r">executeExistingDelayedTasks</span>)
+		{
+			<b>if</b> (!<span class="r18 r">executeExistingDelayedTasks</span>) {
+				<b>lock</b> (<a href="#8200db415432aa8c" class="i field">tasks</a>) {
+					<b>for</b> (<b>int</b> <span id="r19 rd" class="r19 r">n</span>=0; <span class="r19 r">n</span>&lt;<a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r19 r">n</span>++) {
+						<a href="#b1bb11081c96612d" class="t t">IScheduledITask</a> <span id="r20 rd" class="r20 r">t</span> = <a href="#8200db415432aa8c" class="i field">tasks</a> [<span class="r19 r">n</span>];
+						<b>if</b> (<span class="r20 r">t</span>.<a href="#e79fad7baa1b6699" class="i property">Owner</a> == <span class="r16 r">owner</span>) {
+							<a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#3d46113cc199059a" class="i method">RemoveAt</a> (<span class="r19 r">n</span>);
+							<span class="r19 r">n</span>--;
+						}
+					}
+					<a href="#d8e049bef8d7bd1d" class="i field">newTask</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+				}
+			}
+		}
+		
+		<b>public void</b> <a id="954889880e9508cd" href="../R/954889880e9508cd.html" target="n" data-glyph="72,1" class="i method">AddTask</a> (<a href="#b1bb11081c96612d" class="t t">IScheduledITask</a> <span id="r21 rd" class="r21 r">t</span>)
+		{
+			<b>lock</b> (<a href="#8200db415432aa8c" class="i field">tasks</a>) {
+				<b>int</b> <span id="r22 rd" class="r22 r">n</span>;
+				<b>for</b> (<span class="r22 r">n</span>=0; <span class="r22 r">n</span>&lt;<a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>; <span class="r22 r">n</span>++) {
+					<b>if</b> (<span class="r21 r">t</span>.<a href="#81873289d47d3116" class="i property">DueTime</a> &lt; <a href="#8200db415432aa8c" class="i field">tasks</a> [<span class="r22 r">n</span>].<a href="#81873289d47d3116" class="i property">DueTime</a>)
+						<b>break</b>;
+				}
+				<a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#49c519bce0cdbd82" class="i method">Insert</a> (<span class="r22 r">n</span>, <span class="r21 r">t</span>);
+				<b>if</b> (<span class="r22 r">n</span> == 0)
+					<a href="#d8e049bef8d7bd1d" class="i field">newTask</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a> ();
+				
+				<b>if</b> (<a href="#7c59ef34fa68febb" class="i field">scheduler</a> == <b>null</b>) {
+					<a href="#7c59ef34fa68febb" class="i field">scheduler</a> = <b>new</b> <span class="i n">ST</span>.<a href="@0@mscorlib/A.html#76f340c84df6da8d" class="t constructor">Thread</a> (<a href="#5e8db84462de1807" class="i method">SchedulerThread</a>);
+					<a href="#7c59ef34fa68febb" class="i field">scheduler</a>.<a href="@0@mscorlib/A.html#babbe0201454caa0" class="i property">IsBackground</a> = <b>true</b>;
+					<a href="#7c59ef34fa68febb" class="i field">scheduler</a>.<a href="@0@mscorlib/A.html#cd2144b8dd6f4373" class="i method">Start</a> ();
+				}
+			}
+		}
+		
+		<b>public bool</b> <a id="eb6754b0ada2d581" href="../R/eb6754b0ada2d581.html" target="n" data-glyph="72,1" class="i method">HasTasks</a> (<b>object</b> <span id="r23 rd" class="r23 r">owner</span>)
+		{
+			<b>lock</b> (<a href="#8200db415432aa8c" class="i field">tasks</a>) {
+				<b>return</b> <a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@System.Core/A.html#6a1af7c3d17845e3" class="i method">Any</a> (<span id="r24 rd" class="r24 r">t</span> =&gt; <span class="r24 r">t</span>.<a href="#e79fad7baa1b6699" class="i property">Owner</a> == <span class="r23 r">owner</span>);
+			}
+		}
+		
+		<b>void</b> <a id="5e8db84462de1807" href="../R/5e8db84462de1807.html" target="n" data-glyph="76,1" class="i method">SchedulerThread</a> ()
+		{
+			<b>int</b> <span id="r25 rd" class="r25 r">nextWait</span> = <span class="i n">ST</span>.<a href="@0@mscorlib/A.html#6b53654d3452a8df" class="t t">Timeout</a>.<a href="@0@mscorlib/A.html#17ac04506b89ddd8" class="i field">Infinite</a>;
+			<b>while</b> (<b>true</b>) {
+				<b>if</b> (<span class="r25 r">nextWait</span> != <span class="i n">ST</span>.<a href="@0@mscorlib/A.html#6b53654d3452a8df" class="t t">Timeout</a>.<a href="@0@mscorlib/A.html#17ac04506b89ddd8" class="i field">Infinite</a>)
+					<span class="r25 r">nextWait</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#80ff956e9ca8e414" class="i method">Max</a> (0, <span class="r25 r">nextWait</span>);
+				<a href="#d8e049bef8d7bd1d" class="i field">newTask</a>.<a href="@0@mscorlib/A.html#4b231a1c8efbe5a7" class="i method">WaitOne</a> (<span class="r25 r">nextWait</span>);
+				<b>lock</b> (<a href="#8200db415432aa8c" class="i field">tasks</a>) {
+					<a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a> <span id="r26 rd" class="r26 r">now</span> = <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>;
+					<b>int</b> <span id="r27 rd" class="r27 r">n</span>;
+					<b>for</b> (<span class="r27 r">n</span>=0; <span class="r27 r">n</span> &lt; <a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> &amp;&amp; <a href="#8200db415432aa8c" class="i field">tasks</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r27 r">n</span>].<a href="#81873289d47d3116" class="i property">DueTime</a> &lt;= <span class="r26 r">now</span>; <span class="r27 r">n</span>++) {
+						<a href="#8200db415432aa8c" class="i field">tasks</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r27 r">n</span>].<a href="#9efcc32cf48fffbd" class="i method">Start</a> ();
+						<a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#3d46113cc199059a" class="i method">RemoveAt</a> (<span class="r27 r">n</span>);
+						<span class="r27 r">n</span>--;
+					}
+					<b>if</b> (<span class="r27 r">n</span> &lt; <a href="#8200db415432aa8c" class="i field">tasks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>)
+						<span class="r25 r">nextWait</span> = (<b>int</b>) <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#1841a5ce24ed9fb3" class="i method">Ceiling</a> ((<a href="#8200db415432aa8c" class="i field">tasks</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><span class="r27 r">n</span>].<a href="#81873289d47d3116" class="i property">DueTime</a> - <a href="@0@mscorlib/A.html#df6b1eba7461813b" class="t t">DateTime</a>.<a href="@0@mscorlib/A.html#1cd5dd408a32124f" class="i property">Now</a>).<a href="@0@mscorlib/A.html#0001a4a9e0a9b848" class="i property">TotalMilliseconds</a>);
+					<b>else</b>
+						<span class="r25 r">nextWait</span> = <span class="i n">ST</span>.<a href="@0@mscorlib/A.html#6b53654d3452a8df" class="t t">Timeout</a>.<a href="@0@mscorlib/A.html#17ac04506b89ddd8" class="i field">Infinite</a>;
+				}
+			}
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

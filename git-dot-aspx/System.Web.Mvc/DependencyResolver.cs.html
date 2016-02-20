@@ -1,0 +1,228 @@
+﻿<!DOCTYPE html>
+<html><head><title>DependencyResolver.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(219);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#System.Web.Mvc/DependencyResolver.cs" target="_top">DependencyResolver.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#System.Web.Mvc" target="_top">..\Mvc\src\System.Web.Mvc\System.Web.Mvc.csproj</a> (System.Web.Mvc)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.</span>
+ 
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Concurrent</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>.<span class="i n">CodeAnalysis</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Globalization</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Linq</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Reflection</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>.<span class="i n">Properties</span>;
+ 
+<b>namespace</b> <span class="i n">System</span>.<span class="i n">Web</span>.<span class="i n">Mvc</span>
+{
+    <b>public class</b> <a id="f7f1e1ffe6656fd3" href="R/f7f1e1ffe6656fd3.html" target="n" data-glyph="0,0" class="t t">DependencyResolver</a>
+    {
+        <b>private static</b> <a href="#f7f1e1ffe6656fd3" class="t t">DependencyResolver</a> <a id="d3536d321a44b648" href="R/d3536d321a44b648.html" target="n" data-glyph="46,1" class="i field">_instance</a> = <b>new</b> <a href="#b418da1d4549c936" class="t constructor">DependencyResolver</a>();
+ 
+        <b>private</b> <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <a id="2789b19c56e8504a" href="R/2789b19c56e8504a.html" target="n" data-glyph="46,1" class="i field">_current</a>;
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Cache should always be a new CacheDependencyResolver(_current).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="#f52fdf899b791f60" class="t t">CacheDependencyResolver</a> <a id="50ec9ab1e1f9e1b3" href="R/50ec9ab1e1f9e1b3.html" target="n" data-glyph="46,1" class="i field">_currentCache</a>;
+ 
+        <b>public</b> <a id="b418da1d4549c936" href="R/b418da1d4549c936.html" target="n" data-glyph="72,1" class="i constructor">DependencyResolver</a>()
+        {
+            <a href="#b295e6b7f881be9a" class="i method">InnerSetResolver</a>(<b>new</b> <a href="#e1d31f6da1eb4c18" class="t constructor">DefaultDependencyResolver</a>());
+        }
+ 
+        <b>public static</b> <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <a id="8fc55f46700cf2a9" href="R/8fc55f46700cf2a9.html" target="n" data-glyph="102,1" class="i property">Current</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#d3536d321a44b648" class="i field">_instance</a>.<a href="#744c061b55d74694" class="i property">InnerCurrent</a>; }
+        }
+ 
+        <b>internal static</b> <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <a id="f788034590d8c485" href="R/f788034590d8c485.html" target="n" data-glyph="104,1" class="i property">CurrentCache</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#d3536d321a44b648" class="i field">_instance</a>.<a href="#16e63f62554d445b" class="i property">InnerCurrentCache</a>; }
+        }
+ 
+        <b>public</b> <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <a id="744c061b55d74694" href="R/744c061b55d74694.html" target="n" data-glyph="102,1" class="i property">InnerCurrent</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#2789b19c56e8504a" class="i field">_current</a>; }
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Provides caching over results returned by Current.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>internal</b> <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <a id="16e63f62554d445b" href="R/16e63f62554d445b.html" target="n" data-glyph="104,1" class="i property">InnerCurrentCache</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#50ec9ab1e1f9e1b3" class="i field">_currentCache</a>; }
+        }
+ 
+        <b>public static void</b> <a id="9fb21492d7b7fcfa" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetResolver</a>(<a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <span id="r0 rd" class="r0 r">resolver</span>)
+        {
+            <a href="#d3536d321a44b648" class="i field">_instance</a>.<a href="#b295e6b7f881be9a" class="i method">InnerSetResolver</a>(<span class="r0 r">resolver</span>);
+        }
+ 
+        <b>public static void</b> <a id="15d23a24a7bdf605" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetResolver</a>(<b>object</b> <span id="r1 rd" class="r1 r">commonServiceLocator</span>)
+        {
+            <a href="#d3536d321a44b648" class="i field">_instance</a>.<a href="#32fc26128390c8bb" class="i method">InnerSetResolver</a>(<span class="r1 r">commonServiceLocator</span>);
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1006:DoNotNestGenericTypesInMemberSignatures&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is an appropriate nesting of generic types.&quot;</span>)]
+        <b>public static void</b> <a id="d596136cdb4ace1e" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">SetResolver</a>(<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt; <span id="r2 rd" class="r2 r">getService</span>, <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt; <span id="r3 rd" class="r3 r">getServices</span>)
+        {
+            <a href="#d3536d321a44b648" class="i field">_instance</a>.<a href="#daf31a84938b517e" class="i method">InnerSetResolver</a>(<span class="r2 r">getService</span>, <span class="r3 r">getServices</span>);
+        }
+ 
+        <b>public void</b> <a id="b295e6b7f881be9a" href="R/b295e6b7f881be9a.html" target="n" data-glyph="72,1" class="i method">InnerSetResolver</a>(<a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <span id="r4 rd" class="r4 r">resolver</span>)
+        {
+            <b>if</b> (<span class="r4 r">resolver</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;resolver&quot;</span>);
+            }
+ 
+            <a href="#2789b19c56e8504a" class="i field">_current</a> = <span class="r4 r">resolver</span>;
+            <a href="#50ec9ab1e1f9e1b3" class="i field">_currentCache</a> = <b>new</b> <a href="#2951f22609f320eb" class="t constructor">CacheDependencyResolver</a>(<a href="#2789b19c56e8504a" class="i field">_current</a>);
+        }
+ 
+        <b>public void</b> <a id="32fc26128390c8bb" href="R/32fc26128390c8bb.html" target="n" data-glyph="72,1" class="i method">InnerSetResolver</a>(<b>object</b> <span id="r5 rd" class="r5 r">commonServiceLocator</span>)
+        {
+            <b>if</b> (<span class="r5 r">commonServiceLocator</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;commonServiceLocator&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r6 rd" class="r6 r">locatorType</span> = <span class="r5 r">commonServiceLocator</span>.<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>();
+            <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r7 rd" class="r7 r">getInstance</span> = <span class="r6 r">locatorType</span>.<a href="@0@mscorlib/A.html#d43a8d0bb16a0b39" class="i method">GetMethod</a>(<span class="s">&quot;GetInstance&quot;</span>, <b>new</b>[] { <b>typeof</b>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>) });
+            <a href="@0@mscorlib/A.html#382d90b1fa682bac" class="t t">MethodInfo</a> <span id="r8 rd" class="r8 r">getInstances</span> = <span class="r6 r">locatorType</span>.<a href="@0@mscorlib/A.html#d43a8d0bb16a0b39" class="i method">GetMethod</a>(<span class="s">&quot;GetAllInstances&quot;</span>, <b>new</b>[] { <b>typeof</b>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>) });
+ 
+            <b>if</b> (<span class="r7 r">getInstance</span> == <b>null</b> ||
+                <span class="r7 r">getInstance</span>.<a href="@0@mscorlib/A.html#5be6c92e98bc4044" class="i property">ReturnType</a> != <b>typeof</b>(<b>object</b>) ||
+                <span class="r8 r">getInstances</span> == <b>null</b> ||
+                <span class="r8 r">getInstances</span>.<a href="@0@mscorlib/A.html#5be6c92e98bc4044" class="i property">ReturnType</a> != <b>typeof</b>(<a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;))
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#4b20cd3790b6426a" class="t constructor">ArgumentException</a>(
+                    <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#691a34e179b91fdb" class="i method">Format</a>(
+                        <a href="@0@mscorlib/A.html#e319c6636909012f" class="t t">CultureInfo</a>.<a href="@0@mscorlib/A.html#1f5907384ac6bb55" class="i property">CurrentCulture</a>,
+                        <a href="Properties/MvcResources.Designer.cs.html#9b6f1e9cbe67d146" class="t t">MvcResources</a>.<a href="Properties/MvcResources.Designer.cs.html#210aad12048cfddc" class="i property">DependencyResolver_DoesNotImplementICommonServiceLocator</a>,
+                        <span class="r6 r">locatorType</span>.<a href="@0@mscorlib/A.html#976443bb39dc37cd" class="i property">FullName</a>),
+                    <span class="s">&quot;commonServiceLocator&quot;</span>);
+            }
+ 
+            <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="k">var</a> <span id="r9 rd" class="r9 r">getService</span> = (<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt;)<a href="@0@mscorlib/A.html#0dd8585ba1833ad7" class="t t">Delegate</a>.<a href="@0@mscorlib/A.html#c3afe130d316789f" class="i method">CreateDelegate</a>(<b>typeof</b>(<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt;), <span class="r5 r">commonServiceLocator</span>, <span class="r7 r">getInstance</span>);
+            <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="k">var</a> <span id="r10 rd" class="r10 r">getServices</span> = (<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt;)<a href="@0@mscorlib/A.html#0dd8585ba1833ad7" class="t t">Delegate</a>.<a href="@0@mscorlib/A.html#c3afe130d316789f" class="i method">CreateDelegate</a>(<b>typeof</b>(<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt;), <span class="r5 r">commonServiceLocator</span>, <span class="r8 r">getInstances</span>);
+ 
+            <a href="#b295e6b7f881be9a" class="i method">InnerSetResolver</a>(<b>new</b> <a href="#333c4a2893e2b1ae" class="t constructor">DelegateBasedDependencyResolver</a>(<span class="r9 r">getService</span>, <span class="r10 r">getServices</span>));
+        }
+ 
+        [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1006:DoNotNestGenericTypesInMemberSignatures&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This is an appropriate nesting of generic types.&quot;</span>)]
+        <b>public void</b> <a id="daf31a84938b517e" href="R/daf31a84938b517e.html" target="n" data-glyph="72,1" class="i method">InnerSetResolver</a>(<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt; <span id="r11 rd" class="r11 r">getService</span>, <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt; <span id="r12 rd" class="r12 r">getServices</span>)
+        {
+            <b>if</b> (<span class="r11 r">getService</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;getService&quot;</span>);
+            }
+            <b>if</b> (<span class="r12 r">getServices</span> == <b>null</b>)
+            {
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;getServices&quot;</span>);
+            }
+ 
+            <a href="#b295e6b7f881be9a" class="i method">InnerSetResolver</a>(<b>new</b> <a href="#333c4a2893e2b1ae" class="t constructor">DelegateBasedDependencyResolver</a>(<span class="r11 r">getService</span>, <span class="r12 r">getServices</span>));
+        }
+ 
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Wraps an IDependencyResolver and ensures single instance per-type.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Note it&#39;s possible for multiple threads to race and call the _resolver service multiple times.</span>
+        <span class="c">///</span><span class="c"> We&#39;ll pick one winner and ignore the others and still guarantee a unique instance.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+        <b>private sealed class</b> <a id="f52fdf899b791f60" href="R/f52fdf899b791f60.html" target="n" data-glyph="4,1" class="t t">CacheDependencyResolver</a> : <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a>
+        {
+            <b>private readonly</b> <a href="@0@mscorlib/A.html#2e5ef5704344a309" class="t t">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt; <a id="6ae6aebc8af948f9" href="R/6ae6aebc8af948f9.html" target="n" data-glyph="46,2" class="i field">_cache</a> = <b>new</b> <a href="@0@mscorlib/A.html#abc35f3c19fa0290" class="t constructor">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt;();
+            <b>private readonly</b> <a href="@0@mscorlib/A.html#2e5ef5704344a309" class="t t">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt; <a id="8235c0e7719ac50a" href="R/8235c0e7719ac50a.html" target="n" data-glyph="46,2" class="i field">_cacheMultiple</a> = <b>new</b> <a href="@0@mscorlib/A.html#abc35f3c19fa0290" class="t constructor">ConcurrentDictionary</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt;();
+            <b>private readonly</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt; <a id="776dbcd22c496ad9" href="R/776dbcd22c496ad9.html" target="n" data-glyph="46,2" class="i field">_getServiceDelegate</a>;
+            <b>private readonly</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt; <a id="2d15360def2adbb1" href="R/2d15360def2adbb1.html" target="n" data-glyph="46,2" class="i field">_getServicesDelegate</a>;
+ 
+            <b>private readonly</b> <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <a id="39ebfee541c3bc5a" href="R/39ebfee541c3bc5a.html" target="n" data-glyph="46,2" class="i field">_resolver</a>;
+ 
+            <b>public</b> <a id="2951f22609f320eb" href="R/2951f22609f320eb.html" target="n" data-glyph="72,2" class="i constructor">CacheDependencyResolver</a>(<a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a> <span id="r13 rd" class="r13 r">resolver</span>)
+            {
+                <a href="#39ebfee541c3bc5a" class="i field">_resolver</a> = <span class="r13 r">resolver</span>;
+                <a href="#776dbcd22c496ad9" class="i field">_getServiceDelegate</a> = <a href="#39ebfee541c3bc5a" class="i field">_resolver</a>.<a href="IDependencyResolver.cs.html#ce4946a6971ee816" class="i method">GetService</a>;
+                <a href="#2d15360def2adbb1" class="i field">_getServicesDelegate</a> = <a href="#39ebfee541c3bc5a" class="i field">_resolver</a>.<a href="IDependencyResolver.cs.html#49e741670258cb46" class="i method">GetServices</a>;
+            }
+ 
+            <b>public object</b> <a id="75461c81059747a5" href="R/75461c81059747a5.html" target="n" data-glyph="72,2" class="i method">GetService</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r14 rd" class="r14 r">serviceType</span>)
+            {
+                <span class="c">// Use a saved delegate to prevent per-call delegate allocation</span>
+                <b>return</b> <a href="#6ae6aebc8af948f9" class="i field">_cache</a>.<a href="@0@mscorlib/A.html#2f8bcdfbad10304f" class="i method">GetOrAdd</a>(<span class="r14 r">serviceType</span>, <a href="#776dbcd22c496ad9" class="i field">_getServiceDelegate</a>);
+            }
+ 
+            <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt; <a id="f8e68b1acc9ee276" href="R/f8e68b1acc9ee276.html" target="n" data-glyph="72,2" class="i method">GetServices</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r15 rd" class="r15 r">serviceType</span>)
+            {
+                <span class="c">// Use a saved delegate to prevent per-call delegate allocation</span>
+                <b>return</b> <a href="#8235c0e7719ac50a" class="i field">_cacheMultiple</a>.<a href="@0@mscorlib/A.html#2f8bcdfbad10304f" class="i method">GetOrAdd</a>(<span class="r15 r">serviceType</span>, <a href="#2d15360def2adbb1" class="i field">_getServicesDelegate</a>);
+            }
+        }
+ 
+        <b>private class</b> <a id="e1d31f6da1eb4c18" href="R/e1d31f6da1eb4c18.html" target="n" data-glyph="4,1" class="t t"><span id="ddce8ed2d8bd6fc3">DefaultDependencyResolver</span></a> : <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a>
+        {
+            [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1031:DoNotCatchGeneralExceptionTypes&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This method might throw exceptions whose type we cannot strongly link against; namely, ActivationException from common service locator&quot;</span>)]
+            <b>public object</b> <a id="d0470067a425fb93" href="R/d0470067a425fb93.html" target="n" data-glyph="72,2" class="i method">GetService</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r16 rd" class="r16 r">serviceType</span>)
+            {
+                <span class="c">// Since attempting to create an instance of an interface or an abstract type results in an exception, immediately return null</span>
+                <span class="c">// to improve performance and the debugging experience with first-chance exceptions enabled.</span>
+                <b>if</b> (<span class="r16 r">serviceType</span>.<a href="@0@mscorlib/A.html#d7e06d26feea45c5" class="i property">IsInterface</a> || <span class="r16 r">serviceType</span>.<a href="@0@mscorlib/A.html#1dc5004043b9f91e" class="i property">IsAbstract</a>)
+                {
+                    <b>return null</b>;
+                }
+ 
+                <b>try</b>
+                {
+                    <b>return</b> <a href="@0@mscorlib/A.html#955a7437554c8efc" class="t t">Activator</a>.<a href="@0@mscorlib/A.html#4c7b92371a93f246" class="i method">CreateInstance</a>(<span class="r16 r">serviceType</span>);
+                }
+                <b>catch</b>
+                {
+                    <b>return null</b>;
+                }
+            }
+ 
+            <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt; <a id="cd52feb78d7ec30d" href="R/cd52feb78d7ec30d.html" target="n" data-glyph="72,2" class="i method">GetServices</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r17 rd" class="r17 r">serviceType</span>)
+            {
+                <b>return</b> <a href="@0@System.Core/A.html#577032c8811e20d3" class="t t">Enumerable</a>.<a href="@0@System.Core/A.html#4d026772cf3399f5" class="i method">Empty</a>&lt;<b>object</b>&gt;();
+            }
+        }
+ 
+        <b>private class</b> <a id="2e9ca63b4a708223" href="R/2e9ca63b4a708223.html" target="n" data-glyph="4,1" class="t t">DelegateBasedDependencyResolver</a> : <a href="IDependencyResolver.cs.html#64f8d8887fbd9488" class="t t">IDependencyResolver</a>
+        {
+            <b>private</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt; <a id="6059566a7a8438eb" href="R/6059566a7a8438eb.html" target="n" data-glyph="46,2" class="i field">_getService</a>;
+            <b>private</b> <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt; <a id="0b3849d379cd3109" href="R/0b3849d379cd3109.html" target="n" data-glyph="46,2" class="i field">_getServices</a>;
+ 
+            <b>public</b> <a id="333c4a2893e2b1ae" href="R/333c4a2893e2b1ae.html" target="n" data-glyph="72,2" class="i constructor">DelegateBasedDependencyResolver</a>(<a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <b>object</b>&gt; <span id="r18 rd" class="r18 r">getService</span>, <a href="@0@mscorlib/A.html#7a86aba051da82dd" class="t t">Func</a>&lt;<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a>, <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt;&gt; <span id="r19 rd" class="r19 r">getServices</span>)
+            {
+                <a href="#6059566a7a8438eb" class="i field">_getService</a> = <span class="r18 r">getService</span>;
+                <a href="#0b3849d379cd3109" class="i field">_getServices</a> = <span class="r19 r">getServices</span>;
+            }
+ 
+            [<a href="@0@mscorlib/A.html#5e00de6576fb9ce7" class="t constructor">SuppressMessage</a>(<span class="s">&quot;Microsoft.Design&quot;</span>, <span class="s">&quot;CA1031:DoNotCatchGeneralExceptionTypes&quot;</span>, <a href="@0@mscorlib/A.html#ce02a652a479502a" class="i property">Justification</a> = <span class="s">&quot;This method might throw exceptions whose type we cannot strongly link against; namely, ActivationException from common service locator&quot;</span>)]
+            <b>public object</b> <a id="a674834e169af6c5" href="R/a674834e169af6c5.html" target="n" data-glyph="72,2" class="i method">GetService</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r20 rd" class="r20 r">type</span>)
+            {
+                <b>try</b>
+                {
+                    <b>return</b> <a href="#6059566a7a8438eb" class="i field">_getService</a>.<a href="@0@mscorlib/A.html#3c17e52b9e2c8f81" class="i method">Invoke</a>(<span class="r20 r">type</span>);
+                }
+                <b>catch</b>
+                {
+                    <b>return null</b>;
+                }
+            }
+ 
+            <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<b>object</b>&gt; <a id="f9507298f0c4cf0a" href="R/f9507298f0c4cf0a.html" target="n" data-glyph="72,2" class="i method">GetServices</a>(<a href="@0@mscorlib/A.html#3d00eeab9feb80f3" class="t t">Type</a> <span id="r21 rd" class="r21 r">type</span>)
+            {
+                <b>return</b> <a href="#0b3849d379cd3109" class="i field">_getServices</a>(<span class="r21 r">type</span>);
+            }
+        }
+    }
+}
+</pre></td></tr></table></div></body></html>

@@ -1,0 +1,517 @@
+﻿<!DOCTYPE html>
+<html><head><title>TemporaryBuffer.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(508);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/TemporaryBuffer.cs" target="_top">Util\TemporaryBuffer.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">Tamir</span>.<span class="i n">SharpSsh</span>.<span class="i n">java</span>.<span class="i n">io</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c">   A fully buffered output stream.</span>
+    <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c">   Subclasses determine the behavior when the in-memory buffer capacity has been</span>
+    <span class="c">///</span><span class="c">   exceeded and additional bytes are still being received for output.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public abstract class</b> <a id="657dbd7b9cab3ad5" href="../R/657dbd7b9cab3ad5.html" target="n" data-glyph="0,0" class="t t">TemporaryBuffer</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+    {
+        <b>public static int</b> <a id="20edb7def17a8169" href="../R/20edb7def17a8169.html" target="n" data-glyph="42,1" class="i field">DEFAULT_IN_CORE_LIMIT</a> = 1024 * 1024;
+
+        <span class="c">// Chain of data, if we are still completely in-core; otherwise null.</span>
+        <b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="#343a5abdccaf9087" class="t t">Block</a>&gt; <a id="77b653f3c1c817d8" href="../R/77b653f3c1c817d8.html" target="n" data-glyph="46,1" class="i field">_blocks</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Maximum number of bytes we will permit storing in memory.</span>
+        <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">   When this limit is reached the data will be shifted to a file on disk,</span>
+        <span class="c">///</span><span class="c">   preventing the JVM heap from growing out of control.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private readonly int</b> <a id="45bb9376a335dd66" href="../R/45bb9376a335dd66.html" target="n" data-glyph="46,1" class="i field">inCoreLimit</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   If</span>
+        <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#45bb9376a335dd66" class="i field">inCoreLimit</a><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">   has been reached, remainder goes here.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="589e287d8732df34" href="../R/589e287d8732df34.html" target="n" data-glyph="46,1" class="i field">_overflow</a>;
+
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Create a new empty temporary buffer.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">limit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   maximum number of bytes to store in memory before entering the overflow output path.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>protected</b> <a id="f07d0818448e62b2" href="../R/f07d0818448e62b2.html" target="n" data-glyph="75,1" class="i constructor">TemporaryBuffer</a>(<b>int</b> <span id="r0 rd" class="r0 r">limit</span>)
+        {
+            <a href="#45bb9376a335dd66" class="i field">inCoreLimit</a> = <span class="r0 r">limit</span>;
+            <a href="#7cb4801538e7bfb8" class="i method">reset</a>();
+        }
+
+        <b>public void</b> <a id="3f62e4acbd9cf97d" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">write</a>(<b>int</b> <span id="r1 rd" class="r1 r">b</span>)
+        {
+            <b>if</b> (<a href="#589e287d8732df34" class="i field">_overflow</a> != <b>null</b>)
+            {
+                <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>((<b>byte</b>)<span class="r1 r">b</span>);
+                <b>return</b>;
+            }
+
+            <a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r2 rd" class="r2 r">s</span> = <a href="#3af8cfee6239e632" class="i method">last</a>();
+            <b>if</b> (<span class="r2 r">s</span>.<a href="#1558de422247b73c" class="i method">isFull</a>())
+            {
+                <b>if</b> (<a href="#bd27e83cda9f4fec" class="i method">reachedInCoreLimit</a>())
+                {
+                    <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#78aaa430fb7a00a4" class="i method">WriteByte</a>((<b>byte</b>)<span class="r1 r">b</span>);
+                    <b>return</b>;
+                }
+
+                <span class="r2 r">s</span> = <b>new</b> <a href="#343a5abdccaf9087" class="t constructor">Block</a>();
+                <a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r2 r">s</span>);
+            }
+            <span class="r2 r">s</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>[<span class="r2 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a>++] = (<b>byte</b>)<span class="r1 r">b</span>;
+        }
+
+        <b>public void</b> <a id="310dfda0cef3c274" href="../R/310dfda0cef3c274.html" target="n" data-glyph="72,1" class="i method">write</a>(<b>byte</b>[] <span id="r3 rd" class="r3 r">b</span>, <b>int</b> <span id="r4 rd" class="r4 r">off</span>, <b>int</b> <span id="r5 rd" class="r5 r">len</span>)
+        {
+            <b>if</b> (<a href="#589e287d8732df34" class="i field">_overflow</a> == <b>null</b>)
+            {
+                <b>while</b> (<span class="r5 r">len</span> &gt; 0)
+                {
+                    <a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r6 rd" class="r6 r">s</span> = <a href="#3af8cfee6239e632" class="i method">last</a>();
+                    <b>if</b> (<span class="r6 r">s</span>.<a href="#1558de422247b73c" class="i method">isFull</a>())
+                    {
+                        <b>if</b> (<a href="#bd27e83cda9f4fec" class="i method">reachedInCoreLimit</a>())
+                            <b>break</b>;
+
+                        <span class="r6 r">s</span> = <b>new</b> <a href="#343a5abdccaf9087" class="t constructor">Block</a>();
+                        <a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r6 r">s</span>);
+                    }
+
+                    <b>int</b> <span id="r7 rd" class="r7 r">n</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#f441d55c88d635ad" class="i method">Min</a>(<a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a> - <span class="r6 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a>, <span class="r5 r">len</span>);
+                    <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r3 r">b</span>, <span class="r4 r">off</span>, <span class="r6 r">s</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>, <span class="r6 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a>, <span class="r7 r">n</span>);
+                    <span class="r6 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a> += <span class="r7 r">n</span>;
+                    <span class="r5 r">len</span> -= <span class="r7 r">n</span>;
+                    <span class="r4 r">off</span> += <span class="r7 r">n</span>;
+                }
+            }
+
+            <b>if</b> (<span class="r5 r">len</span> &gt; 0)
+                <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r3 r">b</span>, <span class="r4 r">off</span>, <span class="r5 r">len</span>);
+        }
+
+
+        <b>public void</b> <a id="cf35df327d0827e5" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">write</a>(<b>byte</b>[] <span id="r8 rd" class="r8 r">bytes</span>)
+        {
+            <b>if</b> (<span class="r8 r">bytes</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;bytes&quot;</span>);
+
+            <a href="#310dfda0cef3c274" class="i method">write</a>(<span class="r8 r">bytes</span>, 0, <span class="r8 r">bytes</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Copy all bytes remaining on the input stream into this buffer.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">in</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the stream to Read from, until EOF is reached.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="b0919b1eafb19ecb" href="../R/b0919b1eafb19ecb.html" target="n" data-glyph="72,1" class="i method">copy</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r9 rd" class="r9 r">@in</span>)
+        {
+            <b>if</b> (<span class="r9 r">@in</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;in&quot;</span>);
+
+            <b>if</b> (<a href="#77b653f3c1c817d8" class="i field">_blocks</a> != <b>null</b>)
+            {
+                <b>for</b> (; ; )
+                {
+                    <a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r10 rd" class="r10 r">s</span> = <a href="#3af8cfee6239e632" class="i method">last</a>();
+                    <b>if</b> (<span class="r10 r">s</span>.<a href="#1558de422247b73c" class="i method">isFull</a>())
+                    {
+                        <b>if</b> (<a href="#bd27e83cda9f4fec" class="i method">reachedInCoreLimit</a>())
+                            <b>break</b>;
+                        <span class="r10 r">s</span> = <b>new</b> <a href="#343a5abdccaf9087" class="t constructor">Block</a>();
+                        <a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r10 r">s</span>);
+                    }
+
+                    <b>int</b> <span id="r11 rd" class="r11 r">n</span> = <span class="r9 r">@in</span>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r10 r">s</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>, <span class="r10 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a>, <a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a> - <span class="r10 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a>);
+                    <b>if</b> (<span class="r11 r">n</span> &lt; 1)
+                        <b>return</b>;
+                    <span class="r10 r">s</span>.<a href="#01f92180f720f62e" class="i field">count</a> += <span class="r11 r">n</span>;
+                }
+            }
+
+            <b>byte</b>[] <span id="r12 rd" class="r12 r">tmp</span> = <b>new</b> <b>byte</b>[<a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a>];
+            <b>int</b> <span id="r13 rd" class="r13 r">nn</span>;
+            <b>while</b> ((<span class="r13 r">nn</span> = <span class="r9 r">@in</span>.<a href="@0@mscorlib/A.html#6fb9c001d7524ba2" class="i method">Read</a>(<span class="r12 r">tmp</span>, 0, <span class="r12 r">tmp</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)) &gt; 0)
+                <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r12 r">tmp</span>, 0, <span class="r13 r">nn</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Obtain the length (in bytes) of the buffer.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The length is only accurate After </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8f4eaab55462b154" class="i method">close</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> has been invoked.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public virtual long</b> <a id="e97bc5f37f5b4de5" href="../R/e97bc5f37f5b4de5.html" target="n" data-glyph="102,1" class="i property">Length</a>
+        {
+            <b>get</b>
+            {
+                <a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r14 rd" class="r14 r">last</span> = <a href="#657dbd7b9cab3ad5" class="k">this</a>.<a href="#3af8cfee6239e632" class="i method">last</a>();
+                <b>return</b> ((<b>long</b>)<a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a>) * <a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a> - (<a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a> - <span class="r14 r">last</span>.<a href="#01f92180f720f62e" class="i field">count</a>);
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Convert this buffer&#39;s contents into a contiguous byte array.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> The buffer is only complete After {@link #close()} has been invoked.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the complete byte array; length matches </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e97bc5f37f5b4de5" class="i property">Length</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public virtual byte</b>[] <a id="5d8b8c3946dcb5b3" href="../R/5d8b8c3946dcb5b3.html" target="n" data-glyph="72,1" class="i method">ToArray</a>()
+        {
+            <b>long</b> <span id="r15 rd" class="r15 r">len</span> = <a href="#e97bc5f37f5b4de5" class="i property">Length</a>;
+            <b>if</b> (<b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a> &lt; <span class="r15 r">len</span>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5ad855b434264d4b" class="t constructor">OutOfMemoryException</a>(<span class="s">&quot;Length exceeds maximum array size&quot;</span>);
+
+            <b>byte</b>[] <span id="r16 rd" class="r16 r">@out</span> = <b>new</b> <b>byte</b>[(<b>int</b>)<span class="r15 r">len</span>];
+            <b>int</b> <span id="r17 rd" class="r17 r">outPtr</span> = 0;
+            <b>foreach</b> (<a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r18 rd" class="r18 r">b</span> <b>in</b> <a href="#77b653f3c1c817d8" class="i field">_blocks</a>)
+            {
+                <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#7441c6721593042c" class="i method">Copy</a>(<span class="r18 r">b</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>, 0, <span class="r16 r">@out</span>, <span class="r17 r">outPtr</span>, <span class="r18 r">b</span>.<a href="#01f92180f720f62e" class="i field">count</a>);
+                <span class="r17 r">outPtr</span> += <span class="r18 r">b</span>.<a href="#01f92180f720f62e" class="i field">count</a>;
+            }
+            <b>return</b> <span class="r16 r">@out</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Send this buffer to an output stream.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This method may only be invoked After {@link #close()} has completed</span>
+        <span class="c">///</span><span class="c"> normally, to ensure all data is completely transferred.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">os</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">stream to send this buffer&#39;s complete content to.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">pm</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> if not null progress updates are sent here. Caller should</span>
+        <span class="c">///</span><span class="c"> initialize the task and the number of work units to</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e97bc5f37f5b4de5" class="i property">Length</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">/1024</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public virtual void</b> <a id="f94764c5427c841b" href="../R/f94764c5427c841b.html" target="n" data-glyph="72,1" class="i method">writeTo</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r19 rd" class="r19 r">os</span>, <a href="../ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <span id="r20 rd" class="r20 r">pm</span>)
+        {
+            <b>if</b> (<span class="r19 r">os</span> == <b>null</b>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;os&quot;</span>);
+            <b>if</b> (<span class="r20 r">pm</span> == <b>null</b>)
+                <span class="r20 r">pm</span> = <b>new</b> <a href="../NullProgressMonitor.cs.html#4c4113c919cd3d83" class="t constructor">NullProgressMonitor</a>();
+            <b>foreach</b> (<a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r21 rd" class="r21 r">b</span> <b>in</b> <a href="#77b653f3c1c817d8" class="i field">_blocks</a>)
+            {
+                <span class="r19 r">os</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r21 r">b</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>, 0, <span class="r21 r">b</span>.<a href="#01f92180f720f62e" class="i field">count</a>);
+                <span class="r20 r">pm</span>.<a href="../ProgressMonitor.cs.html#3eb9c628ee7d320c" class="i method">Update</a>(<span class="r21 r">b</span>.<a href="#01f92180f720f62e" class="i field">count</a> / 1024);
+            }
+        }
+
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Reset this buffer for reuse, purging all buffered content.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="7cb4801538e7bfb8" href="../R/7cb4801538e7bfb8.html" target="n" data-glyph="72,1" class="i method">reset</a>()
+        {
+            <b>if</b> (<a href="#589e287d8732df34" class="i field">_overflow</a> != <b>null</b>)
+            {
+                <a href="#5e99b3bd61013d03" class="i method">destroy</a>();
+            }
+            <a href="#77b653f3c1c817d8" class="i field">_blocks</a> = <b>new</b> <a href="@0@mscorlib/A.html#b65c1a07c4e5b13a" class="t constructor">List</a>&lt;<a href="#343a5abdccaf9087" class="t t">Block</a>&gt;(<a href="#45bb9376a335dd66" class="i field">inCoreLimit</a> / <a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a>);
+            <a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<b>new</b> <a href="#343a5abdccaf9087" class="t constructor">Block</a>());
+        }
+
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Open the overflow output stream, so the remaining output can be stored.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> the output stream to receive the buffered content, followed by</span>
+        <span class="c">///</span><span class="c"> the remaining output.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>protected abstract</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="2b38206897a0a770" href="../R/2b38206897a0a770.html" target="n" data-glyph="75,1" class="i method">overflow</a>();
+
+        <b>private</b> <a href="#343a5abdccaf9087" class="t t">Block</a> <a id="3af8cfee6239e632" href="../R/3af8cfee6239e632.html" target="n" data-glyph="76,1" class="i method">last</a>()
+        {
+            <b>return</b> <a href="#77b653f3c1c817d8" class="i field">_blocks</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> - 1];
+        }
+
+        <b>private bool</b> <a id="bd27e83cda9f4fec" href="../R/bd27e83cda9f4fec.html" target="n" data-glyph="76,1" class="i method">reachedInCoreLimit</a>()
+        {
+            <b>if</b> (<a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> * <a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a> &lt; <a href="#45bb9376a335dd66" class="i field">inCoreLimit</a>)
+                <b>return false</b>;
+
+            <a href="#589e287d8732df34" class="i field">_overflow</a> = <a href="#2b38206897a0a770" class="i method">overflow</a>();
+
+            <a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r22 rd" class="r22 r">last</span> = <a href="#77b653f3c1c817d8" class="i field">_blocks</a><a href="@0@mscorlib/A.html#0c65bec4d3fac21e">[</a><a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> - 1];
+            <a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#3d46113cc199059a" class="i method">RemoveAt</a>(<a href="#77b653f3c1c817d8" class="i field">_blocks</a>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> - 1);
+            <b>foreach</b> (<a href="#343a5abdccaf9087" class="t t">Block</a> <span id="r23 rd" class="r23 r">b</span> <b>in</b> <a href="#77b653f3c1c817d8" class="i field">_blocks</a>)
+                <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r23 r">b</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>, 0, <span class="r23 r">b</span>.<a href="#01f92180f720f62e" class="i field">count</a>);
+            <a href="#77b653f3c1c817d8" class="i field">_blocks</a> = <b>null</b>;
+
+            <a href="#589e287d8732df34" class="i field">_overflow</a> = <b>new</b> <a href="@0@mscorlib/A.html#4cc04de77589beb5" class="t constructor">BufferedStream</a>(<a href="#589e287d8732df34" class="i field">_overflow</a>, <a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a>);
+            <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r22 r">last</span>.<a href="#ffef9986f7d237ad" class="i field">buffer</a>, 0, <span class="r22 r">last</span>.<a href="#01f92180f720f62e" class="i field">count</a>);
+            <b>return true</b>;
+        }
+
+        <b>public virtual void</b> <a id="8f4eaab55462b154" href="../R/8f4eaab55462b154.html" target="n" data-glyph="72,1" class="i method">close</a>()
+        {
+            <b>if</b> (<a href="#589e287d8732df34" class="i field">_overflow</a> != <b>null</b>)
+            {
+                <b>try</b>
+                {
+                    <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                }
+                <b>finally</b>
+                {
+                    <a href="#589e287d8732df34" class="i field">_overflow</a> = <b>null</b>;
+                }
+            }
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+            <a href="@0@mscorlib/A.html#25d9c1e022317a99" class="t t">GC</a>.<a href="@0@mscorlib/A.html#2673f5220a565bf2" class="i method">SuppressFinalize</a>(<a href="#657dbd7b9cab3ad5" class="k">this</a>); <span class="c">// Disarm lock-release checker</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+        }
+
+        <b>public void</b> <a id="116c5770ba82de50" href="../R/116c5770ba82de50.html" target="n" data-glyph="72,1" class="i method">Dispose</a>()
+        {
+            <a href="#8f4eaab55462b154" class="i method">close</a>();
+        }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+        <span class="c">// A debug mode warning if the type has not been disposed properly</span>
+        ~<a id="7e416b144c7a2f21" href="../R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">TemporaryBuffer</a>()
+        {
+            <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a> + <span class="s">&quot; has not been properly disposed.&quot;</span>);
+        }
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Clear this buffer so it has no data, and cannot be used again.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public virtual void</b> <a id="5e99b3bd61013d03" href="../R/5e99b3bd61013d03.html" target="n" data-glyph="72,1" class="i method">destroy</a>()
+        {
+            <a href="#77b653f3c1c817d8" class="i field">_blocks</a> = <b>null</b>;
+
+            <a href="#8f4eaab55462b154" class="i method">close</a>();
+
+            <b>if</b> (<a href="#589e287d8732df34" class="i field">_overflow</a> != <b>null</b>)
+            {
+                <b>try</b>
+                {
+                    <a href="#589e287d8732df34" class="i field">_overflow</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <span class="c">// We shouldn&#39;t encounter an error closing the file.</span>
+                }
+                <b>finally</b>
+                {
+                    <a href="#589e287d8732df34" class="i field">_overflow</a> = <b>null</b>;
+                }
+            }
+        }
+    }
+
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c">   A fully buffered output stream using local disk storage for large data.</span>
+    <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c">   Initially this output stream buffers to memory and is therefore similar</span>
+    <span class="c">///</span><span class="c">   to ByteArrayOutputStream, but it shifts to using an on disk temporary</span>
+    <span class="c">///</span><span class="c">   file if the output gets too large.</span>
+    <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c">   The content of this buffered stream may be sent to another OutputStream</span>
+    <span class="c">///</span><span class="c">   only after this stream has been properly closed by</span>
+    <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#657dbd7b9cab3ad5" class="t t">TemporaryBuffer</a>.<a href="#8f4eaab55462b154" class="i method">close</a><span class="c">&quot;</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c">   .</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="5727e5431555d215" href="../R/5727e5431555d215.html" target="n" data-glyph="0,0" class="t t">LocalFileBuffer</a> : <a href="#657dbd7b9cab3ad5" class="t t">TemporaryBuffer</a>
+    {
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Location of our temporary file if we are on disk; otherwise null.</span>
+        <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">   If we exceeded the {@link #inCoreLimit} we nulled out {@link #blocks}</span>
+        <span class="c">///</span><span class="c">   and created this file instead. All output goes here through</span>
+        <span class="c">///</span><span class="c">   {@link #overflow}.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="f6b3fe78ded999ed" href="../R/f6b3fe78ded999ed.html" target="n" data-glyph="46,1" class="i field">onDiskFile</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Create a new temporary buffer.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a id="aefbe444c2eb9e5e" href="../R/aefbe444c2eb9e5e.html" target="n" data-glyph="72,1" class="i constructor">LocalFileBuffer</a>()
+            : <a href="#9b1a3b1a8f68f339" class="k">this</a>(<a href="#20edb7def17a8169" class="i field">DEFAULT_IN_CORE_LIMIT</a>)
+        {
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Create a new temporary buffer, limiting memory usage.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">inCoreLimit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   maximum number of bytes to store in memory. Storage beyond</span>
+        <span class="c">///</span><span class="c">   this limit will use the local file.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="9b1a3b1a8f68f339" href="../R/9b1a3b1a8f68f339.html" target="n" data-glyph="72,1" class="i constructor">LocalFileBuffer</a>(<b>int</b> <span id="r24 rd" class="r24 r">inCoreLimit</span>)
+            : <a href="#f07d0818448e62b2" class="k">base</a>(<span class="r24 r">inCoreLimit</span>)
+        {
+        }
+
+        <b>protected override</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="474a485d2db9fadb" href="../R/474a485d2db9fadb.html" target="n" data-glyph="75,1" class="i method">overflow</a>()
+        {
+            <a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="s">&quot;gitsharp_&quot;</span> + <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#efb113f637a6bb47" class="i method">GetRandomFileName</a>() + <span class="s">&quot;.buffer&quot;</span>);
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#71f93211e2965551" class="i field">CreateNew</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#4715fa16da583c25" class="i field">Write</a>);
+        }
+
+        <b>public override long</b> <a id="ee456d493ced625d" href="../R/ee456d493ced625d.html" target="n" data-glyph="102,1" class="i property">Length</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a> == <b>null</b>)
+                {
+                    <b>return</b> <a href="#657dbd7b9cab3ad5" class="k">base</a>.<a href="#e97bc5f37f5b4de5" class="i property">Length</a>;
+                }
+                <b>return</b> <a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a>.<a href="@0@mscorlib/A.html#0ab84ec3507f6ed4" class="i property">Length</a>;
+            }
+        }
+
+        <b>public override byte</b>[] <a id="59291c59fb39d93e" href="../R/59291c59fb39d93e.html" target="n" data-glyph="72,1" class="i method">ToArray</a>()
+        {
+            <b>if</b> (<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a> == <b>null</b>)
+            {
+                <b>return</b> <a href="#657dbd7b9cab3ad5" class="k">base</a>.<a href="#5d8b8c3946dcb5b3" class="i method">ToArray</a>();
+            }
+
+            <b>long</b> <span id="r25 rd" class="r25 r">len</span> = <a href="#ee456d493ced625d" class="i property">Length</a>;
+            <b>if</b> (<b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a> &lt; <span class="r25 r">len</span>)
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#5ad855b434264d4b" class="t constructor">OutOfMemoryException</a>(<span class="s">&quot;Length exceeds maximum array size&quot;</span>);
+            <b>byte</b>[] <span id="r26 rd" class="r26 r">@out</span> = <b>new</b> <b>byte</b>[(<b>int</b>)<span class="r25 r">len</span>];
+
+            <b>using</b> (<b>var</b> <span id="r27 rd" class="r27 r">@in</span> = <b>new</b> <span class="t constructor">FileInputStream</span>(<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+            {
+                <a href="IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r27 r">@in</span>, <span class="r26 r">@out</span>, 0, (<b>int</b>)<span class="r25 r">len</span>);
+            }
+
+            <b>return</b> <span class="r26 r">@out</span>;
+        }
+
+        <b>public override void</b> <a id="59cba98ac561e22d" href="../R/59cba98ac561e22d.html" target="n" data-glyph="72,1" class="i method">writeTo</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r28 rd" class="r28 r">os</span>, <a href="../ProgressMonitor.cs.html#ffa3c64e977f35f6" class="t t">ProgressMonitor</a> <span id="r29 rd" class="r29 r">pm</span>)
+        {
+            <b>if</b> (<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a> == <b>null</b>)
+            {
+                <a href="#657dbd7b9cab3ad5" class="k">base</a>.<a href="#f94764c5427c841b" class="i method">writeTo</a>(<span class="r28 r">os</span>, <span class="r29 r">pm</span>);
+                <b>return</b>;
+            }
+            <b>if</b> (<span class="r29 r">pm</span> == <b>null</b>)
+                <span class="r29 r">pm</span> = <a href="../NullProgressMonitor.cs.html#4c4113c919cd3d83" class="t t">NullProgressMonitor</a>.<a href="../NullProgressMonitor.cs.html#213abbda23ff2f6d" class="i field">Instance</a>;
+            <b>using</b> (<a href="@0@mscorlib/A.html#e23a38af5d11ddd3" class="t t">FileStream</a> <span id="r30 rd" class="r30 r">@in</span> = <b>new</b> <a href="@0@mscorlib/A.html#234a29d0d3012e5c" class="t constructor">FileStream</a>(<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#c0cb6ba6af625b3a" class="t t">FileMode</a>.<a href="@0@mscorlib/A.html#f4421e1d202f76fa" class="i field">Open</a>, <a href="@0@mscorlib/A.html#5cc5644ae3acd24b" class="t t">FileAccess</a>.<a href="@0@mscorlib/A.html#0f1c68c756d0636b" class="i field">Read</a>))
+            {
+                <b>int</b> <span id="r31 rd" class="r31 r">cnt</span>;
+                <b>byte</b>[] <span id="r32 rd" class="r32 r">buf</span> = <b>new</b> <b>byte</b>[<a href="#343a5abdccaf9087" class="t t">Block</a>.<a href="#8891817f4ae7456e" class="i field">SZ</a>];
+                <b>while</b> ((<span class="r31 r">cnt</span> = <span class="r30 r">@in</span>.<a href="@0@mscorlib/A.html#f54c954df34d7a92" class="i method">Read</a>(<span class="r32 r">buf</span>, 0, <span class="r32 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)) &gt; 0)
+                {
+                    <span class="r28 r">os</span>.<a href="@0@mscorlib/A.html#809202cd37ae53a9" class="i method">Write</a>(<span class="r32 r">buf</span>, 0, <span class="r31 r">cnt</span>);
+                    <span class="r29 r">pm</span>.<a href="../ProgressMonitor.cs.html#3eb9c628ee7d320c" class="i method">Update</a>(<span class="r31 r">cnt</span> / 1024);
+                }
+            }
+        }
+
+        <b>public override void</b> <a id="f93d05483b30c62a" href="../R/f93d05483b30c62a.html" target="n" data-glyph="72,1" class="i method">destroy</a>()
+        {
+            <a href="#657dbd7b9cab3ad5" class="k">base</a>.<a href="#5e99b3bd61013d03" class="i method">destroy</a>();
+
+            <b>if</b> (<a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a> != <b>null</b>)
+            {
+                <b>try</b>
+                {
+                    <a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a>.<a href="PathUtil.cs.html#bf54af593f7b2aad" class="i method">DeleteFile</a>();
+                }
+                <b>finally</b>
+                {
+                    <a href="#f6b3fe78ded999ed" class="i field">onDiskFile</a> = <b>null</b>;
+                }
+            }
+        }
+    }
+
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c">   A temporary buffer that will never exceed its in-memory limit.</span>
+    <span class="c">///</span><span class="c">   </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c">   If the in-memory limit is reached an IOException is thrown, rather than</span>
+    <span class="c">///</span><span class="c">   attempting to spool to local disk.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="7570bcb884ae5d50" href="../R/../../0000000000.html" target="n" data-glyph="0,0" class="t t">HeapBuffer</a> : <a href="#657dbd7b9cab3ad5" class="t t">TemporaryBuffer</a>
+    {
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   Create a new heap buffer with a maximum storage limit.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">limit</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">   maximum number of bytes that can be stored in this buffer.</span>
+        <span class="c">///</span><span class="c">   Storing beyond this many will cause an IOException to be</span>
+        <span class="c">///</span><span class="c">   thrown during write.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="df7f5c3452d239c5" href="../R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">HeapBuffer</a>(<b>int</b> <span id="r33 rd" class="r33 r">limit</span>)
+            : <a href="#f07d0818448e62b2" class="k">base</a>(<span class="r33 r">limit</span>)
+        {
+        }
+
+        <b>protected override</b> <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <a id="0bbedb8056e29e56" href="../R/0bbedb8056e29e56.html" target="n" data-glyph="75,1" class="i method">overflow</a>()
+        {
+            <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;In-memory buffer limit exceeded&quot;</span>);
+        }
+    }
+
+    <b>public class</b> <a id="343a5abdccaf9087" href="../R/343a5abdccaf9087.html" target="n" data-glyph="0,0" class="t t"><span id="6bff429fe1bcf2cf">Block</span></a>
+    {
+        <b>public static int</b> <a id="8891817f4ae7456e" href="../R/8891817f4ae7456e.html" target="n" data-glyph="42,1" class="i field">SZ</a> = 8 * 1024;
+
+        <b>public byte</b>[] <a id="ffef9986f7d237ad" href="../R/ffef9986f7d237ad.html" target="n" data-glyph="42,1" class="i field">buffer</a> = <b>new</b> <b>byte</b>[<a href="#8891817f4ae7456e" class="i field">SZ</a>];
+
+        <b>public int</b> <a id="01f92180f720f62e" href="../R/01f92180f720f62e.html" target="n" data-glyph="42,1" class="i field">count</a>;
+
+        <b>public bool</b> <a id="1558de422247b73c" href="../R/1558de422247b73c.html" target="n" data-glyph="72,1" class="i method">isFull</a>()
+        {
+            <b>return</b> <a href="#01f92180f720f62e" class="i field">count</a> == <a href="#8891817f4ae7456e" class="i field">SZ</a>;
+        }
+    }
+}</pre></td></tr></table></div></body></html>

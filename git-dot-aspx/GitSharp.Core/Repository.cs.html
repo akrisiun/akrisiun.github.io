@@ -1,0 +1,1501 @@
+﻿<!DOCTYPE html>
+<html><head><title>Repository.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(1492);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Repository.cs" target="_top">Repository.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2007, Dave Watson &lt;dwatson@mimvista.com&gt;
+ * Copyright (C) 2008, Robin Rosenberg &lt;robin.rosenberg@dewire.com&gt;
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Diagnostics</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+<b>using</b> <span class="i n">Tamir</span>.<span class="i n">SharpSsh</span>.<span class="i n">java</span>.<span class="i n">util</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Represents a Git repository. A repository holds all objects and refs used for</span>
+    <span class="c">///</span><span class="c"> managing source code (could by any type of file, but source code is what</span>
+    <span class="c">///</span><span class="c"> SCM&#39;s are typically used for).</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> In Git terms all data is stored in GIT_DIR, typically a directory called</span>
+    <span class="c">///</span><span class="c"> .git. A work tree is maintained unless the repository is a bare repository.</span>
+    <span class="c">///</span><span class="c"> Typically the .git directory is located at the root of the work dir.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">GIT_DIR</span>
+    <span class="c">///</span><span class="c"> 	</span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> 		</span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">objects/ - objects</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> 		</span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">refs/ - tags and heads</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> 		</span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">config - configuration</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> 		</span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">info/ - more configurations</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> 	</span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This class is thread-safe.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This implementation only handles a subtly undocumented subset of git features.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="a967877e73d4cc25" href="R/a967877e73d4cc25.html" target="n" data-glyph="0,0" class="t t">Repository</a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+    {
+        <b>private</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#5fbf804243225a1e" class="t t">AtomicInteger</a> <a id="134d9c421f385b61" href="R/134d9c421f385b61.html" target="n" data-glyph="46,1" class="i field">_useCnt</a> = <b>new</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#aa6b0d200036c891" class="t constructor">AtomicInteger</a>(1);
+        <b>internal readonly</b> <a href="RefDatabase.cs.html#46bd94b774717bce" class="t t">RefDatabase</a> <a id="99ad610709bc9095" href="R/99ad610709bc9095.html" target="n" data-glyph="44,1" class="i field">_refDb</a>; <span class="c">// [henon] need internal for API</span>
+
+        <b>private readonly</b> <a href="ObjectDirectory.cs.html#676d7fa05a339f1d" class="t t">ObjectDirectory</a> <a id="124c68995e9e1e25" href="R/124c68995e9e1e25.html" target="n" data-glyph="46,1" class="i field">_objectDatabase</a>;
+
+        <b>private</b> <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <a id="bd704d77ccd8231b" href="R/bd704d77ccd8231b.html" target="n" data-glyph="46,1" class="i field">_index</a>;
+
+        <span class="c">// private readonly List&lt;DirectoryInfo&gt; _objectsDirs; // never used.</span>
+
+        <b>private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt; <a id="52f07e2dd08c8ab5" href="R/52f07e2dd08c8ab5.html" target="n" data-glyph="46,1" class="i field">listeners</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt;(); <span class="c">//TODO: make thread safe</span>
+        <b>static private</b> <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt; <a id="8b06c735765e9e39" href="R/8b06c735765e9e39.html" target="n" data-glyph="46,1" class="i field">allListeners</a> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt;(); <span class="c">//TODO: make thread safe</span>
+
+        <b>private</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="db3254883aecf320" href="R/db3254883aecf320.html" target="n" data-glyph="46,1" class="i field">workDir</a>;
+
+        <b>private</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="a3cef5319d5fab6e" href="R/a3cef5319d5fab6e.html" target="n" data-glyph="46,1" class="i field">indexFile</a>;
+        <b>private readonly object</b> <a id="9a3f206834e1bcc3" href="R/9a3f206834e1bcc3.html" target="n" data-glyph="46,1" class="i field">_padLock</a> = <b>new</b> <b>object</b>();
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct a representation of a Git repository.</span>
+        <span class="c">///</span><span class="c"> The work tree, object directory, alternate object directories and index file locations are deduced from the given git directory and the default rules.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">d</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_DIR (the location of the repository metadata).</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="774170b9e076df04" href="R/774170b9e076df04.html" target="n" data-glyph="72,1" class="i constructor">Repository</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r0 rd" class="r0 r">d</span>)
+            : <a href="#ee5f9bbabc7fc691" class="k">this</a>(<span class="r0 r">d</span>, <b>null</b>, <b>null</b>, <b>null</b>, <b>null</b>)  <span class="c">// go figure it out</span>
+        {
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct a representation of a Git repository.</span>
+        <span class="c">///</span><span class="c"> The work tree, object directory, alternate object directories and index file locations are deduced from the given git directory and the default rules.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">d</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_DIR (the location of the repository metadata).</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">workTree</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_WORK_TREE (the root of the checkout). May be null for default value.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="2fccd073b75b740e" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i constructor">Repository</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r1 rd" class="r1 r">d</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r2 rd" class="r2 r">workTree</span>)
+            : <a href="#ee5f9bbabc7fc691" class="k">this</a>(<span class="r1 r">d</span>, <span class="r2 r">workTree</span>, <b>null</b>, <b>null</b>, <b>null</b>) <span class="c">// go figure it out </span>
+        {
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct a representation of a Git repository using the given parameters possibly overriding default conventions..</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">d</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_DIR (the location of the repository metadata). May be null for default value in which case it depends on GIT_WORK_TREE.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">workTree</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_WORK_TREE (the root of the checkout). May be null for default value if GIT_DIR is</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">objectDir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_OBJECT_DIRECTORY (where objects and are stored). May be null for default value. Relative names ares resolved against GIT_WORK_TREE</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">alternateObjectDir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_ALTERNATE_OBJECT_DIRECTORIES (where more objects are read from). May be null for default value. Relative names ares resolved against GIT_WORK_TREE</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">indexFile</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">GIT_INDEX_FILE (the location of the index file). May be null for default value. Relative names ares resolved against GIT_WORK_TREE.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public</b> <a id="ee5f9bbabc7fc691" href="R/ee5f9bbabc7fc691.html" target="n" data-glyph="72,1" class="i constructor">Repository</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r3 rd" class="r3 r">d</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r4 rd" class="r4 r">workTree</span>, <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r5 rd" class="r5 r">objectDir</span>,
+                <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a>[] <span id="r6 rd" class="r6 r">alternateObjectDir</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r7 rd" class="r7 r">indexFile</span>)
+        {
+            <b>if</b> (<span class="r4 r">workTree</span> != <b>null</b>)
+            {
+                <a href="#db3254883aecf320" class="i field">workDir</a> = <span class="r4 r">workTree</span>;
+                <b>if</b> (<span class="r3 r">d</span> == <b>null</b>)
+                    <a href="#77a819ff8f2ad4d4" class="i property">Directory</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<span class="r4 r">workTree</span>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9367fd41bca7cf44" class="i field">DOT_GIT</a>);
+                <b>else</b>
+                    <a href="#77a819ff8f2ad4d4" class="i property">Directory</a> = <span class="r3 r">d</span>;
+            }
+            <b>else</b>
+            {
+                <b>if</b> (<span class="r3 r">d</span> != <b>null</b>)
+                    <a href="#77a819ff8f2ad4d4" class="i property">Directory</a> = <span class="r3 r">d</span>;
+                <b>else</b>
+                {
+                    <a href="#eaacf452fa865f6c" class="i method">Dispose</a>();
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Either GIT_DIR or GIT_WORK_TREE must be passed to Repository constructor&quot;</span>);
+                }
+            }
+
+            <a href="FileBasedConfig.cs.html#31739b7b09e6d920" class="k">var</a> <span id="r8 rd" class="r8 r">userConfig</span> = <a href="SystemReader.cs.html#36b2c00b32768833" class="t t">SystemReader</a>.<a href="SystemReader.cs.html#8313facd37fc98f9" class="i method">getInstance</a>().<a href="SystemReader.cs.html#c09ff94aec0db3f3" class="i method">openUserConfig</a>();
+
+            <b>try</b>
+            {
+                <span class="r8 r">userConfig</span>.<a href="FileBasedConfig.cs.html#a2c6e31dfaaa5eb8" class="i method">load</a>();
+            }
+            <b>catch</b> (<a href="Exceptions/ConfigInvalidException.cs.html#bdcda0745f6a996d" class="t t">ConfigInvalidException</a> <span id="r9 rd" class="r9 r">e1</span>)
+            {
+                <a href="#eaacf452fa865f6c" class="i method">Dispose</a>();
+
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#d47d382441d940e8" class="t constructor">IOException</a>(<span class="s">&quot;User config file &quot;</span>
+                    + <span class="r8 r">userConfig</span>.<a href="FileBasedConfig.cs.html#ba7993194b611ad7" class="i method">getFile</a>().<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> + <span class="s">&quot; invalid: &quot;</span>
+                    + <span class="r9 r">e1</span>, <span class="r9 r">e1</span>);
+            }
+
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a> = <b>new</b> <a href="RepositoryConfig.cs.html#48764f47125d9505" class="t constructor">RepositoryConfig</a>(<span class="r8 r">userConfig</span>, (<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a>)<a href="Util/FS.cs.html#c49f385e4a538de3" class="t t">FS</a>.<a href="Util/FS.cs.html#b4834bd19b90739e" class="i method">resolve</a>(<a href="#77a819ff8f2ad4d4" class="i property">Directory</a>, <span class="s">&quot;config&quot;</span>));
+
+            <b>try</b>
+            {
+                <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="FileBasedConfig.cs.html#a2c6e31dfaaa5eb8" class="i method">load</a>();
+            }
+            <b>catch</b> (<a href="Exceptions/ConfigInvalidException.cs.html#bdcda0745f6a996d" class="t t">ConfigInvalidException</a> <span id="r10 rd" class="r10 r">e1</span>)
+            {
+                <a href="#eaacf452fa865f6c" class="i method">Dispose</a>();
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#d47d382441d940e8" class="t constructor">IOException</a>(<span class="s">&quot;Unknown repository format&quot;</span>, <span class="r10 r">e1</span>);
+            }
+
+            <b>if</b> (<a href="#db3254883aecf320" class="i field">workDir</a> == <b>null</b>)
+            {
+                <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a> <span id="r11 rd" class="r11 r">workTreeConfig</span> = <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#d215890433ed9633" class="i method">getString</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;worktree&quot;</span>);
+                <b>if</b> (<span class="r11 r">workTreeConfig</span> != <b>null</b>)
+                {
+                    <a href="#db3254883aecf320" class="i field">workDir</a> = (<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a>)<a href="Util/FS.cs.html#c49f385e4a538de3" class="t t">FS</a>.<a href="Util/FS.cs.html#b4834bd19b90739e" class="i method">resolve</a>(<span class="r3 r">d</span>, <span class="r11 r">workTreeConfig</span>);
+                }
+                <b>else</b>
+                {
+                    <a href="#db3254883aecf320" class="i field">workDir</a> = <a href="#77a819ff8f2ad4d4" class="i property">Directory</a>.<a href="@0@mscorlib/A.html#4b0f923e4e34075e" class="i property">Parent</a>;
+                }
+            }
+
+            <a href="#99ad610709bc9095" class="i field">_refDb</a> = <b>new</b> <a href="RefDirectory.cs.html#e809935403030c68" class="t constructor">RefDirectory</a>(<a href="#a967877e73d4cc25" class="k">this</a>);
+            <b>if</b> (<span class="r5 r">objectDir</span> != <b>null</b>)
+                <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a> = <b>new</b> <a href="ObjectDirectory.cs.html#e3465b1156bddeab" class="t constructor">ObjectDirectory</a>(<a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<span class="r5 r">objectDir</span>, <span class="s">&quot;&quot;</span>),
+                        <span class="r6 r">alternateObjectDir</span>);
+            <b>else</b>
+                <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a> = <b>new</b> <a href="ObjectDirectory.cs.html#e3465b1156bddeab" class="t constructor">ObjectDirectory</a>(<a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#6ddb293f2dca8340" class="i method">CombineDirectoryPath</a>(<a href="#77a819ff8f2ad4d4" class="i property">Directory</a>, <span class="s">&quot;objects&quot;</span>),
+                        <span class="r6 r">alternateObjectDir</span>);
+
+            <b>if</b> (<span class="r7 r">indexFile</span> != <b>null</b>)
+                <a href="#a967877e73d4cc25" class="k">this</a>.<a href="#a3cef5319d5fab6e" class="i field">indexFile</a> = <span class="r7 r">indexFile</span>;
+            <b>else</b>
+                <a href="#a967877e73d4cc25" class="k">this</a>.<a href="#a3cef5319d5fab6e" class="i field">indexFile</a> = <a href="Util/PathUtil.cs.html#50cb4ca1720e7971" class="t t">PathUtil</a>.<a href="Util/PathUtil.cs.html#ce6459c9804cf380" class="i method">CombineFilePath</a>(<a href="#77a819ff8f2ad4d4" class="i property">Directory</a>, <span class="s">&quot;index&quot;</span>);
+
+            <b>if</b> (<a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDirectory.cs.html#9f85ccb917da4ecc" class="i method">exists</a>())
+            {
+                <b>string</b> <span id="r12 rd" class="r12 r">repositoryFormatVersion</span> = <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#d215890433ed9633" class="i method">getString</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;repositoryFormatVersion&quot;</span>);
+
+                <b>if</b> (!<span class="s">&quot;0&quot;</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r12 r">repositoryFormatVersion</span>))
+                {
+                    <a href="#eaacf452fa865f6c" class="i method">Dispose</a>();
+                    <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Unknown repository format \&quot;&quot;</span>
+                                          + <span class="r12 r">repositoryFormatVersion</span> + <span class="s">&quot;\&quot;; expected \&quot;0\&quot;.&quot;</span>);
+                }
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new Git repository initializing the necessary files and</span>
+        <span class="c">///</span><span class="c"> directories.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="be416f18acdc8342" href="R/be416f18acdc8342.html" target="n" data-glyph="72,1" class="i method">Create</a>()
+        {
+            <b>lock</b> (<a href="#9a3f206834e1bcc3" class="i field">_padLock</a>)
+            {
+                <a href="#90313aaafd93dd69" class="i method">Create</a>(<b>false</b>);
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a new Git repository initializing the necessary files and</span>
+        <span class="c">///</span><span class="c"> directories.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r13 r">bare</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">if true, a bare repository is created.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="90313aaafd93dd69" href="R/90313aaafd93dd69.html" target="n" data-glyph="72,1" class="i method">Create</a>(<b>bool</b> <span id="r13 rd" class="r13 r">bare</span>)
+        {
+            <a href="@0@mscorlib/A.html#f1b135ff6c380b37" class="k">var</a> <span id="r14 rd" class="r14 r">reinit</span> = <b>false</b>;
+
+            <b>if</b> (<a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="FileBasedConfig.cs.html#ba7993194b611ad7" class="i method">getFile</a>().<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+            {
+                <span class="r14 r">reinit</span> = <b>true</b>;
+            }
+
+            <b>if</b> (!<span class="r14 r">reinit</span>)
+            {
+                <a href="#77a819ff8f2ad4d4" class="i property">Directory</a>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>();
+                <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#cc68b8a22f3161d1" class="i method">create</a>();
+                <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDirectory.cs.html#1954992301f058a6" class="i method">create</a>();
+
+                <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r15 rd" class="r15 r">head</span> = <a href="#43378c3c1076b68b" class="i method">UpdateRef</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>);
+                <span class="r15 r">head</span>.<a href="RefUpdate.cs.html#78a7f5bfcb17d569" class="i method">disableRefLog</a>();
+                <span class="r15 r">head</span>.<a href="RefUpdate.cs.html#6a7017e890732529" class="i method">link</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#f5c8f6540674ab54" class="i field">R_HEADS</a> + <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#48e8cbcf9ac4b8f7" class="i field">MASTER</a>);
+            }
+
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#a8265e627e22e1fe" class="i method">setInt</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;repositoryformatversion&quot;</span>, 0);
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#6d53f794eead37b2" class="i method">setBoolean</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;filemode&quot;</span>, <b>true</b>);
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#6d53f794eead37b2" class="i method">setBoolean</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;bare&quot;</span>, <span class="r13 r">bare</span>);
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#6d53f794eead37b2" class="i method">setBoolean</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;logallrefupdates&quot;</span>, !<span class="r13 r">bare</span>);
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="Config.cs.html#6d53f794eead37b2" class="i method">setBoolean</a>(<span class="s">&quot;core&quot;</span>, <b>null</b>, <span class="s">&quot;autocrlf&quot;</span>, <b>false</b>);
+
+            <a href="#5bc9cbfb2f0922eb" class="i property">Config</a>.<a href="FileBasedConfig.cs.html#b8bb0759e18f03bd" class="i method">save</a>();
+
+            <b>return</b> <span class="r14 r">reinit</span>;
+        }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="8335808da30bf0cd" href="R/8335808da30bf0cd.html" target="n" data-glyph="102,1" class="i property">ObjectsDirectory</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDirectory.cs.html#6fe9e2d1be36b7a4" class="i method">getDirectory</a>(); }
+        }
+
+        <b>public</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="77a819ff8f2ad4d4" href="R/77a819ff8f2ad4d4.html" target="n" data-glyph="102,1" class="i property">Directory</a> { <b>get</b>; <b>private set</b>; }
+        <b>public</b> <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <a id="8728658bd6901bbe" href="R/8728658bd6901bbe.html" target="n" data-glyph="102,1" class="i property">WorkingDirectory</a> { <b>get</b> { <b>return</b> <a href="#db3254883aecf320" class="i field">workDir</a>; } }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Override default workdir</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r16 r">workTree</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the work tree directory</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="2fe93614013bec2f" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">setWorkDir</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r16 rd" class="r16 r">workTree</span>)
+        {
+            <a href="#db3254883aecf320" class="i field">workDir</a> = <span class="r16 r">workTree</span>;
+        }
+
+        <b>public</b> <a href="RepositoryConfig.cs.html#cfe59cda5a797e80" class="t t">RepositoryConfig</a> <a id="5bc9cbfb2f0922eb" href="R/5bc9cbfb2f0922eb.html" target="n" data-glyph="102,1" class="i property">Config</a> { <b>get</b>; <b>private set</b>; }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Construct a filename where the loose object having a specified SHA-1</span>
+        <span class="c">///</span><span class="c"> should be stored. If the object is stored in a shared repository the path</span>
+        <span class="c">///</span><span class="c"> to the alternative repo will be returned. If the object is not yet store</span>
+        <span class="c">///</span><span class="c"> a usable path in this repo will be returned. It is assumed that callers</span>
+        <span class="c">///</span><span class="c"> will look for objects in a pack first.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r17 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Suggested file name</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="c79c19964e8db0e6" href="R/c79c19964e8db0e6.html" target="n" data-glyph="72,1" class="i method">ToFile</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r17 rd" class="r17 r">objectId</span>)
+        {
+            <b>return</b> <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDirectory.cs.html#29e4bdc419b441fb" class="i method">fileFor</a>(<span class="r17 r">objectId</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r18 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> true if the specified object is stored in this repo or any of the</span>
+        <span class="c">///</span><span class="c"> known shared repositories.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public bool</b> <a id="02a2ce785759ae90" href="R/02a2ce785759ae90.html" target="n" data-glyph="72,1" class="i method">HasObject</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r18 rd" class="r18 r">objectId</span>)
+        {
+            <b>return</b> <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDatabase.cs.html#3ea0dc30cedf3f88" class="i method">hasObject</a>(<span class="r18 r">objectId</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r19 r">windowCursor</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Temporary working space associated with the calling thread.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r20 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SHA-1 of an object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for accessing the data of the named</span>
+        <span class="c">///</span><span class="c"> object, or null if the object does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <a id="0a6ee5a14a08d1df" href="R/0a6ee5a14a08d1df.html" target="n" data-glyph="72,1" class="i method">OpenObject</a>(<a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r19 rd" class="r19 r">windowCursor</span>, <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r20 rd" class="r20 r">id</span>)
+        {
+            <b>return</b> <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDatabase.cs.html#213ba5ac972a76d3" class="i method">openObject</a>(<span class="r19 r">windowCursor</span>, <span class="r20 r">id</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r21 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SHA-1 of an object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for accessing the data of the named</span>
+        <span class="c">///</span><span class="c"> object, or null if the object does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <a id="958de4672035f671" href="R/958de4672035f671.html" target="n" data-glyph="72,1" class="i method">OpenObject</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r21 rd" class="r21 r">id</span>)
+        {
+            <a href="WindowCursor.cs.html#1782168e8a82d90f" class="k">var</a> <span id="r22 rd" class="r22 r">wc</span> = <b>new</b> <a href="WindowCursor.cs.html#8cb7e36e619a1307" class="t constructor">WindowCursor</a>();
+            <b>try</b>
+            {
+                <b>return</b> <a href="#0a6ee5a14a08d1df" class="i method">OpenObject</a>(<span class="r22 r">wc</span>, <span class="r21 r">id</span>);
+            }
+            <b>finally</b>
+            {
+                <span class="r22 r">wc</span>.<a href="WindowCursor.cs.html#5fc4aebb06ba157d" class="i method">Release</a>();
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Open object in all packs containing specified object.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r23 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">id of object to search for</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r24 r">windowCursor</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Temporary working space associated with the calling thread.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Collection of loaders for this object, from all packs containing</span>
+        <span class="c">///</span><span class="c"> this object</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#3acf01620172c7f0" class="t t">IEnumerable</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt; <a id="e0bc390dce39f32a" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">OpenObjectInAllPacks</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r23 rd" class="r23 r">objectId</span>, <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r24 rd" class="r24 r">windowCursor</span>)
+        {
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="k">var</a> <span id="r25 rd" class="r25 r">result</span> = <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt;();
+            <a href="#33c33e6237056fcc" class="i method">OpenObjectInAllPacks</a>(<span class="r23 r">objectId</span>, <span class="r25 r">result</span>, <span class="r24 r">windowCursor</span>);
+            <b>return</b> <span class="r25 r">result</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Open object in all packs containing specified object.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r26 r">objectId</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> of object to search for</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r27 r">resultLoaders</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Result collection of loaders for this object, filled with</span>
+        <span class="c">///</span><span class="c"> loaders from all packs containing specified object</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r28 r">windowCursor</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Temporary working space associated with the calling thread.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="33c33e6237056fcc" href="R/33c33e6237056fcc.html" target="n" data-glyph="72,1" class="i method">OpenObjectInAllPacks</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r26 rd" class="r26 r">objectId</span>, <a href="@0@mscorlib/A.html#a9bf1395d3addc77" class="t t">ICollection</a>&lt;<a href="PackedObjectLoader.cs.html#a2110e69ed08fb94" class="t t">PackedObjectLoader</a>&gt; <span id="r27 rd" class="r27 r">resultLoaders</span>,
+                                         <a href="WindowCursor.cs.html#1782168e8a82d90f" class="t t">WindowCursor</a> <span id="r28 rd" class="r28 r">windowCursor</span>)
+        {
+            <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDatabase.cs.html#bb4b1788ffe57afb" class="i method">OpenObjectInAllPacks</a>(<span class="r27 r">resultLoaders</span>, <span class="r28 r">windowCursor</span>, <span class="r26 r">objectId</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r29 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SHA&#39;1 of a blob</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for accessing the data of a named blob</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <a id="620dd24281450a4b" href="R/620dd24281450a4b.html" target="n" data-glyph="72,1" class="i method">OpenBlob</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r29 rd" class="r29 r">id</span>)
+        {
+            <b>return</b> <a href="#958de4672035f671" class="i method">OpenObject</a>(<span class="r29 r">id</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SHA&#39;1 of a tree</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for accessing the data of a named tree</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <a id="70bd1e25691509a0" href="R/70bd1e25691509a0.html" target="n" data-glyph="72,1" class="i method">OpenTree</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r30 rd" class="r30 r">id</span>)
+        {
+            <b>return</b> <a href="#958de4672035f671" class="i method">OpenObject</a>(<span class="r30 r">id</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access a Commit object using a symbolic reference. This reference may</span>
+        <span class="c">///</span><span class="c"> be a SHA-1 or ref in combination with a number of symbols translating</span>
+        <span class="c">///</span><span class="c"> from one ref or SHA1-1 to another, such as HEAD^ etc.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r31 r">resolveString</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a reference to a git commit object</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> named by the specified string</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <a id="ed3eef4f6f4c4982" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">MapCommit</a>(<b>string</b> <span id="r31 rd" class="r31 r">resolveString</span>)
+        {
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r32 rd" class="r32 r">id</span> = <a href="#8d7dd48b46ac1019" class="i method">Resolve</a>(<span class="r31 r">resolveString</span>);
+            <b>return</b> <span class="r32 r">id</span> != <b>null</b> ? <a href="#6c248665104198fc" class="i method">MapCommit</a>(<span class="r32 r">id</span>) : <b>null</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access a Commit by SHA&#39;1 id.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r33 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Commit or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <a id="6c248665104198fc" href="R/6c248665104198fc.html" target="n" data-glyph="72,1" class="i method">MapCommit</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r33 rd" class="r33 r">id</span>)
+        {
+            <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r34 rd" class="r34 r">or</span> = <a href="#958de4672035f671" class="i method">OpenObject</a>(<span class="r33 r">id</span>);
+            <b>if</b> (<span class="r34 r">or</span> == <b>null</b>)
+            {
+                <b>return null</b>;
+            }
+
+            <b>byte</b>[] <span id="r35 rd" class="r35 r">raw</span> = <span class="r34 r">or</span>.<a href="ObjectLoader.cs.html#d883e0b16803f8fb" class="i property">Bytes</a>;
+            <b>if</b> (<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#5dc47817ed87c51e" class="i field">OBJ_COMMIT</a> == <span class="r34 r">or</span>.<a href="ObjectLoader.cs.html#400376a9353596de" class="i property">Type</a>)
+            {
+                <b>return</b> <b>new</b> <a href="Commit.cs.html#5fbbb4cac2551734" class="t constructor">Commit</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r33 r">id</span>, <span class="r35 r">raw</span>);
+            }
+
+            <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r33 r">id</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access any type of Git object by id and</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SHA-1 of object to read</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">optional, only relevant for simple tags</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The Git object if found or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public object</b> <a id="a46e964ceb16553d" href="R/a46e964ceb16553d.html" target="n" data-glyph="72,1" class="i method">MapObject</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r36 rd" class="r36 r">id</span>, <b>string</b> <span id="r37 rd" class="r37 r">refName</span>)
+        {
+            <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r38 rd" class="r38 r">or</span> = <a href="#958de4672035f671" class="i method">OpenObject</a>(<span class="r36 r">id</span>);
+
+            <b>if</b> (<span class="r38 r">or</span> == <b>null</b>)
+            {
+                <b>return null</b>;
+            }
+
+            <b>byte</b>[] <span id="r39 rd" class="r39 r">raw</span> = <span class="r38 r">or</span>.<a href="ObjectLoader.cs.html#d883e0b16803f8fb" class="i property">Bytes</a>;
+            <b>switch</b> ((<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>)(<span class="r38 r">or</span>.<a href="ObjectLoader.cs.html#400376a9353596de" class="i property">Type</a>))
+            {
+                <b>case</b> <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#d3cd40a2991d1aba" class="i field">Tree</a>:
+                    <b>return</b> <a href="#68aa556317f630ed" class="i method">MakeTree</a>(<span class="r36 r">id</span>, <span class="r39 r">raw</span>);
+
+                <b>case</b> <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>:
+                    <b>return</b> <a href="#0de144182cc75d09" class="i method">MakeCommit</a>(<span class="r36 r">id</span>, <span class="r39 r">raw</span>);
+
+                <b>case</b> <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#ef24a02f56064bf4" class="i field">Tag</a>:
+                    <b>return</b> <a href="#e642699acd542181" class="i method">MakeTag</a>(<span class="r36 r">id</span>, <span class="r37 r">refName</span>, <span class="r39 r">raw</span>);
+
+                <b>case</b> <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#69c2908118b8b8c1" class="i field">Blob</a>:
+                    <b>return</b> <span class="r39 r">raw</span>;
+
+                <b>default</b>:
+                    <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#f8a1d5919dc8c7af" class="t constructor">IncorrectObjectTypeException</a>(<span class="r36 r">id</span>,
+                        <span class="s">&quot;COMMIT nor TREE nor BLOB nor TAG&quot;</span>);
+            }
+        }
+
+        <b>private object</b> <a id="0de144182cc75d09" href="R/0de144182cc75d09.html" target="n" data-glyph="76,1" class="i method">MakeCommit</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r40 rd" class="r40 r">id</span>, <b>byte</b>[] <span id="r41 rd" class="r41 r">raw</span>)
+        {
+            <b>return</b> <b>new</b> <a href="Commit.cs.html#5fbbb4cac2551734" class="t constructor">Commit</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r40 r">id</span>, <span class="r41 r">raw</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access a Tree object using a symbolic reference. This reference may</span>
+        <span class="c">///</span><span class="c"> be a SHA-1 or ref in combination with a number of symbols translating</span>
+        <span class="c">///</span><span class="c"> from one ref or SHA1-1 to another, such as HEAD^{tree} etc.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r42 r">revstr</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">a reference to a git commit object</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a Tree named by the specified string</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <a id="4814c0d12d1c66c8" href="R/4814c0d12d1c66c8.html" target="n" data-glyph="72,1" class="i method">MapTree</a>(<b>string</b> <span id="r42 rd" class="r42 r">revstr</span>)
+        {
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r43 rd" class="r43 r">id</span> = <a href="#8d7dd48b46ac1019" class="i method">Resolve</a>(<span class="r42 r">revstr</span>);
+            <b>return</b> (<span class="r43 r">id</span> != <b>null</b>) ? <a href="#b5b612d688cbc4ee" class="i method">MapTree</a>(<span class="r43 r">id</span>) : <b>null</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access a Tree by SHA&#39;1 id.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r44 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Tree or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <a id="b5b612d688cbc4ee" href="R/b5b612d688cbc4ee.html" target="n" data-glyph="72,1" class="i method">MapTree</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r44 rd" class="r44 r">id</span>)
+        {
+            <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r45 rd" class="r45 r">or</span> = <a href="#958de4672035f671" class="i method">OpenObject</a>(<span class="r44 r">id</span>);
+            <b>if</b> (<span class="r45 r">or</span> == <b>null</b>)
+            {
+                <b>return null</b>;
+            }
+
+            <b>byte</b>[] <span id="r46 rd" class="r46 r">raw</span> = <span class="r45 r">or</span>.<a href="ObjectLoader.cs.html#d883e0b16803f8fb" class="i property">Bytes</a>;
+            <b>switch</b> (((<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>)<span class="r45 r">or</span>.<a href="ObjectLoader.cs.html#400376a9353596de" class="i property">Type</a>))
+            {
+                <b>case</b> <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#d3cd40a2991d1aba" class="i field">Tree</a>:
+                    <b>return</b> <b>new</b> <a href="Tree.cs.html#6f4170604db55bcd" class="t constructor">Tree</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r44 r">id</span>, <span class="r46 r">raw</span>);
+
+                <b>case</b> <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>:
+                    <b>return</b> <a href="#b5b612d688cbc4ee" class="i method">MapTree</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#3e127c192a574f53" class="i method">FromString</a>(<span class="r46 r">raw</span>, 5));
+            }
+
+            <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r44 r">id</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#d3cd40a2991d1aba" class="i field">Tree</a>);
+        }
+
+        <b>private</b> <a href="Tree.cs.html#5c7834780fcb0bc3" class="t t">Tree</a> <a id="68aa556317f630ed" href="R/68aa556317f630ed.html" target="n" data-glyph="76,1" class="i method">MakeTree</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r47 rd" class="r47 r">id</span>, <b>byte</b>[] <span id="r48 rd" class="r48 r">raw</span>)
+        {
+            <b>return</b> <b>new</b> <a href="Tree.cs.html#6f4170604db55bcd" class="t constructor">Tree</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r47 r">id</span>, <span class="r48 r">raw</span>);
+        }
+
+        <b>private</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a> <a id="e642699acd542181" href="R/e642699acd542181.html" target="n" data-glyph="76,1" class="i method">MakeTag</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r49 rd" class="r49 r">id</span>, <b>string</b> <span id="r50 rd" class="r50 r">refName</span>, <b>byte</b>[] <span id="r51 rd" class="r51 r">raw</span>)
+        {
+            <b>return</b> <b>new</b> <a href="Tag.cs.html#2fb85fbf99aff934" class="t constructor">Tag</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r49 r">id</span>, <span class="r50 r">refName</span>, <span class="r51 r">raw</span>);
+        }
+
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access a tag by symbolic name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r52 r">revstr</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Tag or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a> <a id="d6e0b9b3c4bac848" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">MapTag</a>(<b>string</b> <span id="r52 rd" class="r52 r">revstr</span>)
+        {
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r53 rd" class="r53 r">id</span> = <a href="#8d7dd48b46ac1019" class="i method">Resolve</a>(<span class="r52 r">revstr</span>);
+            <b>return</b> <span class="r53 r">id</span> != <b>null</b> ? <a href="#910fa852e5d8e09f" class="i method">MapTag</a>(<span class="r52 r">revstr</span>, <span class="r53 r">id</span>) : <b>null</b>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Access a Tag by SHA&#39;1 id</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r54 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r55 r">id</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Commit or null</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a> <a id="910fa852e5d8e09f" href="R/910fa852e5d8e09f.html" target="n" data-glyph="72,1" class="i method">MapTag</a>(<b>string</b> <span id="r54 rd" class="r54 r">refName</span>, <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r55 rd" class="r55 r">id</span>)
+        {
+            <a href="ObjectLoader.cs.html#15ff0cd10979224e" class="t t">ObjectLoader</a> <span id="r56 rd" class="r56 r">or</span> = <a href="#958de4672035f671" class="i method">OpenObject</a>(<span class="r55 r">id</span>);
+            <b>if</b> (<span class="r56 r">or</span> == <b>null</b>) <b>return null</b>;
+
+            <b>byte</b>[] <span id="r57 rd" class="r57 r">raw</span> = <span class="r56 r">or</span>.<a href="ObjectLoader.cs.html#d883e0b16803f8fb" class="i property">Bytes</a>;
+
+            <b>if</b> (<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#ef24a02f56064bf4" class="i field">Tag</a> == (<a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>)<span class="r56 r">or</span>.<a href="ObjectLoader.cs.html#400376a9353596de" class="i property">Type</a>)
+            {
+                <b>return</b> <b>new</b> <a href="Tag.cs.html#2fb85fbf99aff934" class="t constructor">Tag</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r55 r">id</span>, <span class="r54 r">refName</span>, <span class="r57 r">raw</span>);
+            }
+
+            <b>return</b> <b>new</b> <a href="Tag.cs.html#2fb85fbf99aff934" class="t constructor">Tag</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r55 r">id</span>, <span class="r54 r">refName</span>, <b>null</b>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a command to update (or create) a ref in this repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r58 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> name of the ref the caller wants to modify.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An update command. The caller must finish populating this command</span>
+        <span class="c">///</span><span class="c"> and then invoke one of the update methods to actually make a</span>
+        <span class="c">///</span><span class="c"> change.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <a id="43378c3c1076b68b" href="R/43378c3c1076b68b.html" target="n" data-glyph="72,1" class="i method">UpdateRef</a>(<b>string</b> <span id="r58 rd" class="r58 r">refName</span>)
+        {
+            <b>return</b> <a href="#7f23fa2824e99bc7" class="i method">UpdateRef</a>(<span class="r58 r">refName</span>, <b>false</b>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a command to update, create or delete a ref in this repository.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r59 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">name of the ref the caller wants to modify.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r60 r">detach</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">true to create a detached head</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">An update command. The caller must finish populating this command and then invoke one of the update methods to actually make a change.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <a id="7f23fa2824e99bc7" href="R/7f23fa2824e99bc7.html" target="n" data-glyph="72,1" class="i method">UpdateRef</a>(<b>string</b> <span id="r59 rd" class="r59 r">refName</span>, <b>bool</b> <span id="r60 rd" class="r60 r">detach</span>)
+        {
+            <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#d53ff39c32c043e0" class="i method">newUpdate</a>(<span class="r59 r">refName</span>, <span class="r60 r">detach</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Create a command to rename a ref in this repository</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r61 r">fromRef</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of ref to rename from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r62 r">toRef</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Name of ref to rename to.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An update command that knows how to rename a branch to another.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The rename could not be performed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="RefRename.cs.html#5fd7aa1b7decfdc1" class="t t">RefRename</a> <a id="a0456e21c8b87b39" href="R/a0456e21c8b87b39.html" target="n" data-glyph="72,1" class="i method">RenameRef</a>(<b>string</b> <span id="r61 rd" class="r61 r">fromRef</span>, <b>string</b> <span id="r62 rd" class="r62 r">toRef</span>)
+        {
+            <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#849e0fd0b96e9074" class="i method">newRename</a>(<span class="r61 r">fromRef</span>, <span class="r62 r">toRef</span>);
+        }
+
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Parse a git revision string and return an object id.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	Currently supported is combinations of these.</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">SHA-1 - a SHA-1</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">refs/... - a ref name</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">ref^n - nth parent reference</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">ref~n - distance via parent reference</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">ref@{n} - nth version of ref</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">ref^{tree} - tree references by ref</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">ref^{commit} - commit references by ref</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c">	Not supported is</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">ul</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">timestamps in reflogs, ref@{full or relative timestamp}</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	 </span><span class="c">&lt;</span><span class="c">li</span><span class="c">&gt;</span><span class="c">abbreviated SHA-1&#39;s</span><span class="c">&lt;/</span><span class="c">li</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">ul</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r63 r">revision</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A git object references expression.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> An </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> or null if revstr can&#39;t be resolved to any </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c">	</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">On serious errors.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="8d7dd48b46ac1019" href="R/8d7dd48b46ac1019.html" target="n" data-glyph="72,1" class="i method">Resolve</a>(<b>string</b> <span id="r63 rd" class="r63 r">revision</span>)
+        {
+            <b>object</b> <span id="r64 rd" class="r64 r">oref</span> = <b>null</b>;
+            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r65 rd" class="r65 r">refId</span> = <b>null</b>;
+
+            <span class="c">// [ammachado] Avoid the loop if the reference is not a special one.</span>
+            <b>if</b> (<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#299d36326434ba20" class="i method">IndexOfAny</a>(<b>new</b>[] { <span class="s">&#39;^&#39;</span>, <span class="s">&#39;~&#39;</span>, <span class="s">&#39;@&#39;</span> }) == -1)
+            {
+                <b>return</b> <a href="#a05c293ee2db246c" class="i method">ResolveSimple</a>(<span class="r63 r">revision</span>);
+            }
+
+            <b>for</b> (<b>int</b> <span id="r66 rd" class="r66 r">i</span> = 0; <span class="r66 r">i</span> &lt; <span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; ++<span class="r66 r">i</span>)
+            {
+                <b>switch</b> (<span class="r63 r">revision</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r66 r">i</span>])
+                {
+                    <b>case</b> <span class="s">&#39;^&#39;</span>:
+                        <b>if</b> (<span class="r65 r">refId</span> == <b>null</b>)
+                        {
+                            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r67 rd" class="r67 r">refstr</span> = <b>new</b> <b>string</b>(<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#d78d4544220d96be" class="i method">ToCharArray</a>(0, <span class="r66 r">i</span>));
+                            <span class="r65 r">refId</span> = <a href="#a05c293ee2db246c" class="i method">ResolveSimple</a>(<span class="r67 r">refstr</span>);
+                            <b>if</b> (<span class="r65 r">refId</span> == <b>null</b>) <b>return null</b>;
+                        }
+
+                        <b>if</b> (<span class="r66 r">i</span> + 1 &lt; <span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>)
+                        {
+                            <b>switch</b> (<span class="r63 r">revision</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r66 r">i</span> + 1])
+                            {
+                                <b>case</b> <span class="s">&#39;0&#39;</span>:
+                                <b>case</b> <span class="s">&#39;1&#39;</span>:
+                                <b>case</b> <span class="s">&#39;2&#39;</span>:
+                                <b>case</b> <span class="s">&#39;3&#39;</span>:
+                                <b>case</b> <span class="s">&#39;4&#39;</span>:
+                                <b>case</b> <span class="s">&#39;5&#39;</span>:
+                                <b>case</b> <span class="s">&#39;6&#39;</span>:
+                                <b>case</b> <span class="s">&#39;7&#39;</span>:
+                                <b>case</b> <span class="s">&#39;8&#39;</span>:
+                                <b>case</b> <span class="s">&#39;9&#39;</span>:
+
+                                    <b>int</b> <span id="r68 rd" class="r68 r">j</span>;
+                                    <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+
+                                    <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                                    {
+                                        <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r69 rd" class="r69 r">tag</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                                        <span class="r65 r">refId</span> = <span class="r69 r">tag</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                                        <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                    }
+
+                                    <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <span id="r70 rd" class="r70 r">oCom</span> = (<span class="r64 r">oref</span> <b>as</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a>);
+                                    <b>if</b> (<span class="r70 r">oCom</span> == <b>null</b>)
+                                    {
+                                        <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>);
+                                    }
+
+                                    <b>for</b> (<span class="r68 r">j</span> = <span class="r66 r">i</span> + 1; <span class="r68 r">j</span> &lt; <span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; ++<span class="r68 r">j</span>)
+                                    {
+                                        <b>if</b> (!<a href="@0@mscorlib/A.html#02f2b1a33b09362d" class="t t">Char</a>.<a href="@0@mscorlib/A.html#041e77a953545d16" class="i method">IsDigit</a>(<span class="r63 r">revision</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r68 r">j</span>])) <b>break</b>;
+                                    }
+
+                                    <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r71 rd" class="r71 r">parentnum</span> = <b>new</b> <b>string</b>(<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#d78d4544220d96be" class="i method">ToCharArray</a>(<span class="r66 r">i</span> + 1, <span class="r68 r">j</span> - <span class="r66 r">i</span> - 1));
+
+                                    <b>int</b> <span id="r72 rd" class="r72 r">pnum</span>;
+
+                                    <b>try</b>
+                                    {
+                                        <span class="r72 r">pnum</span> = <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#069d595792a157df" class="i method">ToInt32</a>(<span class="r71 r">parentnum</span>);
+                                    }
+                                    <b>catch</b> (<a href="@0@mscorlib/A.html#80a470d64a9b80ef" class="t t">FormatException</a>)
+                                    {
+                                        <b>throw</b> <b>new</b> <a href="Exceptions/RevisionSyntaxException.cs.html#4764518901a018fd" class="t constructor">RevisionSyntaxException</a>(<span class="r63 r">revision</span>, <span class="s">&quot;Invalid commit parent number&quot;</span>);
+                                    }
+                                    <b>if</b> (<span class="r72 r">pnum</span> != 0)
+                                    {
+                                        <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>[] <span id="r73 rd" class="r73 r">parents</span> = <span class="r70 r">oCom</span>.<a href="Commit.cs.html#05ed469ec0352a50" class="i property">ParentIds</a>;
+                                        <b>if</b> (<span class="r72 r">pnum</span> &gt; <span class="r73 r">parents</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+                                            <span class="r65 r">refId</span> = <b>null</b>;
+                                        <b>else</b>
+                                            <span class="r65 r">refId</span> = <span class="r73 r">parents</span>[<span class="r72 r">pnum</span> - 1];
+                                    }
+
+                                    <span class="r66 r">i</span> = <span class="r68 r">j</span> - 1;
+                                    <b>break</b>;
+
+                                <b>case</b> <span class="s">&#39;{&#39;</span>:
+                                    <b>int</b> <span id="r74 rd" class="r74 r">k</span>;
+                                    <b>string</b> <span id="r75 rd" class="r75 r">item</span> = <b>null</b>;
+                                    <b>for</b> (<span class="r74 r">k</span> = <span class="r66 r">i</span> + 2; <span class="r74 r">k</span> &lt; <span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; ++<span class="r74 r">k</span>)
+                                    {
+                                        <b>if</b> (<span class="r63 r">revision</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r74 r">k</span>] != <span class="s">&#39;}&#39;</span>) <b>continue</b>;
+                                        <span class="r75 r">item</span> = <b>new</b> <b>string</b>(<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#d78d4544220d96be" class="i method">ToCharArray</a>(<span class="r66 r">i</span> + 2, <span class="r74 r">k</span> - <span class="r66 r">i</span> - 2));
+                                        <b>break</b>;
+                                    }
+
+                                    <span class="r66 r">i</span> = <span class="r74 r">k</span>;
+                                    <b>if</b> (<span class="r75 r">item</span> != <b>null</b>)
+                                    {
+                                        <b>if</b> (<span class="r75 r">item</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="s">&quot;tree&quot;</span>))
+                                        {
+                                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                                            {
+                                                <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r76 rd" class="r76 r">t</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                                                <span class="r65 r">refId</span> = <span class="r76 r">t</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                                                <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            }
+                                            <a href="Treeish.cs.html#f2a5e1e5a4e553e0" class="t t">Treeish</a> <span id="r77 rd" class="r77 r">oTree</span> = (<span class="r64 r">oref</span> <b>as</b> <a href="Treeish.cs.html#f2a5e1e5a4e553e0" class="t t">Treeish</a>);
+                                            <b>if</b> (<span class="r77 r">oTree</span> != <b>null</b>)
+                                            {
+                                                <span class="r65 r">refId</span> = <span class="r77 r">oTree</span>.<a href="Treeish.cs.html#f51aa5062716d5dc" class="i property">TreeId</a>;
+                                            }
+                                            <b>else</b>
+                                            {
+                                                <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#d3cd40a2991d1aba" class="i field">Tree</a>);
+                                            }
+                                        }
+                                        <b>else if</b> (<span class="r75 r">item</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="s">&quot;commit&quot;</span>))
+                                        {
+                                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                                            {
+                                                <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r78 rd" class="r78 r">t</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                                                <span class="r65 r">refId</span> = <span class="r78 r">t</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                                                <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            }
+                                            <b>if</b> (!(<span class="r64 r">oref</span> <b>is</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a>))
+                                            {
+                                                <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>);
+                                            }
+                                        }
+                                        <b>else if</b> (<span class="r75 r">item</span>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="s">&quot;blob&quot;</span>))
+                                        {
+                                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                                            {
+                                                <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r79 rd" class="r79 r">t</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                                                <span class="r65 r">refId</span> = <span class="r79 r">t</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                                                <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            }
+                                            <b>if</b> (!(<span class="r64 r">oref</span> <b>is byte</b>[]))
+                                            {
+                                                <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>);
+                                            }
+                                        }
+                                        <b>else if</b> (<b>string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>.<a href="@0@mscorlib/A.html#31b307b02a3bd6b9" class="i method">Equals</a>(<span class="r75 r">item</span>))
+                                        {
+                                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                                            {
+                                                <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r80 rd" class="r80 r">t</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                                                <span class="r65 r">refId</span> = <span class="r80 r">t</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                                                <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                            }
+                                        }
+                                        <b>else</b>
+                                        {
+                                            <b>throw</b> <b>new</b> <a href="Exceptions/RevisionSyntaxException.cs.html#15f94ab3829c59fb" class="t constructor">RevisionSyntaxException</a>(<span class="r63 r">revision</span>);
+                                        }
+                                    }
+                                    <b>else</b>
+                                    {
+                                        <b>throw</b> <b>new</b> <a href="Exceptions/RevisionSyntaxException.cs.html#15f94ab3829c59fb" class="t constructor">RevisionSyntaxException</a>(<span class="r63 r">revision</span>);
+                                    }
+                                    <b>break</b>;
+
+                                <b>default</b>:
+                                    <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                                    <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <span id="r81 rd" class="r81 r">oComm</span> = (<span class="r64 r">oref</span> <b>as</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a>);
+                                    <b>if</b> (<span class="r81 r">oComm</span> != <b>null</b>)
+                                    {
+                                        <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>[] <span id="r82 rd" class="r82 r">parents</span> = <span class="r81 r">oComm</span>.<a href="Commit.cs.html#05ed469ec0352a50" class="i property">ParentIds</a>;
+                                        <span class="r65 r">refId</span> = <span class="r82 r">parents</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0 ? <b>null</b> : <span class="r82 r">parents</span>[0];
+                                    }
+                                    <b>else</b>
+                                    {
+                                        <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#d6d51708af0738f7" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#3004c112cecf7e29" class="i field">Commit</a>);
+                                    }
+                                    <b>break</b>;
+                            }
+                        }
+                        <b>else</b>
+                        {
+                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                            <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                            {
+                                <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r83 rd" class="r83 r">tag</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                                <span class="r65 r">refId</span> = <span class="r83 r">tag</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                                <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                            }
+
+                            <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <span id="r84 rd" class="r84 r">oCom</span> = (<span class="r64 r">oref</span> <b>as</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a>);
+                            <b>if</b> (<span class="r84 r">oCom</span> != <b>null</b>)
+                            {
+                                <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>[] <span id="r85 rd" class="r85 r">parents</span> = <span class="r84 r">oCom</span>.<a href="Commit.cs.html#05ed469ec0352a50" class="i property">ParentIds</a>;
+                                <span class="r65 r">refId</span> = <span class="r85 r">parents</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0 ? <b>null</b> : <span class="r85 r">parents</span>[0];
+                            }
+                            <b>else</b>
+                            {
+                                <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#f8a1d5919dc8c7af" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#aed2508fae481977" class="i field">TYPE_COMMIT</a>);
+                            }
+                        }
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;~&#39;</span>:
+                        <b>if</b> (<span class="r64 r">oref</span> == <b>null</b>)
+                        {
+                            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r86 rd" class="r86 r">refstr</span> = <b>new</b> <b>string</b>(<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#d78d4544220d96be" class="i method">ToCharArray</a>(0, <span class="r66 r">i</span>));
+                            <span class="r65 r">refId</span> = <a href="#a05c293ee2db246c" class="i method">ResolveSimple</a>(<span class="r86 r">refstr</span>);
+                            <b>if</b> (<span class="r65 r">refId</span> == <b>null</b>) <b>return null</b>;
+                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                        }
+
+                        <b>while</b> (<span class="r64 r">oref</span> <b>is</b> <a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)
+                        {
+                            <a href="Tag.cs.html#3c239a0e2fc89af5" class="k">var</a> <span id="r87 rd" class="r87 r">tag</span> = (<a href="Tag.cs.html#3c239a0e2fc89af5" class="t t">Tag</a>)<span class="r64 r">oref</span>;
+                            <span class="r65 r">refId</span> = <span class="r87 r">tag</span>.<a href="Tag.cs.html#a67c69bbdcb913ab" class="i property">Id</a>;
+                            <span class="r64 r">oref</span> = <a href="#a46e964ceb16553d" class="i method">MapObject</a>(<span class="r65 r">refId</span>, <b>null</b>);
+                        }
+
+                        <b>if</b> (!(<span class="r64 r">oref</span> <b>is</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a>))
+                        {
+                            <b>throw</b> <b>new</b> <a href="Exceptions/IncorrectObjectTypeException.cs.html#f8a1d5919dc8c7af" class="t constructor">IncorrectObjectTypeException</a>(<span class="r65 r">refId</span>, <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#aed2508fae481977" class="i field">TYPE_COMMIT</a>);
+                        }
+
+                        <b>int</b> <span id="r88 rd" class="r88 r">l</span>;
+                        <b>for</b> (<span class="r88 r">l</span> = <span class="r66 r">i</span> + 1; <span class="r88 r">l</span> &lt; <span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; ++<span class="r88 r">l</span>)
+                        {
+                            <b>if</b> (!<a href="@0@mscorlib/A.html#02f2b1a33b09362d" class="t t">Char</a>.<a href="@0@mscorlib/A.html#041e77a953545d16" class="i method">IsDigit</a>(<span class="r63 r">revision</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r88 r">l</span>]))
+                                <b>break</b>;
+                        }
+
+                        <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r89 rd" class="r89 r">distnum</span> = <b>new</b> <b>string</b>(<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#d78d4544220d96be" class="i method">ToCharArray</a>(<span class="r66 r">i</span> + 1, <span class="r88 r">l</span> - <span class="r66 r">i</span> - 1));
+                        <b>int</b> <span id="r90 rd" class="r90 r">dist</span>;
+
+                        <b>try</b>
+                        {
+                            <span class="r90 r">dist</span> = <a href="@0@mscorlib/A.html#fc990bd1275d43d6" class="t t">Convert</a>.<a href="@0@mscorlib/A.html#069d595792a157df" class="i method">ToInt32</a>(<span class="r89 r">distnum</span>);
+                        }
+                        <b>catch</b> (<a href="@0@mscorlib/A.html#80a470d64a9b80ef" class="t t">FormatException</a>)
+                        {
+                            <b>throw</b> <b>new</b> <a href="Exceptions/RevisionSyntaxException.cs.html#4764518901a018fd" class="t constructor">RevisionSyntaxException</a>(<span class="s">&quot;Invalid ancestry length&quot;</span>, <span class="r63 r">revision</span>);
+                        }
+                        <b>while</b> (<span class="r90 r">dist</span> &gt; 0)
+                        {
+
+                            <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>[] <span id="r91 rd" class="r91 r">parents</span> = ((<a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a>)<span class="r64 r">oref</span>).<a href="Commit.cs.html#05ed469ec0352a50" class="i property">ParentIds</a>;
+                            <b>if</b> (<span class="r91 r">parents</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> == 0)
+                            {
+                                <span class="r65 r">refId</span> = <b>null</b>;
+                                <b>break</b>;
+                            }
+                            <span class="r65 r">refId</span> = <span class="r91 r">parents</span>[0];
+                            <span class="r64 r">oref</span> = <a href="#6c248665104198fc" class="i method">MapCommit</a>(<span class="r65 r">refId</span>);
+                            --<span class="r90 r">dist</span>;
+                        }
+                        <span class="r66 r">i</span> = <span class="r88 r">l</span> - 1;
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;@&#39;</span>:
+                        <b>int</b> <span id="r92 rd" class="r92 r">m</span>;
+                        <b>string</b> <span id="r93 rd" class="r93 r">time</span> = <b>null</b>;
+                        <b>for</b> (<span class="r92 r">m</span> = <span class="r66 r">i</span> + 2; <span class="r92 r">m</span> &lt; <span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>; ++<span class="r92 r">m</span>)
+                        {
+                            <b>if</b> (<span class="r63 r">revision</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r92 r">m</span>] != <span class="s">&#39;}&#39;</span>) <b>continue</b>;
+                            <span class="r93 r">time</span> = <b>new</b> <b>string</b>(<span class="r63 r">revision</span>.<a href="@0@mscorlib/A.html#d78d4544220d96be" class="i method">ToCharArray</a>(<span class="r66 r">i</span> + 2, <span class="r92 r">m</span> - <span class="r66 r">i</span> - 2));
+                            <b>break</b>;
+                        }
+
+                        <b>if</b> (<span class="r93 r">time</span> != <b>null</b>)
+                        {
+                            <b>throw</b> <b>new</b> <a href="Exceptions/RevisionSyntaxException.cs.html#4764518901a018fd" class="t constructor">RevisionSyntaxException</a>(<span class="s">&quot;reflogs not yet supported by revision parser yet&quot;</span>, <span class="r63 r">revision</span>);
+                        }
+                        <span class="r66 r">i</span> = <span class="r92 r">m</span> - 1;
+                        <b>break</b>;
+
+                    <b>default</b>:
+                        <b>if</b> (<span class="r65 r">refId</span> != <b>null</b>)
+                        {
+                            <b>throw</b> <b>new</b> <a href="Exceptions/RevisionSyntaxException.cs.html#15f94ab3829c59fb" class="t constructor">RevisionSyntaxException</a>(<span class="r63 r">revision</span>);
+                        }
+                        <b>break</b>;
+                }
+            }
+
+            <b>if</b> (<span class="r65 r">refId</span> == <b>null</b>)
+            {
+                <span class="r65 r">refId</span> = <a href="#a05c293ee2db246c" class="i method">ResolveSimple</a>(<span class="r63 r">revision</span>);
+            }
+
+            <b>return</b> <span class="r65 r">refId</span>;
+        }
+
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="a05c293ee2db246c" href="R/a05c293ee2db246c.html" target="n" data-glyph="76,1" class="i method">ResolveSimple</a>(<b>string</b> <span id="r94 rd" class="r94 r">revstr</span>)
+        {
+            <b>if</b> (<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#5049b44847b24f97" class="i method">IsId</a>(<span class="r94 r">revstr</span>))
+            {
+                <b>return</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a4a5d5ce43840f13" class="i method">FromString</a>(<span class="r94 r">revstr</span>);
+            }
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r95 rd" class="r95 r">r</span> = <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#9c9ca544bcc753ec" class="i method">getRef</a>(<span class="r94 r">revstr</span>);
+            <b>return</b> <span class="r95 r">r</span> != <b>null</b> ? <span class="r95 r">r</span>.<a href="Ref.cs.html#8d89227bc6e67ab0" class="i property">ObjectId</a> : <b>null</b>;
+        }
+
+        <b>public void</b> <a id="71517c1f5d2f508d" href="R/71517c1f5d2f508d.html" target="n" data-glyph="72,1" class="i method">IncrementOpen</a>()
+        {
+            <a href="#134d9c421f385b61" class="i field">_useCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#21a298998c49faa1" class="i method">incrementAndGet</a>();
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Close all resources used by this repository</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public void</b> <a id="3d2d562261dbfd23" href="R/3d2d562261dbfd23.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+        {
+            <b>int</b> <span id="r96 rd" class="r96 r">usageCount</span> = <a href="#134d9c421f385b61" class="i field">_useCnt</a>.<a href="Util/JavaHelper/AtomicValue.cs.html#2dff7918197b9b16" class="i method">decrementAndGet</a>();
+            <b>if</b> (<span class="r96 r">usageCount</span> == 0)
+            {
+                <b>if</b> (<a href="#124c68995e9e1e25" class="i field">_objectDatabase</a> != <b>null</b>)
+                {
+                    <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDatabase.cs.html#31800827aea8c009" class="i method">Dispose</a>();
+                    <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#afe9577f5703575b" class="i method">Dispose</a>();
+                }
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+                <a href="@0@mscorlib/A.html#25d9c1e022317a99" class="t t">GC</a>.<a href="@0@mscorlib/A.html#2673f5220a565bf2" class="i method">SuppressFinalize</a>(<a href="#a967877e73d4cc25" class="k">this</a>); <span class="c">// Disarm lock-release checker</span>
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+            }
+        }
+
+<span class="k preprocess">#</span><span class="k preprocess">if</span> <span class="i">DEBUG</span>
+        <span class="c">// A debug mode warning if the type has not been disposed properly</span>
+        ~<a id="26106ac450d87989" href="R/../../0000000000.html" target="n" data-glyph="75,1" class="i method">Repository</a>()
+        {
+            <a href="@0@mscorlib/A.html#f907d79481da6ba4" class="t t">Console</a>.<a href="@0@mscorlib/A.html#7c403e083a0bb390" class="i property">Error</a>.<a href="@0@mscorlib/A.html#5238cceaebfeaa74" class="i method">WriteLine</a>(<a href="@0@mscorlib/A.html#4d73eb225aef8a61" class="i method">GetType</a>().<a href="@0@mscorlib/A.html#aa4f112f79364b6e" class="i property">Name</a> + <span class="s">&quot; has not been properly disposed: &quot;</span> + <a href="#77a819ff8f2ad4d4" class="i property">Directory</a>);
+        }
+<span class="k preprocess">#</span><span class="k preprocess">endif</span>
+
+        <b>public void</b> <a id="6bca5f8d3693f557" href="R/6bca5f8d3693f557.html" target="n" data-glyph="72,1" class="i method">OpenPack</a>(<a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r97 rd" class="r97 r">pack</span>, <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r98 rd" class="r98 r">idx</span>)
+        {
+            <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>.<a href="ObjectDirectory.cs.html#6c71dbc92d1eec18" class="i method">openPack</a>(<span class="r97 r">pack</span>, <span class="r98 r">idx</span>);
+        }
+
+        <b>public</b> <a href="ObjectDirectory.cs.html#676d7fa05a339f1d" class="t t">ObjectDirectory</a> <a id="bc489b302b2b9b41" href="R/bc489b302b2b9b41.html" target="n" data-glyph="102,1" class="i property">ObjectDatabase</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#124c68995e9e1e25" class="i field">_objectDatabase</a>; }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The reference database which stores the reference namespace.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a href="RefDatabase.cs.html#46bd94b774717bce" class="t t">RefDatabase</a> <a id="65d95d440057975b" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">RefDatabase</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>; }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Gets a representation of the index associated with this repo</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a href="GitIndex.cs.html#f85fef7d9e501a33" class="t t">GitIndex</a> <a id="e0080a5fa643374c" href="R/e0080a5fa643374c.html" target="n" data-glyph="102,1" class="i property">Index</a>
+        {
+            <b>get</b>
+            {
+                <b>if</b> (<a href="#bd704d77ccd8231b" class="i field">_index</a> == <b>null</b>)
+                {
+                    <a href="#bd704d77ccd8231b" class="i field">_index</a> = <b>new</b> <a href="GitIndex.cs.html#0b44614a9a7cfd94" class="t constructor">GitIndex</a>(<a href="#a967877e73d4cc25" class="k">this</a>);
+                    <a href="#bd704d77ccd8231b" class="i field">_index</a>.<a href="GitIndex.cs.html#e0ebbc0131ba1b87" class="i method">Read</a>();
+                }
+                <b>else</b>
+                {
+                    <a href="#bd704d77ccd8231b" class="i field">_index</a>.<a href="GitIndex.cs.html#42148351d6aeb41d" class="i method">RereadIfNecessary</a>();
+                }
+
+                <b>return</b> <a href="#bd704d77ccd8231b" class="i field">_index</a>;
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">the index file location</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <a id="d34bfd10f7960cc7" href="R/d34bfd10f7960cc7.html" target="n" data-glyph="72,1" class="i method">getIndexFile</a>()
+        {
+            <b>return</b> <a href="#a3cef5319d5fab6e" class="i field">indexFile</a>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Replaces any windows director separators (backslash) with /</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r99 r">bytes</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>internal static byte</b>[] <a id="6cad4279396ab06a" href="R/6cad4279396ab06a.html" target="n" data-glyph="74,1" class="i method">GitInternalSlash</a>(<b>byte</b>[] <span id="r99 rd" class="r99 r">bytes</span>)
+        {
+            <b>if</b> (<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a> == <span class="s">&#39;/&#39;</span>) <span class="c">// [henon] DirectorySeparatorChar == \</span>
+            {
+                <b>return</b> <span class="r99 r">bytes</span>;
+            }
+
+            <b>for</b> (<b>int</b> <span id="r100 rd" class="r100 r">i</span> = 0; <span class="r100 r">i</span> &lt; <span class="r99 r">bytes</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; ++<span class="r100 r">i</span>)
+            {
+                <b>if</b> (<span class="r99 r">bytes</span>[<span class="r100 r">i</span>] == <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a>)
+                {
+                    <span class="r99 r">bytes</span>[<span class="r100 r">i</span>] = (<b>byte</b>)<span class="s">&#39;/&#39;</span>;
+                }
+            }
+
+            <b>return</b> <span class="r99 r">bytes</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Strip work dir and return normalized repository path</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r101 r">workDir</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Work directory</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r102 r">file</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">File whose path shall be stripp off it&#39;s workdir</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">Normalized repository relative path</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public static string</b> <a id="85fefa5ffb656935" href="R/85fefa5ffb656935.html" target="n" data-glyph="72,1" class="i method">StripWorkDir</a>(<a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r101 rd" class="r101 r">workDir</span>, <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r102 rd" class="r102 r">file</span>)
+        {
+            <b>string</b> <span id="r103 rd" class="r103 r">filePath</span> = <span class="r102 r">file</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>();
+            <b>string</b> <span id="r104 rd" class="r104 r">workDirPath</span> = <span class="r101 r">workDir</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>();
+
+            <b>if</b> (<span class="r103 r">filePath</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> &lt;= <span class="r104 r">workDirPath</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> ||
+                <span class="r103 r">filePath</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r104 r">workDirPath</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>] != <a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a> ||
+                !<span class="r103 r">filePath</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<span class="r104 r">workDirPath</span>))
+            {
+                <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r105 rd" class="r105 r">absWd</span> = <b>new</b> <a href="@0@mscorlib/A.html#683f5ff112df8d3a" class="t constructor">DirectoryInfo</a>(<span class="r101 r">workDir</span>.<a href="Util/Extensions.cs.html#39c3246f6e4e556b" class="i method">DirectoryName</a>());
+                <a href="@0@mscorlib/A.html#32b1bf3d4eb90f32" class="t t">FileSystemInfo</a> <span id="r106 rd" class="r106 r">absFile</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r102 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+
+                <b>if</b> (<span class="r105 r">absWd</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> == <span class="r101 r">workDir</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> &amp;&amp; <span class="r106 r">absFile</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a> == <span class="r102 r">file</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>)
+                {
+                    <b>return string</b>.<a href="@0@mscorlib/A.html#c9f70a27facb27cf" class="i field">Empty</a>;
+                }
+
+                <b>return</b> <a href="#85fefa5ffb656935" class="i method">StripWorkDir</a>(<span class="r105 r">absWd</span>, <span class="r106 r">absFile</span>);
+            }
+
+            <b>string</b> <span id="r107 rd" class="r107 r">relName</span> = <span class="r103 r">filePath</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<span class="r104 r">workDirPath</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a> + 1);
+
+            <b>if</b> (<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a> != <span class="s">&#39;/&#39;</span>)
+            {
+                <span class="r107 r">relName</span> = <span class="r107 r">relName</span>.<a href="@0@mscorlib/A.html#987da5dfb39f1927" class="i method">Replace</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#d1bb57592858d485" class="i field">DirectorySeparatorChar</a>, <span class="s">&#39;/&#39;</span>);
+            }
+
+            <b>return</b> <span class="r107 r">relName</span>;
+        }
+
+        <span class="c">/**</span>
+	     <span class="c">*</span><span class="c"> Register a {@link RepositoryListener} which will be notified</span>
+	     <span class="c">*</span><span class="c"> when ref changes are detected.</span>
+	     <span class="c">*</span>
+	     <span class="c">*</span><span class="c"> @param l</span>
+	     <span class="c">*/</span>
+        <b>public void</b> <a id="d67993d910ae172b" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">addRepositoryChangedListener</a>(<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a> <span id="r108 rd" class="r108 r">l</span>)
+        {
+            <a href="#52f07e2dd08c8ab5" class="i field">listeners</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r108 r">l</span>);
+        }
+
+        <span class="c">/**</span>
+         <span class="c">*</span><span class="c"> Remove a registered {@link RepositoryListener}</span>
+         <span class="c">*</span><span class="c"> @param l</span>
+         <span class="c">*/</span>
+        <b>public void</b> <a id="c787a9e0ea987c0d" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">removeRepositoryChangedListener</a>(<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a> <span id="r109 rd" class="r109 r">l</span>)
+        {
+            <a href="#52f07e2dd08c8ab5" class="i field">listeners</a>.<a href="@0@mscorlib/A.html#db8cdd552a0bb10c" class="i method">Remove</a>(<span class="r109 r">l</span>);
+        }
+
+        <span class="c">/**</span>
+         <span class="c">*</span><span class="c"> Register a global {@link RepositoryListener} which will be notified</span>
+         <span class="c">*</span><span class="c"> when a ref changes in any repository are detected.</span>
+         <span class="c">*</span>
+         <span class="c">*</span><span class="c"> @param l</span>
+         <span class="c">*/</span>
+        <b>public static void</b> <a id="debd3d19c6e0adc9" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">addAnyRepositoryChangedListener</a>(<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a> <span id="r110 rd" class="r110 r">l</span>)
+        {
+            <a href="#8b06c735765e9e39" class="i field">allListeners</a>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r110 r">l</span>);
+        }
+
+        <span class="c">/**</span>
+         <span class="c">*</span><span class="c"> Remove a globally registered {@link RepositoryListener}</span>
+         <span class="c">*</span><span class="c"> @param l</span>
+         <span class="c">*/</span>
+        <b>public static void</b> <a id="36989939e5412a63" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">removeAnyRepositoryChangedListener</a>(<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a> <span id="r111 rd" class="r111 r">l</span>)
+        {
+            <a href="#8b06c735765e9e39" class="i field">allListeners</a>.<a href="@0@mscorlib/A.html#db8cdd552a0bb10c" class="i method">Remove</a>(<span class="r111 r">l</span>);
+        }
+
+        <b>internal void</b> <a id="3d1eba96bcb2d461" href="R/3d1eba96bcb2d461.html" target="n" data-glyph="74,1" class="i method">fireRefsChanged</a>()
+        {
+            <a href="RefsChangedEventArgs.cs.html#85711f8add53050a" class="k">var</a> <span id="r112 rd" class="r112 r">@event</span> = <b>new</b> <a href="RefsChangedEventArgs.cs.html#e6717eabd882f340" class="t constructor">RefsChangedEventArgs</a>(<a href="#a967877e73d4cc25" class="k">this</a>);
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt; <span id="r113 rd" class="r113 r">all</span>;
+            <b>lock</b> (<a href="#52f07e2dd08c8ab5" class="i field">listeners</a>)
+            {
+                <span class="r113 r">all</span> = <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt;(<a href="#52f07e2dd08c8ab5" class="i field">listeners</a>);
+            }
+            <b>lock</b> (<a href="#8b06c735765e9e39" class="i field">allListeners</a>)
+            {
+                <span class="r113 r">all</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<a href="#8b06c735765e9e39" class="i field">allListeners</a>);
+            }
+            <b>foreach</b> (<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a> <span id="r114 rd" class="r114 r">l</span> <b>in</b> <span class="r113 r">all</span>)
+            {
+                <span class="r114 r">l</span>.<a href="RepositoryListener.cs.html#272c0f48c9163c38" class="i method">refsChanged</a>(<span class="r112 r">@event</span>);
+            }
+        }
+
+        <b>internal void</b> <a id="64ab5ae6fd3bb6b4" href="R/64ab5ae6fd3bb6b4.html" target="n" data-glyph="74,1" class="i method">fireIndexChanged</a>()
+        {
+            <a href="IndexChangedEventArgs.cs.html#dc435f696c4f8a37" class="k">var</a> <span id="r115 rd" class="r115 r">@event</span> = <b>new</b> <a href="IndexChangedEventArgs.cs.html#765ce60159771b0d" class="t constructor">IndexChangedEventArgs</a>(<a href="#a967877e73d4cc25" class="k">this</a>);
+            <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt; <span id="r116 rd" class="r116 r">all</span>;
+            <b>lock</b> (<a href="#52f07e2dd08c8ab5" class="i field">listeners</a>)
+            {
+                <span class="r116 r">all</span> = <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a>&gt;(<a href="#52f07e2dd08c8ab5" class="i field">listeners</a>);
+            }
+            <b>lock</b> (<a href="#8b06c735765e9e39" class="i field">allListeners</a>)
+            {
+                <span class="r116 r">all</span>.<a href="@0@mscorlib/A.html#e569d850a66a1771" class="i method">AddRange</a>(<a href="#8b06c735765e9e39" class="i field">allListeners</a>);
+            }
+            <b>foreach</b> (<a href="RepositoryListener.cs.html#25297967a33f7340" class="t t">RepositoryListener</a> <span id="r117 rd" class="r117 r">l</span> <b>in</b> <span class="r116 r">all</span>)
+            {
+                <span class="r117 r">l</span>.<a href="RepositoryListener.cs.html#71bf2ab40dcabb06" class="i method">indexChanged</a>(<span class="r115 r">@event</span>);
+            }
+        }
+
+        <span class="c">/**</span>
+ <span class="c">*</span><span class="c"> Force a scan for changed refs.</span>
+ <span class="c">*</span>
+ <span class="c">*</span><span class="c"> @throws IOException</span>
+ <span class="c">*/</span>
+        <b>public void</b> <a id="8abfdd6348ab4424" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">scanForRepoChanges</a>()
+        {
+            <a href="#32678fc8cb626f00" class="i method">getAllRefs</a>(); <span class="c">// This will look for changes to refs</span>
+            <a href="GitIndex.cs.html#f85fef7d9e501a33" class="k">var</a> <span id="r118 rd" class="r118 r">index</span> = <a href="#e0080a5fa643374c" class="i property">Index</a>; <span class="c">// This will detect changes in the index</span>
+        }
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Gets the </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a967877e73d4cc25" class="t t">Repository</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> state</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a> <a id="4a8c0dade0955deb" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">RespositoryState</a>
+        {
+            <b>get</b>
+            {
+                <span class="c">// Pre Git-1.6 logic</span>
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;.dotest&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#c6645f17af3a0e9b" class="i field">Rebasing</a>;
+                }
+
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;.dotest-merge&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#bfd7b4879564315f" class="i field">RebasingInteractive</a>;
+                }
+
+                <span class="c">// From 1.6 onwards</span>
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;rebase-apply/rebasing&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#90d5f786ba77d0ad" class="i field">RebasingRebasing</a>;
+                }
+
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;rebase-apply/applying&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#3f771a0235dee963" class="i field">Apply</a>;
+                }
+
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;rebase-apply&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#c6645f17af3a0e9b" class="i field">Rebasing</a>;
+                }
+
+
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;rebase-merge/interactive&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#bfd7b4879564315f" class="i field">RebasingInteractive</a>;
+                }
+
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;rebase-merge&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#a3bd5fef4b709d4c" class="i field">RebasingMerge</a>;
+                }
+
+                <span class="c">// Both versions</span>
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;MERGE_HEAD&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#3386e107d69c2478" class="i field">Merging</a>;
+                }
+
+                <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<a href="@0@mscorlib/A.html#090eca8621a248ee" class="t t">Path</a>.<a href="@0@mscorlib/A.html#2d7263f86a526264" class="i method">Combine</a>(<a href="#8728658bd6901bbe" class="i property">WorkingDirectory</a>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="s">&quot;BISECT_LOG&quot;</span>)).<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                {
+                    <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#45fadd7ee7231e50" class="i field">Bisecting</a>;
+                }
+
+                <b>return</b> <a href="RepositoryState.cs.html#d9effe64b9ec6cdc" class="t t">RepositoryState</a>.<a href="RepositoryState.cs.html#fb5c58e30629e6ba" class="i field">Safe</a>;
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">mutable map of all known refs (heads, tags, remotes).</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="32678fc8cb626f00" href="R/32678fc8cb626f00.html" target="n" data-glyph="72,1" class="i method">getAllRefs</a>()
+        {
+            <b>try</b>
+            {
+                <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#6f4c630ce6ba6673" class="i method">getRefs</a>(<a href="RefDatabase.cs.html#46bd94b774717bce" class="t t">RefDatabase</a>.<a href="RefDatabase.cs.html#4dc469d51157ca01" class="i field">ALL</a>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+            {
+                <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;();
+            }
+        }
+
+        <b>public</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="4c8d7fcd486ffb24" href="R/4c8d7fcd486ffb24.html" target="n" data-glyph="72,1" class="i method">getRef</a>(<b>string</b> <span id="r119 rd" class="r119 r">name</span>)
+        {
+            <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#9c9ca544bcc753ec" class="i method">getRef</a>(<span class="r119 r">name</span>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> mutable map of all tags; key is short tag name (&quot;v1.0&quot;) and value</span>
+        <span class="c">///</span><span class="c"> of the entry contains the ref with the full tag name</span>
+        <span class="c">///</span><span class="c"> (&quot;refs/tags/v1.0&quot;).</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <a id="23e154977408b4ca" href="R/23e154977408b4ca.html" target="n" data-glyph="72,1" class="i method">getTags</a>()
+        {
+            <b>try</b>
+            {
+                <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#6f4c630ce6ba6673" class="i method">getRefs</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#71ce821cee5d9c50" class="i field">R_TAGS</a>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+            {
+                <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#bf6849e410b43c4c" class="t constructor">Dictionary</a>&lt;<b>string</b>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;();
+            }
+        }
+
+        <b>public</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="eac09ea6075de44e" href="R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">Head</a>
+        {
+            <b>get</b> { <b>return</b> <a href="#4c8d7fcd486ffb24" class="i method">getRef</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>); }
+        }
+
+        <b>public</b> <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <a id="6ce6cf0e9a6ea39a" href="R/6ce6cf0e9a6ea39a.html" target="n" data-glyph="72,1" class="i method">Peel</a>(<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r120 rd" class="r120 r">pRef</span>)
+        {
+            <b>try</b>
+            {
+                <b>return</b> <a href="#99ad610709bc9095" class="i field">_refDb</a>.<a href="RefDatabase.cs.html#500c8c260e579e5d" class="i method">peel</a>(<span class="r120 r">pRef</span>);
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+            {
+                <span class="c">// Historical accident; if the reference cannot be peeled due</span>
+                <span class="c">// to some sort of repository access problem we claim that the</span>
+                <span class="c">// same as if the reference was not an annotated tag.</span>
+                <b>return</b> <span class="r120 r">pRef</span>;
+            }
+        }
+
+        <span class="c">/**</span>
+	     <span class="c">*</span><span class="c"> @return a map with all objects referenced by a peeled ref.</span>
+	     <span class="c">*/</span>
+        <b>public</b> <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="t t">Dictionary</a>&lt;<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;&gt; <a id="c2770c8a011191ab" href="R/c2770c8a011191ab.html" target="n" data-glyph="72,1" class="i method">getAllRefsByPeeledObjectId</a>()
+        {
+            <a href="@0@mscorlib/A.html#20343df0c96b629b" class="t t">IDictionary</a>&lt;<b>string</b>, <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r121 rd" class="r121 r">allRefs</span> = <a href="#32678fc8cb626f00" class="i method">getAllRefs</a>();
+            <a href="@0@mscorlib/A.html#d3599058f8d79be0" class="k">var</a> <span id="r122 rd" class="r122 r">ret</span> = <b>new</b> <a href="@0@mscorlib/A.html#6a2b29a26fb6e208" class="t constructor">Dictionary</a>&lt;<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a>, <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;&gt;(<span class="r121 r">allRefs</span>.<a href="@0@mscorlib/A.html#3d6c21c4e9bd5f63" class="i property">Count</a>);
+            <b>foreach</b> (<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r123 rd" class="r123 r">@ref</span> <b>in</b> <span class="r121 r">allRefs</span>.<a href="@0@mscorlib/A.html#81fedd966b885f90" class="i property">Values</a>)
+            {
+                <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r124 rd" class="r124 r">ref2</span> = <span class="r123 r">@ref</span>;
+                <span class="r124 r">ref2</span> = <a href="#6ce6cf0e9a6ea39a" class="i method">Peel</a>(<span class="r124 r">ref2</span>);
+                <a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r125 rd" class="r125 r">target</span> = <span class="r124 r">ref2</span>.<a href="Ref.cs.html#f66f8dec6822d09c" class="i property">PeeledObjectId</a>;
+                <b>if</b> (<span class="r125 r">target</span> == <b>null</b>)
+                    <span class="r125 r">target</span> = <span class="r124 r">ref2</span>.<a href="Ref.cs.html#8d89227bc6e67ab0" class="i property">ObjectId</a>;
+                <span class="c">// We assume most Sets here are singletons</span>
+                <a href="@0@mscorlib/A.html#cf7f4095e4de7646" class="t t">List</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; <span id="r126 rd" class="r126 r">oset</span> = <span class="r122 r">ret</span>.<a href="Util/Extensions.cs.html#7210ca1e7c9f62dc" class="i method">put</a>(<span class="r125 r">target</span>, <b>new</b> <a href="@0@mscorlib/A.html#9e5352b2b304ceba" class="t constructor">List</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt; { <span class="r124 r">ref2</span> });
+                <b>if</b> (<span class="r126 r">oset</span> != <b>null</b>)
+                {
+                    <span class="c">// that was not the case (rare)</span>
+                    <b>if</b> (<span class="r126 r">oset</span>.<a href="@0@mscorlib/A.html#78a69d857716bc68" class="i property">Count</a> == 1)
+                    {
+                        <span class="c">// Was a read-only singleton, we must copy to a new Set</span>
+                        <span class="r126 r">oset</span> = <b>new</b> <a href="@0@mscorlib/A.html#d2ac2c19c9cf1d44" class="t constructor">List</a>&lt;<a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a>&gt;(<span class="r126 r">oset</span>);
+                    }
+                    <span class="r122 r">ret</span>.<a href="Util/Extensions.cs.html#7210ca1e7c9f62dc" class="i method">put</a>(<span class="r125 r">target</span>, <span class="r126 r">oset</span>);
+                    <span class="r126 r">oset</span>.<a href="@0@mscorlib/A.html#9cc11588bffd57c1" class="i method">Add</a>(<span class="r124 r">ref2</span>);
+                }
+            }
+            <b>return</b> <span class="r122 r">ret</span>;
+        }
+
+        <b>public static</b> <a href="#a967877e73d4cc25" class="t t">Repository</a> <a id="9acc283d655ef1c3" href="R/9acc283d655ef1c3.html" target="n" data-glyph="72,1" class="i method">Open</a>(<b>string</b> <span id="r127 rd" class="r127 r">directory</span>)
+        {
+            <b>return</b> <a href="#d3dfc816ea24982f" class="i method">Open</a>(<b>new</b> <a href="@0@mscorlib/A.html#683f5ff112df8d3a" class="t constructor">DirectoryInfo</a>(<span class="r127 r">directory</span>));
+        }
+
+        <b>public static</b> <a href="#a967877e73d4cc25" class="t t">Repository</a> <a id="d3dfc816ea24982f" href="R/d3dfc816ea24982f.html" target="n" data-glyph="72,1" class="i method">Open</a>(<a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r128 rd" class="r128 r">directory</span>)
+        {
+            <a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="k">var</a> <span id="r129 rd" class="r129 r">name</span> = <span class="r128 r">directory</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>;
+            <b>if</b> (<span class="r129 r">name</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#4a8ee3055a056441" class="i field">DOT_GIT_EXT</a>))
+            {
+                <b>return</b> <b>new</b> <a href="#774170b9e076df04" class="t constructor">Repository</a>(<span class="r128 r">directory</span>);
+            }
+
+            <b>var</b> <span id="r130 rd" class="r130 r">subDirectories</span> = <span class="r128 r">directory</span>.<a href="@0@mscorlib/A.html#4d814c472e441624" class="i method">GetDirectories</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#9367fd41bca7cf44" class="i field">DOT_GIT</a>);
+            <b>if</b> (<span class="r130 r">subDirectories</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &gt; 0)
+            {
+                <b>return</b> <b>new</b> <a href="#774170b9e076df04" class="t constructor">Repository</a>(<span class="r130 r">subDirectories</span>[0]);
+            }
+
+            <b>if</b> (<span class="r128 r">directory</span>.<a href="@0@mscorlib/A.html#4b0f923e4e34075e" class="i property">Parent</a> == <b>null</b>) <b>return null</b>;
+
+            <b>return</b> <a href="#d3dfc816ea24982f" class="i method">Open</a>(<span class="r128 r">directory</span>.<a href="@0@mscorlib/A.html#4b0f923e4e34075e" class="i property">Parent</a>);
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Check validity of a ref name. It must not contain character that has</span>
+        <span class="c">///</span><span class="c"> a special meaning in a Git object reference expression. Some other</span>
+        <span class="c">///</span><span class="c"> dangerous characters are also excluded.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r131 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Returns true if </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r131 r">refName</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> is a valid ref name.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public static bool</b> <a id="a860a5351a71ca3b" href="R/a860a5351a71ca3b.html" target="n" data-glyph="72,1" class="i method">IsValidRefName</a>(<b>string</b> <span id="r131 rd" class="r131 r">refName</span>)
+        {
+            <b>int</b> <span id="r132 rd" class="r132 r">len</span> = <span class="r131 r">refName</span>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>;
+
+            <b>if</b> (<span class="r132 r">len</span> == 0) <b>return false</b>;
+
+            <b>if</b> (<span class="r131 r">refName</span>.<a href="@0@mscorlib/A.html#cb74053b3f2d03f4" class="i method">EndsWith</a>(<a href="LockFile.cs.html#6a33a20086fca4a1" class="t t">LockFile</a>.<a href="LockFile.cs.html#3b26c06e8d47ad7c" class="i field">SUFFIX</a>)) <b>return false</b>;
+
+            <b>int</b> <span id="r133 rd" class="r133 r">components</span> = 1;
+            <b>char</b> <span id="r134 rd" class="r134 r">p</span> = <span class="s">&#39;\0&#39;</span>;
+            <b>for</b> (<b>int</b> <span id="r135 rd" class="r135 r">i</span> = 0; <span class="r135 r">i</span> &lt; <span class="r132 r">len</span>; <span class="r135 r">i</span>++)
+            {
+                <b>char</b> <span id="r136 rd" class="r136 r">c</span> = <span class="r131 r">refName</span><a href="@0@mscorlib/A.html#8307d03426b56fe1">[</a><span class="r135 r">i</span>];
+                <b>if</b> (<span class="r136 r">c</span> &lt;= <span class="s">&#39; &#39;</span>) <b>return false</b>;
+
+                <b>switch</b> (<span class="r136 r">c</span>)
+                {
+                    <b>case</b> <span class="s">&#39;.&#39;</span>:
+                        <b>switch</b> (<span class="r134 r">p</span>)
+                        {
+                            <b>case</b> <span class="s">&#39;\0&#39;</span>:
+                            <b>case</b> <span class="s">&#39;/&#39;</span>:
+                            <b>case</b> <span class="s">&#39;.&#39;</span>:
+                                <b>return false</b>;
+                        }
+
+                        <b>if</b> (<span class="r135 r">i</span> == <span class="r132 r">len</span> - 1) <b>return false</b>;
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;/&#39;</span>:
+                        <b>if</b> (<span class="r135 r">i</span> == 0 || <span class="r135 r">i</span> == <span class="r132 r">len</span> - 1) <b>return false</b>;
+                        <span class="r133 r">components</span>++;
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;{&#39;</span>:
+                        <b>if</b> (<span class="r134 r">p</span> == <span class="s">&#39;@&#39;</span>) <b>return false</b>;
+                        <b>break</b>;
+
+                    <b>case</b> <span class="s">&#39;~&#39;</span>:
+                    <b>case</b> <span class="s">&#39;^&#39;</span>:
+                    <b>case</b> <span class="s">&#39;:&#39;</span>:
+                    <b>case</b> <span class="s">&#39;?&#39;</span>:
+                    <b>case</b> <span class="s">&#39;[&#39;</span>:
+                    <b>case</b> <span class="s">&#39;*&#39;</span>:
+                    <b>case</b> <span class="s">&#39;\\&#39;</span>:
+                        <b>return false</b>;
+                }
+                <span class="r134 r">p</span> = <span class="r136 r">c</span>;
+            }
+
+            <b>return</b> <span class="r133 r">components</span> &gt; 1;
+        }
+
+        <b>public</b> <a href="Commit.cs.html#6c448dd0f2a39a5d" class="t t">Commit</a> <a id="02f885bfb58b26ae" href="R/../../0000000000.html" target="n" data-glyph="72,1" class="i method">OpenCommit</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <span id="r137 rd" class="r137 r">id</span>)
+        {
+            <b>return</b> <a href="#6c248665104198fc" class="i method">MapCommit</a>(<span class="r137 r">id</span>);
+        }
+
+        <b>public override string</b> <a id="abf96ddbd9c9cf45" href="R/abf96ddbd9c9cf45.html" target="n" data-glyph="72,1" class="i method">ToString</a>()
+        {
+            <b>return</b> <span class="s">&quot;Repository[&quot;</span> + <a href="#77a819ff8f2ad4d4" class="i property">Directory</a> + <span class="s">&quot;]&quot;</span>;
+        }
+
+        <b>public void</b> <a id="eaacf452fa865f6c" href="R/eaacf452fa865f6c.html" target="n" data-glyph="72,1" class="i method">Dispose</a>()
+        {
+            <a href="#3d2d562261dbfd23" class="i method">Close</a>();
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the name of the reference that {@code HEAD} points to.</span>
+        <span class="c">///</span><span class="c"> Returns name of current branch (for example {@code refs/heads/master}) or</span>
+        <span class="c">///</span><span class="c"> an ObjectId in hex format if the current branch is detached.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This is essentially the same as doing:</span>
+        <span class="c">///</span><span class="c"> </span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> return getRef(Constants.HEAD).getTarget().getName()</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span>
+        <span class="c">///</span><span class="c"> Except when HEAD is detached, in which case this method returns the</span>
+        <span class="c">///</span><span class="c"> current ObjectId in hexadecimal string format.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="294ef23756a9b67b" href="R/294ef23756a9b67b.html" target="n" data-glyph="102,1" class="i property">FullBranch</a>
+        {
+            <b>get</b>
+            {
+                <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r138 rd" class="r138 r">head</span> = <a href="#4c8d7fcd486ffb24" class="i method">getRef</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>);
+
+                <b>if</b> (<span class="r138 r">head</span> == <b>null</b>)
+                    <b>return null</b>;
+                <b>if</b> (<span class="r138 r">head</span>.<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+                    <b>return</b> <span class="r138 r">head</span>.<a href="Ref.cs.html#62bf1c054532cc4f" class="i method">getTarget</a>().<a href="Ref.cs.html#403188401875718b" class="i method">getName</a>();
+                <b>if</b> (<span class="r138 r">head</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>() != <b>null</b>)
+                    <b>return</b> <span class="r138 r">head</span>.<a href="Ref.cs.html#de0b10813e4bb8d7" class="i method">getObjectId</a>().<a href="AnyObjectId.cs.html#90e7a293494044eb" class="i property">Name</a>;
+                <b>return null</b>;
+
+            }
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> Get the short name of the current branch that {@code HEAD} points to.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> This is essentially the same as {@link #getFullBranch()}, except the</span>
+        <span class="c">///</span><span class="c"> leading prefix {@code refs/heads/} is removed from the reference before</span>
+        <span class="c">///</span><span class="c"> it is returned to the caller.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> name of current branch (for example {@code master}), or an</span>
+        <span class="c">///</span><span class="c"> ObjectId in hex format if the current branch is detached.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="4e87ffefc233c318" href="R/4e87ffefc233c318.html" target="n" data-glyph="72,1" class="i method">getBranch</a>()
+        {
+            <b>string</b> <span id="r139 rd" class="r139 r">name</span> = <a href="#294ef23756a9b67b" class="i property">FullBranch</a>;
+            <b>if</b> (<span class="r139 r">name</span> != <b>null</b>)
+                <b>return</b> <a href="#d8bb457e49a1b60d" class="i method">ShortenRefName</a>(<span class="r139 r">name</span>);
+            <b>return</b> <span class="r139 r">name</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r140 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">A more user friendly ref name</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <b>public string</b> <a id="d8bb457e49a1b60d" href="R/d8bb457e49a1b60d.html" target="n" data-glyph="72,1" class="i method">ShortenRefName</a>(<b>string</b> <span id="r140 rd" class="r140 r">refName</span>)
+        {
+            <b>if</b> (<span class="r140 r">refName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#f5c8f6540674ab54" class="i field">R_HEADS</a>))
+            {
+                <b>return</b> <span class="r140 r">refName</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#f5c8f6540674ab54" class="i field">R_HEADS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+            }
+
+            <b>if</b> (<span class="r140 r">refName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#71ce821cee5d9c50" class="i field">R_TAGS</a>))
+            {
+                <b>return</b> <span class="r140 r">refName</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#71ce821cee5d9c50" class="i field">R_TAGS</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+            }
+
+            <b>if</b> (<span class="r140 r">refName</span>.<a href="@0@mscorlib/A.html#23804789ea4c9c0e" class="i method">StartsWith</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#dd2e6d4fa212de24" class="i field">R_REMOTES</a>))
+            {
+                <b>return</b> <span class="r140 r">refName</span>.<a href="@0@mscorlib/A.html#882fa7998d6ca35a" class="i method">Substring</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#dd2e6d4fa212de24" class="i field">R_REMOTES</a>.<a href="@0@mscorlib/A.html#e13f5829ef28aa07" class="i property">Length</a>);
+            }
+
+            <b>return</b> <span class="r140 r">refName</span>;
+        }
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r141 r">refName</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8a911fd197aa9ab9" class="i method">ReflogReader</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> for the supplied </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r141 r">refName</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">,</span>
+        <span class="c">///</span><span class="c"> or null if the named ref does not exist.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> could not be accessed.</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+        <b>public</b> <a href="ReflogReader.cs.html#c9fddb8f87d828e3" class="t t">ReflogReader</a> <a id="8a911fd197aa9ab9" href="R/8a911fd197aa9ab9.html" target="n" data-glyph="72,1" class="i method">ReflogReader</a>(<b>string</b> <span id="r141 rd" class="r141 r">refName</span>)
+        {
+            <a href="Ref.cs.html#14820c0f09e6d05b" class="t t">Ref</a> <span id="r142 rd" class="r142 r">gitRef</span> = <a href="#4c8d7fcd486ffb24" class="i method">getRef</a>(<span class="r141 r">refName</span>);
+            <b>if</b> (<span class="r142 r">gitRef</span> != <b>null</b>)
+            {
+                <b>return</b> <b>new</b> <a href="ReflogReader.cs.html#044496bb084669df" class="t constructor">ReflogReader</a>(<a href="#a967877e73d4cc25" class="k">this</a>, <span class="r142 r">gitRef</span>.<a href="Ref.cs.html#71407e74e2ebd777" class="i property">Name</a>);
+            }
+
+            <b>return null</b>;
+        }
+    }
+}</pre></td></tr></table></div></body></html>

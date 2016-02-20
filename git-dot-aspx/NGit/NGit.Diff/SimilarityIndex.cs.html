@@ -1,0 +1,486 @@
+﻿<!DOCTYPE html>
+<html><head><title>SimilarityIndex.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(477);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Diff/SimilarityIndex.cs" target="_top">NGit.Diff\SimilarityIndex.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">NGit</span>;
+<b>using</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Diff</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Index structure of lines/blocks in one file.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Index structure of lines/blocks in one file.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> This structure can be used to compute an approximation of the similarity</span>
+	<span class="c">///</span><span class="c"> between two files. The index is used by</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="SimilarityRenameDetector.cs.html#4c702d7248fc2b98" class="t t">SimilarityRenameDetector</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">SimilarityRenameDetector</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> to</span>
+	<span class="c">///</span><span class="c"> compute scores between files.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> To save space in memory, this index uses a space efficient encoding which</span>
+	<span class="c">///</span><span class="c"> will not exceed 1 MiB per instance. The index starts out at a smaller size</span>
+	<span class="c">///</span><span class="c"> (closer to 2 KiB), but may grow as more distinct blocks within the scanned</span>
+	<span class="c">///</span><span class="c"> file are discovered.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>internal class</b> <a id="3ef28f7b2755c1d6" href="../R/3ef28f7b2755c1d6.html" target="n" data-glyph="2,0" class="t t">SimilarityIndex</a>
+	{
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A special</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">TableFullException</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> used in place of OutOfMemoryError.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private static readonly</b> <a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a> <a id="f6e8473d0e886540" href="../R/f6e8473d0e886540.html" target="n" data-glyph="46,1" class="i field">TABLE_FULL_OUT_OF_MEMORY</a>
+			 = <b>new</b> <a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t constructor">TableFullException</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Shift to apply before storing a key.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Shift to apply before storing a key.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Within the 64 bit table record space, we leave the highest bit unset so</span>
+		<span class="c">///</span><span class="c"> all values are positive. The lower 32 bits to count bytes.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private const int</b> <a id="b1d402917c0388ab" href="../R/b1d402917c0388ab.html" target="n" data-glyph="10,1" class="i field">KEY_SHIFT</a> = 32;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Maximum value of the count field, also mask to extract the count.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Maximum value of the count field, also mask to extract the count.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private const long</b> <a id="322c6d2d7fca06ae" href="../R/322c6d2d7fca06ae.html" target="n" data-glyph="10,1" class="i field">MAX_COUNT</a> = (1L &lt;&lt; <a href="#b1d402917c0388ab" class="i field">KEY_SHIFT</a>) - 1;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Total size of the file we hashed into the structure.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Total size of the file we hashed into the structure.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private long</b> <a id="b020a1f8018da568" href="../R/b020a1f8018da568.html" target="n" data-glyph="46,1" class="i field">fileSize</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of non-zero entries in</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8b8b5b2bc05b12ab" class="i field">idHash</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">idHash</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="c684e2f475c3b553" href="../R/c684e2f475c3b553.html" target="n" data-glyph="46,1" class="i field">idSize</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c684e2f475c3b553" class="i field">idSize</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">idSize</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> that triggers</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#8b8b5b2bc05b12ab" class="i field">idHash</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">idHash</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> to double in size.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="1e708f5b7dcfdefe" href="../R/1e708f5b7dcfdefe.html" target="n" data-glyph="46,1" class="i field">idGrowAt</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Pairings of content keys and counters.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Pairings of content keys and counters.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Slots in the table are actually two ints wedged into a single long. The</span>
+		<span class="c">///</span><span class="c"> upper 32 bits stores the content key, and the remaining lower bits stores</span>
+		<span class="c">///</span><span class="c"> the number of bytes associated with that key. Empty slots are denoted by</span>
+		<span class="c">///</span><span class="c"> 0, which cannot occur because the count cannot be 0. Values can only be</span>
+		<span class="c">///</span><span class="c"> positive, which we enforce during key addition.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private long</b>[] <a id="8b8b5b2bc05b12ab" href="../R/8b8b5b2bc05b12ab.html" target="n" data-glyph="46,1" class="i field">idHash</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">idHash.length == 1 </span><span class="c">&amp;lt;</span><span class="c">&amp;lt;</span><span class="c"> idHashBits</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private int</b> <a id="b94567a137d317d5" href="../R/b94567a137d317d5.html" target="n" data-glyph="46,1" class="i field">idHashBits</a>;
+
+		<b>public</b> <a id="62d19fb7e80ba732" href="../R/62d19fb7e80ba732.html" target="n" data-glyph="72,1" class="i constructor">SimilarityIndex</a>()
+		{
+			<a href="#b94567a137d317d5" class="i field">idHashBits</a> = 8;
+			<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a> = <b>new</b> <b>long</b>[1 &lt;&lt; <a href="#b94567a137d317d5" class="i field">idHashBits</a>];
+			<a href="#1e708f5b7dcfdefe" class="i field">idGrowAt</a> = <a href="#b5ed93e3b3faf667" class="i method">GrowAt</a>(<a href="#b94567a137d317d5" class="i field">idHashBits</a>);
+		}
+
+		<b>internal virtual long</b> <a id="17a31f55259e8822" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">GetFileSize</a>()
+		{
+			<b>return</b> <a href="#b020a1f8018da568" class="i field">fileSize</a>;
+		}
+
+		<b>internal virtual void</b> <a id="669296c72d817b75" href="../R/669296c72d817b75.html" target="n" data-glyph="74,1" class="i method">SetFileSize</a>(<b>long</b> <span id="r0 rd" class="r0 r">size</span>)
+		{
+			<a href="#b020a1f8018da568" class="i field">fileSize</a> = <span class="r0 r">size</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Errors</span>.<a href="../NGit.Errors/MissingObjectException.cs.html#01009483d28da410" class="t t">MissingObjectException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="9ab0433dab15f3ab" href="../R/9ab0433dab15f3ab.html" target="n" data-glyph="74,1" class="i method">Hash</a>(<a href="../NGit/ObjectLoader.cs.html#3278691da2df9ac1" class="t t">ObjectLoader</a> <span id="r1 rd" class="r1 r">obj</span>)
+		{
+			<b>if</b> (<span class="r1 r">obj</span>.<a href="../NGit/ObjectLoader.cs.html#77050b0258d30dfa" class="i method">IsLarge</a>())
+			{
+				<a href="../NGit/ObjectStream.cs.html#8382d037187c2c47" class="t t">ObjectStream</a> <span id="r2 rd" class="r2 r">@in</span> = <span class="r1 r">obj</span>.<a href="../NGit/ObjectLoader.cs.html#d2affe33a9a8203a" class="i method">OpenStream</a>();
+				<b>try</b>
+				{
+					<a href="#669296c72d817b75" class="i method">SetFileSize</a>(<span class="r2 r">@in</span>.<a href="../NGit/ObjectStream.cs.html#7c6031b50a25e217" class="i method">GetSize</a>());
+					<a href="#00f035941865bc56" class="i method">Hash</a>(<span class="r2 r">@in</span>, <a href="#b020a1f8018da568" class="i field">fileSize</a>);
+				}
+				<b>finally</b>
+				{
+					<span class="r2 r">@in</span>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+				}
+			}
+			<b>else</b>
+			{
+				<b>byte</b>[] <span id="r3 rd" class="r3 r">raw</span> = <span class="r1 r">obj</span>.<a href="../NGit/ObjectLoader.cs.html#4a8244caa592258a" class="i method">GetCachedBytes</a>();
+				<a href="#669296c72d817b75" class="i method">SetFileSize</a>(<span class="r3 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<a href="#8fa3fecb22f2aaf1" class="i method">Hash</a>(<span class="r3 r">raw</span>, 0, <span class="r3 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="8fa3fecb22f2aaf1" href="../R/8fa3fecb22f2aaf1.html" target="n" data-glyph="74,1" class="i method">Hash</a>(<b>byte</b>[] <span id="r4 rd" class="r4 r">raw</span>, <b>int</b> <span id="r5 rd" class="r5 r">ptr</span>, <b>int</b> <span id="r6 rd" class="r6 r">end</span>)
+		{
+			<b>while</b> (<span class="r5 r">ptr</span> &lt; <span class="r6 r">end</span>)
+			{
+				<b>int</b> <span id="r7 rd" class="r7 r">hash</span> = 5381;
+				<b>int</b> <span id="r8 rd" class="r8 r">start</span> = <span class="r5 r">ptr</span>;
+				<b>do</b>
+				{
+					<span class="c">// Hash one line, or one block, whichever occurs first.</span>
+					<b>int</b> <span id="r9 rd" class="r9 r">c</span> = <span class="r4 r">raw</span>[<span class="r5 r">ptr</span>++] &amp; <b>unchecked</b>((<b>int</b>)(0xff));
+					<b>if</b> (<span class="r9 r">c</span> == <span class="s">&#39;\n&#39;</span>)
+					{
+						<b>break</b>;
+					}
+					<span class="r7 r">hash</span> = (<span class="r7 r">hash</span> &lt;&lt; 5) + <span class="r7 r">hash</span> + <span class="r9 r">c</span>;
+				}
+				<b>while</b> (<span class="r5 r">ptr</span> &lt; <span class="r6 r">end</span> &amp;&amp; <span class="r5 r">ptr</span> - <span class="r8 r">start</span> &lt; 64);
+				<a href="#08f72bda4a65d16f" class="i method">Add</a>(<span class="r7 r">hash</span>, <span class="r5 r">ptr</span> - <span class="r8 r">start</span>);
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="00f035941865bc56" href="../R/00f035941865bc56.html" target="n" data-glyph="74,1" class="i method">Hash</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r10 rd" class="r10 r">@in</span>, <b>long</b> <span id="r11 rd" class="r11 r">remaining</span>)
+		{
+			<b>byte</b>[] <span id="r12 rd" class="r12 r">buf</span> = <b>new</b> <b>byte</b>[4096];
+			<b>int</b> <span id="r13 rd" class="r13 r">ptr</span> = 0;
+			<b>int</b> <span id="r14 rd" class="r14 r">cnt</span> = 0;
+			<b>while</b> (0 &lt; <span class="r11 r">remaining</span>)
+			{
+				<b>int</b> <span id="r15 rd" class="r15 r">hash</span> = 5381;
+				<span class="c">// Hash one line, or one block, whichever occurs first.</span>
+				<b>int</b> <span id="r16 rd" class="r16 r">n</span> = 0;
+				<b>do</b>
+				{
+					<b>if</b> (<span class="r13 r">ptr</span> == <span class="r14 r">cnt</span>)
+					{
+						<span class="r13 r">ptr</span> = 0;
+						<span class="r14 r">cnt</span> = <span class="r10 r">@in</span>.<a href="/Sharpen/A.html#aed09ce58860ccfe" class="i method">Read</a>(<span class="r12 r">buf</span>, 0, <span class="r12 r">buf</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+						<b>if</b> (<span class="r14 r">cnt</span> &lt;= 0)
+						{
+							<b>throw</b> <b>new</b> <a href="/Sharpen/A.html#c0e011224ccab48f" class="t constructor">EOFException</a>();
+						}
+					}
+					<span class="r16 r">n</span>++;
+					<b>int</b> <span id="r17 rd" class="r17 r">c</span> = <span class="r12 r">buf</span>[<span class="r13 r">ptr</span>++] &amp; <b>unchecked</b>((<b>int</b>)(0xff));
+					<b>if</b> (<span class="r17 r">c</span> == <span class="s">&#39;\n&#39;</span>)
+					{
+						<b>break</b>;
+					}
+					<span class="r15 r">hash</span> = (<span class="r15 r">hash</span> &lt;&lt; 5) + <span class="r15 r">hash</span> + <span class="r17 r">c</span>;
+				}
+				<b>while</b> (<span class="r16 r">n</span> &lt; 64 &amp;&amp; <span class="r16 r">n</span> &lt; <span class="r11 r">remaining</span>);
+				<a href="#08f72bda4a65d16f" class="i method">Add</a>(<span class="r15 r">hash</span>, <span class="r16 r">n</span>);
+				<span class="r11 r">remaining</span> -= <span class="r16 r">n</span>;
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Sort the internal table so it can be used for efficient scoring.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Sort the internal table so it can be used for efficient scoring.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">p</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Once sorted, additional lines/blocks cannot be added to the index.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="d4ea6a821078aeed" href="../R/d4ea6a821078aeed.html" target="n" data-glyph="74,1" class="i method">Sort</a>()
+		{
+			<span class="c">// Sort the array. All of the empty space will wind up at the front,</span>
+			<span class="c">// because we forced all of the keys to always be positive. Later</span>
+			<span class="c">// we only work with the back half of the array.</span>
+			<span class="c">//</span>
+			<a href="/Sharpen/A.html#7342d8d23595dd8e" class="t t">Arrays</a>.<a href="/Sharpen/A.html#0f29a26af393d93a" class="i method">Sort</a>(<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>);
+		}
+
+		<b>internal virtual int</b> <a id="e207b961b24fc8b9" href="../R/e207b961b24fc8b9.html" target="n" data-glyph="74,1" class="i method">Score</a>(<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <span id="r18 rd" class="r18 r">dst</span>, <b>int</b> <span id="r19 rd" class="r19 r">maxScore</span>)
+		{
+			<b>long</b> <span id="r20 rd" class="r20 r">max</span> = <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#c0288bbe62da07cb" class="i method">Max</a>(<a href="#b020a1f8018da568" class="i field">fileSize</a>, <span class="r18 r">dst</span>.<a href="#b020a1f8018da568" class="i field">fileSize</a>);
+			<b>if</b> (<span class="r20 r">max</span> == 0)
+			{
+				<b>return</b> <span class="r19 r">maxScore</span>;
+			}
+			<b>return</b> (<b>int</b>)((<a href="#12c069c2145df85f" class="i method">Common</a>(<span class="r18 r">dst</span>) * <span class="r19 r">maxScore</span>) / <span class="r20 r">max</span>);
+		}
+
+		<b>internal virtual long</b> <a id="12c069c2145df85f" href="../R/12c069c2145df85f.html" target="n" data-glyph="74,1" class="i method">Common</a>(<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <span id="r21 rd" class="r21 r">dst</span>)
+		{
+			<b>return</b> <a href="#5b326782c0ef2c21" class="i method">Common</a>(<a href="#3ef28f7b2755c1d6" class="k">this</a>, <span class="r21 r">dst</span>);
+		}
+
+		<b>private static long</b> <a id="5b326782c0ef2c21" href="../R/5b326782c0ef2c21.html" target="n" data-glyph="76,1" class="i method">Common</a>(<span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a> <span id="r22 rd" class="r22 r">src</span>, <span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>
+			 <span id="r23 rd" class="r23 r">dst</span>)
+		{
+			<b>int</b> <span id="r24 rd" class="r24 r">srcIdx</span> = <span class="r22 r">src</span>.<a href="#fb38db591e8f758e" class="i method">PackedIndex</a>(0);
+			<b>int</b> <span id="r25 rd" class="r25 r">dstIdx</span> = <span class="r23 r">dst</span>.<a href="#fb38db591e8f758e" class="i method">PackedIndex</a>(0);
+			<b>long</b>[] <span id="r26 rd" class="r26 r">srcHash</span> = <span class="r22 r">src</span>.<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>;
+			<b>long</b>[] <span id="r27 rd" class="r27 r">dstHash</span> = <span class="r23 r">dst</span>.<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>;
+			<b>return</b> <a href="#0256b07cbbf4025c" class="i method">Common</a>(<span class="r26 r">srcHash</span>, <span class="r24 r">srcIdx</span>, <span class="r27 r">dstHash</span>, <span class="r25 r">dstIdx</span>);
+		}
+
+		<b>private static long</b> <a id="0256b07cbbf4025c" href="../R/0256b07cbbf4025c.html" target="n" data-glyph="76,1" class="i method">Common</a>(<b>long</b>[] <span id="r28 rd" class="r28 r">srcHash</span>, <b>int</b> <span id="r29 rd" class="r29 r">srcIdx</span>, <b>long</b>[] <span id="r30 rd" class="r30 r">dstHash</span>, <b>int</b> <span id="r31 rd" class="r31 r">dstIdx</span>
+			)
+		{
+			<span class="c">//</span>
+			<b>if</b> (<span class="r29 r">srcIdx</span> == <span class="r28 r">srcHash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> || <span class="r31 r">dstIdx</span> == <span class="r30 r">dstHash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+			{
+				<b>return</b> 0;
+			}
+			<b>long</b> <span id="r32 rd" class="r32 r">common</span> = 0;
+			<b>int</b> <span id="r33 rd" class="r33 r">srcKey</span> = <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r28 r">srcHash</span>[<span class="r29 r">srcIdx</span>]);
+			<b>int</b> <span id="r34 rd" class="r34 r">dstKey</span> = <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r30 r">dstHash</span>[<span class="r31 r">dstIdx</span>]);
+			<b>for</b> (; ; )
+			{
+				<b>if</b> (<span class="r33 r">srcKey</span> == <span class="r34 r">dstKey</span>)
+				{
+					<span class="r32 r">common</span> += <a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<a href="#611dd2d6f0e0d87f" class="i method">CountOf</a>(<span class="r28 r">srcHash</span>[<span class="r29 r">srcIdx</span>]), <a href="#611dd2d6f0e0d87f" class="i method">CountOf</a>(<span class="r30 r">dstHash</span>[<span class="r31 r">dstIdx</span>]));
+					<b>if</b> (++<span class="r29 r">srcIdx</span> == <span class="r28 r">srcHash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+					{
+						<b>break</b>;
+					}
+					<span class="r33 r">srcKey</span> = <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r28 r">srcHash</span>[<span class="r29 r">srcIdx</span>]);
+					<b>if</b> (++<span class="r31 r">dstIdx</span> == <span class="r30 r">dstHash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+					{
+						<b>break</b>;
+					}
+					<span class="r34 r">dstKey</span> = <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r30 r">dstHash</span>[<span class="r31 r">dstIdx</span>]);
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<span class="r33 r">srcKey</span> &lt; <span class="r34 r">dstKey</span>)
+					{
+						<span class="c">// Regions of src which do not appear in dst.</span>
+						<b>if</b> (++<span class="r29 r">srcIdx</span> == <span class="r28 r">srcHash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+						{
+							<b>break</b>;
+						}
+						<span class="r33 r">srcKey</span> = <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r28 r">srcHash</span>[<span class="r29 r">srcIdx</span>]);
+					}
+					<b>else</b>
+					{
+						<span class="c">// Regions of dst which do not appear in src.</span>
+						<b>if</b> (++<span class="r31 r">dstIdx</span> == <span class="r30 r">dstHash</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+						{
+							<b>break</b>;
+						}
+						<span class="r34 r">dstKey</span> = <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r30 r">dstHash</span>[<span class="r31 r">dstIdx</span>]);
+					}
+				}
+			}
+			<b>return</b> <span class="r32 r">common</span>;
+		}
+
+		<span class="c">// Testing only</span>
+		<b>internal virtual int</b> <a id="97c8d65bdebdf2f8" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">Size</a>()
+		{
+			<b>return</b> <a href="#c684e2f475c3b553" class="i field">idSize</a>;
+		}
+
+		<span class="c">// Testing only</span>
+		<b>internal virtual int</b> <a id="01e788270462c94d" href="../R/01e788270462c94d.html" target="n" data-glyph="74,1" class="i method">Key</a>(<b>int</b> <span id="r35 rd" class="r35 r">idx</span>)
+		{
+			<b>return</b> <a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<a href="#fb38db591e8f758e" class="i method">PackedIndex</a>(<span class="r35 r">idx</span>)]);
+		}
+
+		<span class="c">// Testing only</span>
+		<b>internal virtual long</b> <a id="9b5d97a0a03f6705" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">Count</a>(<b>int</b> <span id="r36 rd" class="r36 r">idx</span>)
+		{
+			<b>return</b> <a href="#611dd2d6f0e0d87f" class="i method">CountOf</a>(<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<a href="#fb38db591e8f758e" class="i method">PackedIndex</a>(<span class="r36 r">idx</span>)]);
+		}
+
+		<span class="c">// Brute force approach only for testing.</span>
+		<b>internal virtual int</b> <a id="f1c1d89b95c5484b" href="../R/../../0000000000.html" target="n" data-glyph="74,1" class="i method">FindIndex</a>(<b>int</b> <span id="r37 rd" class="r37 r">key</span>)
+		{
+			<b>for</b> (<b>int</b> <span id="r38 rd" class="r38 r">i</span> = 0; <span class="r38 r">i</span> &lt; <a href="#c684e2f475c3b553" class="i field">idSize</a>; <span class="r38 r">i</span>++)
+			{
+				<b>if</b> (<a href="#01e788270462c94d" class="i method">Key</a>(<span class="r38 r">i</span>) == <span class="r37 r">key</span>)
+				{
+					<b>return</b> <span class="r38 r">i</span>;
+				}
+			}
+			<b>return</b> -1;
+		}
+
+		<b>private int</b> <a id="fb38db591e8f758e" href="../R/fb38db591e8f758e.html" target="n" data-glyph="76,1" class="i method">PackedIndex</a>(<b>int</b> <span id="r39 rd" class="r39 r">idx</span>)
+		{
+			<b>return</b> (<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> - <a href="#c684e2f475c3b553" class="i field">idSize</a>) + <span class="r39 r">idx</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="08f72bda4a65d16f" href="../R/08f72bda4a65d16f.html" target="n" data-glyph="74,1" class="i method">Add</a>(<b>int</b> <span id="r40 rd" class="r40 r">key</span>, <b>int</b> <span id="r41 rd" class="r41 r">cnt</span>)
+		{
+			<span class="r40 r">key</span> = (<b>int</b>)(((<b>uint</b>)(<span class="r40 r">key</span> * <b>unchecked</b>((<b>int</b>)(0x9e370001)))) &gt;&gt; 1);
+			<span class="c">// Mix bits and ensure not negative.</span>
+			<b>int</b> <span id="r42 rd" class="r42 r">j</span> = <a href="#efa5b619714e2ed5" class="i method">Slot</a>(<span class="r40 r">key</span>);
+			<b>for</b> (; ; )
+			{
+				<b>long</b> <span id="r43 rd" class="r43 r">v</span> = <a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<span class="r42 r">j</span>];
+				<b>if</b> (<span class="r43 r">v</span> == 0)
+				{
+					<span class="c">// Empty slot in the table, store here.</span>
+					<b>if</b> (<a href="#1e708f5b7dcfdefe" class="i field">idGrowAt</a> &lt;= <a href="#c684e2f475c3b553" class="i field">idSize</a>)
+					{
+						<a href="#51a4cce54c8dafeb" class="i method">Grow</a>();
+						<span class="r42 r">j</span> = <a href="#efa5b619714e2ed5" class="i method">Slot</a>(<span class="r40 r">key</span>);
+						<b>continue</b>;
+					}
+					<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<span class="r42 r">j</span>] = <a href="#45b7dd40c6bdd4b9" class="i method">Pair</a>(<span class="r40 r">key</span>, <span class="r41 r">cnt</span>);
+					<a href="#c684e2f475c3b553" class="i field">idSize</a>++;
+					<b>return</b>;
+				}
+				<b>else</b>
+				{
+					<b>if</b> (<a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r43 r">v</span>) == <span class="r40 r">key</span>)
+					{
+						<span class="c">// Same key, increment the counter. If it overflows, fail</span>
+						<span class="c">// indexing to prevent the key from being impacted.</span>
+						<span class="c">//</span>
+						<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<span class="r42 r">j</span>] = <a href="#45b7dd40c6bdd4b9" class="i method">Pair</a>(<span class="r40 r">key</span>, <a href="#611dd2d6f0e0d87f" class="i method">CountOf</a>(<span class="r43 r">v</span>) + <span class="r41 r">cnt</span>);
+						<b>return</b>;
+					}
+					<b>else</b>
+					{
+						<b>if</b> (++<span class="r42 r">j</span> &gt;= <a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+						{
+							<span class="r42 r">j</span> = 0;
+						}
+					}
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private static long</b> <a id="45b7dd40c6bdd4b9" href="../R/45b7dd40c6bdd4b9.html" target="n" data-glyph="76,1" class="i method">Pair</a>(<b>int</b> <span id="r44 rd" class="r44 r">key</span>, <b>long</b> <span id="r45 rd" class="r45 r">cnt</span>)
+		{
+			<b>if</b> (<a href="#322c6d2d7fca06ae" class="i field">MAX_COUNT</a> &lt; <span class="r45 r">cnt</span>)
+			{
+				<b>throw</b> <b>new</b> <a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t constructor">TableFullException</a>();
+			}
+			<b>return</b> (((<b>long</b>)<span class="r44 r">key</span>) &lt;&lt; <a href="#b1d402917c0388ab" class="i field">KEY_SHIFT</a>) | <span class="r45 r">cnt</span>;
+		}
+
+		<b>private int</b> <a id="efa5b619714e2ed5" href="../R/efa5b619714e2ed5.html" target="n" data-glyph="76,1" class="i method">Slot</a>(<b>int</b> <span id="r46 rd" class="r46 r">key</span>)
+		{
+			<span class="c">// We use 31 - idHashBits because the upper bit was already forced</span>
+			<span class="c">// to be 0 and we want the remaining high bits to be used as the</span>
+			<span class="c">// table slot.</span>
+			<span class="c">//</span>
+			<b>return</b> (<b>int</b>)(((<b>uint</b>)<span class="r46 r">key</span>) &gt;&gt; (31 - <a href="#b94567a137d317d5" class="i field">idHashBits</a>));
+		}
+
+		<b>private static int</b> <a id="b5ed93e3b3faf667" href="../R/b5ed93e3b3faf667.html" target="n" data-glyph="76,1" class="i method">GrowAt</a>(<b>int</b> <span id="r47 rd" class="r47 r">idHashBits</span>)
+		{
+			<b>return</b> (1 &lt;&lt; <span class="r47 r">idHashBits</span>) * (<span class="r47 r">idHashBits</span> - 3) / <span class="r47 r">idHashBits</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Diff</span>.<a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t t">TableFullException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>private void</b> <a id="51a4cce54c8dafeb" href="../R/51a4cce54c8dafeb.html" target="n" data-glyph="76,1" class="i method">Grow</a>()
+		{
+			<b>if</b> (<a href="#b94567a137d317d5" class="i field">idHashBits</a> == 30)
+			{
+				<b>throw</b> <b>new</b> <a href="#3ef28f7b2755c1d6" class="t t">SimilarityIndex</a>.<a href="#f3b9a597ef03222d" class="t constructor">TableFullException</a>();
+			}
+			<b>long</b>[] <span id="r48 rd" class="r48 r">oldHash</span> = <a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>;
+			<b>int</b> <span id="r49 rd" class="r49 r">oldSize</span> = <a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+			<a href="#b94567a137d317d5" class="i field">idHashBits</a>++;
+			<a href="#1e708f5b7dcfdefe" class="i field">idGrowAt</a> = <a href="#b5ed93e3b3faf667" class="i method">GrowAt</a>(<a href="#b94567a137d317d5" class="i field">idHashBits</a>);
+			<b>try</b>
+			{
+				<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a> = <b>new</b> <b>long</b>[1 &lt;&lt; <a href="#b94567a137d317d5" class="i field">idHashBits</a>];
+			}
+			<b>catch</b> (<a href="@0@mscorlib/A.html#23ab5b3ef9ea2683" class="t t">OutOfMemoryException</a>)
+			{
+				<b>throw</b> <a href="#f6e8473d0e886540" class="i field">TABLE_FULL_OUT_OF_MEMORY</a>;
+			}
+			<b>for</b> (<b>int</b> <span id="r50 rd" class="r50 r">i</span> = 0; <span class="r50 r">i</span> &lt; <span class="r49 r">oldSize</span>; <span class="r50 r">i</span>++)
+			{
+				<b>long</b> <span id="r51 rd" class="r51 r">v</span> = <span class="r48 r">oldHash</span>[<span class="r50 r">i</span>];
+				<b>if</b> (<span class="r51 r">v</span> != 0)
+				{
+					<b>int</b> <span id="r52 rd" class="r52 r">j</span> = <a href="#efa5b619714e2ed5" class="i method">Slot</a>(<a href="#d114af648ec3f9bb" class="i method">KeyOf</a>(<span class="r51 r">v</span>));
+					<b>while</b> (<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<span class="r52 r">j</span>] != 0)
+					{
+						<b>if</b> (++<span class="r52 r">j</span> &gt;= <a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+						{
+							<span class="r52 r">j</span> = 0;
+						}
+					}
+					<a href="#8b8b5b2bc05b12ab" class="i field">idHash</a>[<span class="r52 r">j</span>] = <span class="r51 r">v</span>;
+				}
+			}
+		}
+
+		<b>private static int</b> <a id="d114af648ec3f9bb" href="../R/d114af648ec3f9bb.html" target="n" data-glyph="76,1" class="i method">KeyOf</a>(<b>long</b> <span id="r53 rd" class="r53 r">v</span>)
+		{
+			<b>return</b> (<b>int</b>)((<b>long</b>)(((<b>ulong</b>)<span class="r53 r">v</span>) &gt;&gt; <a href="#b1d402917c0388ab" class="i field">KEY_SHIFT</a>));
+		}
+
+		<b>private static long</b> <a id="611dd2d6f0e0d87f" href="../R/611dd2d6f0e0d87f.html" target="n" data-glyph="76,1" class="i method">CountOf</a>(<b>long</b> <span id="r54 rd" class="r54 r">v</span>)
+		{
+			<b>return</b> <span class="r54 r">v</span> &amp; <a href="#322c6d2d7fca06ae" class="i field">MAX_COUNT</a>;
+		}
+
+		[<span class="i n">System</span>.<a href="@0@mscorlib/A.html#e971d5381ca60183" class="t constructor">Serializable</a>]
+		<b>internal class</b> <a id="f3b9a597ef03222d" href="../R/f3b9a597ef03222d.html" target="n" data-glyph="2,1" class="t t"><span id="977d2a7b5634122f">TableFullException</span></a> : <a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a>
+		{
+			<b>private const long</b> <a id="c1de60d1213210b2" href="../R/../../0000000000.html" target="n" data-glyph="10,2" class="i field">serialVersionUID</a> = 1L;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

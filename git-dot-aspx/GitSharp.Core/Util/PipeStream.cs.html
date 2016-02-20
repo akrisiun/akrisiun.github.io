@@ -1,0 +1,371 @@
+﻿<!DOCTYPE html>
+<html><head><title>PipeStream.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(362);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/Util/PipeStream.cs" target="_top">Util\PipeStream.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">///</span><span class="c">	Copyright (c) 2006 James Kolpack (james dot kolpack at google mail)</span>
+<span class="c">///</span><span class="c">	Copyright (C) 2010 Henon </span><span class="c">&lt;</span><span class="c">meinrad.recheis</span>@gmail.com<span class="c">&gt;</span>
+<span class="c">///</span><span class="c">	</span>
+<span class="c">///</span><span class="c">	Permission is hereby granted, free of charge, to any person obtaining a copy of this software and </span>
+<span class="c">///</span><span class="c">	associated documentation files (the &quot;Software&quot;), to deal in the Software without restriction, </span>
+<span class="c">///</span><span class="c">	including without limitation the rights to use, copy, modify, merge, publish, distribute, </span>
+<span class="c">///</span><span class="c">	sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is </span>
+<span class="c">///</span><span class="c">	furnished to do so, subject to the following conditions:</span>
+<span class="c">///</span><span class="c">	</span>
+<span class="c">///</span><span class="c">	The above copyright notice and this permission notice shall be included in all copies or </span>
+<span class="c">///</span><span class="c">	substantial portions of the Software.</span>
+<span class="c">///</span><span class="c">	</span>
+<span class="c">///</span><span class="c">	THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, </span>
+<span class="c">///</span><span class="c">	INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR </span>
+<span class="c">///</span><span class="c">	PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE </span>
+<span class="c">///</span><span class="c">	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT </span>
+<span class="c">///</span><span class="c">	OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR </span>
+<span class="c">///</span><span class="c">	OTHER DEALINGS IN THE SOFTWARE.</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> PipeStream is a thread-safe read/write data stream for use between two threads in a </span>
+	<span class="c">///</span><span class="c"> single-producer/single-consumer type problem.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">version</span><span class="c">&gt;</span><span class="c">2006/10/13 1.0</span><span class="c">&lt;/</span><span class="c">version</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Update on 2008/10/9 1.1 - uses Monitor instead of Manual Reset events for more elegant synchronicity.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="c59050fdacbd23b1" href="../R/../../0000000000.html" target="n" data-glyph="0,0" class="t t"><span id="06b4fdbf04981402">PipeStream</span></a> : <a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a>
+	{
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Private members
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Queue of bytes provides the datastructure for transmitting from an</span>
+		<span class="c">///</span><span class="c"> input stream to an output stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Possible more effecient ways to accomplish this.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="@0@System/A.html#aa3beab99b2e0db2" class="t t">Queue</a>&lt;<b>byte</b>&gt; <a id="e976e6f436a1be77" href="../R/e976e6f436a1be77.html" target="n" data-glyph="46,1" class="i field">mBuffer</a> = <b>new</b> <a href="@0@System/A.html#a09109def640b7b1" class="t constructor">Queue</a>&lt;<b>byte</b>&gt;();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Indicates that the input stream has been flushed and that</span>
+		<span class="c">///</span><span class="c"> all remaining data should be written to the output stream.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="45bce69f031b7b22" href="../R/45bce69f031b7b22.html" target="n" data-glyph="46,1" class="i field">mFlushed</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Maximum number of bytes to store in the buffer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private long</b> <a id="b297fab6d6c45e9e" href="../R/b297fab6d6c45e9e.html" target="n" data-glyph="46,1" class="i field">mMaxBufferLength</a> = 200 * <a href="#0cbb2c8e585d6ff2" class="i field">MB</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Setting this to true will cause Read() to block if it appears</span>
+		<span class="c">///</span><span class="c"> that it will run out of data.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="d68bd65dc9624ea0" href="../R/d68bd65dc9624ea0.html" target="n" data-glyph="46,1" class="i field">mBlockLastRead</a>;
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Public Const members
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of bytes in a kilobyte</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public const long</b> <a id="afd8309ea917ec6d" href="../R/afd8309ea917ec6d.html" target="n" data-glyph="6,1" class="i field">KB</a> = 1024;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of bytes in a megabyte</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>public const long</b> <a id="0cbb2c8e585d6ff2" href="../R/0cbb2c8e585d6ff2.html" target="n" data-glyph="6,1" class="i field">MB</a> = <a href="#afd8309ea917ec6d" class="i field">KB</a> * 1024;
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Public properties
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets or sets the maximum number of bytes to store in the buffer.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">value</span><span class="c">&gt;</span><span class="c">The length of the max buffer.</span><span class="c">&lt;/</span><span class="c">value</span><span class="c">&gt;</span>
+		<b>public long</b> <a id="2d670f8ee4249dbe" href="../R/../../0000000000.html" target="n" data-glyph="102,1" class="i property">MaxBufferLength</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#b297fab6d6c45e9e" class="i field">mMaxBufferLength</a>; }
+			<b>set</b> { <a href="#b297fab6d6c45e9e" class="i field">mMaxBufferLength</a> = <b>value</b>; }
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Gets or sets a value indicating whether to block last read method before the buffer is empty.</span>
+		<span class="c">///</span><span class="c"> When true, Read() will block until it can fill the passed in buffer and count.</span>
+		<span class="c">///</span><span class="c"> When false, Read() will not block, returning all the available buffer data.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Setting to true will remove the possibility of ending a stream reader prematurely.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">value</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> 	</span><span class="c">&lt;</span><span class="c">c</span><span class="c">&gt;</span><span class="c">true</span><span class="c">&lt;/</span><span class="c">c</span><span class="c">&gt;</span><span class="c"> if block last read method before the buffer is empty; otherwise, </span><span class="c">&lt;</span><span class="c">c</span><span class="c">&gt;</span><span class="c">false</span><span class="c">&lt;/</span><span class="c">c</span><span class="c">&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">value</span><span class="c">&gt;</span>
+		<b>public bool</b> <a id="a67dd6ad230ff633" href="../R/a67dd6ad230ff633.html" target="n" data-glyph="102,1" class="i property">BlockLastReadBuffer</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#d68bd65dc9624ea0" class="i field">mBlockLastRead</a>; }
+			<b>set</b>
+			{
+				<a href="#d68bd65dc9624ea0" class="i field">mBlockLastRead</a> = <b>value</b>;
+
+				<span class="c">// when turning off the block last read, signal Read() that it may now read the rest of the buffer.</span>
+				<b>if</b> (!<a href="#d68bd65dc9624ea0" class="i field">mBlockLastRead</a>)
+					<b>lock</b> (<a href="#e976e6f436a1be77" class="i field">mBuffer</a>)
+						<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#a6f1cd0fc54149df" class="i method">Pulse</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>);
+			}
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Stream overide methods
+
+		<b>public override void</b> <a id="1b0e2f0eb2f5e95a" href="../R/1b0e2f0eb2f5e95a.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+		{
+			<a href="#820ddecf7815bbce" class="i method">CheckDisposed</a>();
+			<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="k">base</a>.<a href="@0@mscorlib/A.html#dc4ffe046b847b84" class="i method">Close</a>();
+			<a href="#2aaf8764d074d783" class="i method">Dispose</a>();
+			<b>lock</b> (<a href="#e976e6f436a1be77" class="i field">mBuffer</a>)
+				<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#a6f1cd0fc54149df" class="i method">Pulse</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>);
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">2</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public</b> <b>new</b> <b>void</b> <a id="2aaf8764d074d783" href="../R/2aaf8764d074d783.html" target="n" data-glyph="72,1" class="i method">Dispose</a>()
+		{
+			<b>if</b> (<a href="#4a470bb01e652c0c" class="i field">mDisposed</a>)
+				<b>return</b>;
+			<span class="c">// clear the internal buffer</span>
+			<a href="#e976e6f436a1be77" class="i field">mBuffer</a>.<a href="@0@System/A.html#dc76e9d36ccbafaa" class="i method">Clear</a>();
+			<a href="#4a470bb01e652c0c" class="i field">mDisposed</a> = <b>true</b>;
+		}
+
+		<b>private bool</b> <a id="4a470bb01e652c0c" href="../R/4a470bb01e652c0c.html" target="n" data-glyph="46,1" class="i field">mDisposed</a>;
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, clears all buffers for this stream and causes any buffered data to be written to the underlying device.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">2</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override void</b> <a id="14740a42a84c3a55" href="../R/14740a42a84c3a55.html" target="n" data-glyph="72,1" class="i method">Flush</a>()
+		{
+			<a href="#820ddecf7815bbce" class="i method">CheckDisposed</a>();
+			<a href="#45bce69f031b7b22" class="i field">mFlushed</a> = <b>true</b>;
+			<b>lock</b> (<a href="#e976e6f436a1be77" class="i field">mBuffer</a>)
+				<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#a6f1cd0fc54149df" class="i method">Pulse</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>);
+		}
+
+		<b>private void</b> <a id="820ddecf7815bbce" href="../R/820ddecf7815bbce.html" target="n" data-glyph="76,1" class="i method">CheckDisposed</a>()
+		{
+			<b>if</b> (<a href="#4a470bb01e652c0c" class="i field">mDisposed</a>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#53515c848f859933" class="t constructor">ObjectDisposedException</a>(<span class="s">&quot;stream has been closed&quot;</span>);
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, sets the position within the current stream.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">The new position within the current stream.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A byte offset relative to the origin parameter. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">origin</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A value of type </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.SeekOrigin</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span><span class="c"> indicating the reference point used to obtain the new position. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support seeking, such as if the stream is constructed from a pipe or console output. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="d082c6c98de67513" href="../R/d082c6c98de67513.html" target="n" data-glyph="72,1" class="i method">Seek</a>(<b>long</b> <span id="r0 rd" class="r0 r">offset</span>, <a href="@0@mscorlib/A.html#2cc1cf6635f00a52" class="t t">SeekOrigin</a> <span id="r1 rd" class="r1 r">origin</span>)
+		{
+			<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, sets the length of the current stream.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">value</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The desired length of the current stream in bytes. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support both writing and seeking, such as if the stream is constructed from a pipe or console output. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">2</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override void</b> <a id="f8ffd85fcb45bb52" href="../R/f8ffd85fcb45bb52.html" target="n" data-glyph="72,1" class="i method">SetLength</a>(<b>long</b> <span id="r2 rd" class="r2 r">value</span>)
+		{
+			<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>();
+		}
+
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, reads a sequence of bytes from the current stream and advances the position within the stream by the number of bytes read.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">The total number of bytes read into the buffer. This can be less than the number of bytes requested if that many bytes are not currently available, or zero (0) if the end of the stream has been reached.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The zero-based byte offset in buffer at which to begin storing the data read from the current stream. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r4 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The maximum number of bytes to be read from the current stream. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r5 r">buffer</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An array of bytes. When this method returns, the buffer contains the specified byte array with the values between offset and (offset + count - 1) replaced by the bytes read from the current source. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ArgumentException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The sum of offset and count is larger than the buffer length. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support reading. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ArgumentNullException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">buffer is null. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ArgumentOutOfRangeException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">offset or count is negative. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override int</b> <a id="adb8d9e6250eec7b" href="../R/adb8d9e6250eec7b.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r5 rd" class="r5 r">buffer</span>, <b>int</b> <span id="r3 rd" class="r3 r">offset</span>, <b>int</b> <span id="r4 rd" class="r4 r">count</span>)
+		{
+			<a href="#820ddecf7815bbce" class="i method">CheckDisposed</a>();
+			<b>if</b> (<span class="r3 r">offset</span> != 0)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#3f64c7634faf1768" class="t constructor">NotImplementedException</a>(<span class="s">&quot;Offsets with value of non-zero are not supported&quot;</span>);
+			<b>if</b> (<span class="r5 r">buffer</span> == <b>null</b>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Buffer is null&quot;</span>);
+			<b>if</b> (<span class="r3 r">offset</span> + <span class="r4 r">count</span> &gt; <span class="r5 r">buffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;The sum of offset and count is greater than the buffer length. &quot;</span>);
+			<b>if</b> (<span class="r3 r">offset</span> &lt; 0 || <span class="r4 r">count</span> &lt; 0)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#27138d3b17d5ff6b" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;offset&quot;</span>, <span class="s">&quot;offset or count is negative.&quot;</span>);
+			<b>if</b> (<a href="#a67dd6ad230ff633" class="i property">BlockLastReadBuffer</a> &amp;&amp; <span class="r4 r">count</span> &gt;= <a href="#b297fab6d6c45e9e" class="i field">mMaxBufferLength</a>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<a href="@0@mscorlib/A.html#8281103e6f23cb5c" class="t t">String</a>.<a href="@0@mscorlib/A.html#7432dab173fae5fc" class="i method">Format</a>(<span class="s">&quot;count({0}) &gt; mMaxBufferLength({1})&quot;</span>, <span class="r4 r">count</span>, <a href="#b297fab6d6c45e9e" class="i field">mMaxBufferLength</a>));
+
+			<b>if</b> (<span class="r4 r">count</span> == 0)
+				<b>return</b> 0;
+
+			<b>int</b> <span id="r6 rd" class="r6 r">readLength</span> = 0;
+
+			<b>lock</b> (<a href="#e976e6f436a1be77" class="i field">mBuffer</a>)
+			{
+				<b>while</b> (!<a href="#a5880649b907b2f2" class="i method">ReadAvailable</a>(<span class="r4 r">count</span>))
+				{
+					<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#8873bad9bee77901" class="i method">Wait</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>);
+					<a href="#820ddecf7815bbce" class="i method">CheckDisposed</a>();
+				}
+				<span class="c">// fill the read buffer</span>
+				<b>for</b> (; <span class="r6 r">readLength</span> &lt; <span class="r4 r">count</span> &amp;&amp; <a href="#1f0acb8ae9c23ebd" class="i property">Length</a> &gt; 0; <span class="r6 r">readLength</span>++)
+				{
+					<span class="r5 r">buffer</span>[<span class="r6 r">readLength</span>] = <a href="#e976e6f436a1be77" class="i field">mBuffer</a>.<a href="@0@System/A.html#e68caf2d91344411" class="i method">Dequeue</a>();
+				}
+
+				<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#a6f1cd0fc54149df" class="i method">Pulse</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>);
+			}
+			<b>return</b> <span class="r6 r">readLength</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Returns true if there are </span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>private bool</b> <a id="a5880649b907b2f2" href="../R/a5880649b907b2f2.html" target="n" data-glyph="76,1" class="i method">ReadAvailable</a>(<b>int</b> <span id="r7 rd" class="r7 r">count</span>)
+		{
+			<b>return</b> (<a href="#1f0acb8ae9c23ebd" class="i property">Length</a> &gt;= <span class="r7 r">count</span> || <a href="#45bce69f031b7b22" class="i field">mFlushed</a>) &amp;&amp;
+				(<a href="#1f0acb8ae9c23ebd" class="i property">Length</a> &gt;= (<span class="r7 r">count</span> + 1) || !<a href="#a67dd6ad230ff633" class="i property">BlockLastReadBuffer</a>);
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, writes a sequence of bytes to the current stream and advances the current position within this stream by the number of bytes written.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r8 r">offset</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The zero-based byte offset in buffer at which to begin copying bytes to the current stream. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r9 r">count</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The number of bytes to be written to the current stream. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r10 r">buffer</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An array of bytes. This method copies count bytes from buffer to the current stream. </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support writing. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ArgumentNullException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">buffer is null. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ArgumentException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The sum of offset and count is greater than the buffer length. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ArgumentOutOfRangeException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">offset or count is negative. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override void</b> <a id="c08aa6a21cf0b73c" href="../R/c08aa6a21cf0b73c.html" target="n" data-glyph="72,1" class="i method">Write</a>(<b>byte</b>[] <span id="r10 rd" class="r10 r">buffer</span>, <b>int</b> <span id="r8 rd" class="r8 r">offset</span>, <b>int</b> <span id="r9 rd" class="r9 r">count</span>)
+		{
+			<a href="#820ddecf7815bbce" class="i method">CheckDisposed</a>();
+			<b>if</b> (<span class="r10 r">buffer</span> == <b>null</b>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;Buffer is null&quot;</span>);
+			<b>if</b> (<span class="r8 r">offset</span> + <span class="r9 r">count</span> &gt; <span class="r10 r">buffer</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;The sum of offset and count is greater than the buffer length. &quot;</span>);
+			<b>if</b> (<span class="r8 r">offset</span> &lt; 0 || <span class="r9 r">count</span> &lt; 0)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#27138d3b17d5ff6b" class="t constructor">ArgumentOutOfRangeException</a>(<span class="s">&quot;offset&quot;</span>, <span class="s">&quot;offset or count is negative.&quot;</span>);
+			<b>if</b> (<span class="r9 r">count</span> == 0)
+				<b>return</b>;
+
+			<b>lock</b> (<a href="#e976e6f436a1be77" class="i field">mBuffer</a>)
+			{
+				<span class="c">// wait until the buffer isn&#39;t full</span>
+				<b>while</b> (<a href="#1f0acb8ae9c23ebd" class="i property">Length</a> &gt;= <a href="#b297fab6d6c45e9e" class="i field">mMaxBufferLength</a>)
+					<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#8873bad9bee77901" class="i method">Wait</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>);
+				<a href="#820ddecf7815bbce" class="i method">CheckDisposed</a>();
+				<a href="#45bce69f031b7b22" class="i field">mFlushed</a> = <b>false</b>; <span class="c">// if it were flushed before, it soon will not be.</span>
+
+				<span class="c">// queue up the buffer data</span>
+				<b>for</b> (<b>int</b> <span id="r11 rd" class="r11 r">i</span> = <span class="r8 r">offset</span>; <span class="r11 r">i</span> &lt; <span class="r8 r">offset</span> + <span class="r9 r">count</span>; <span class="r11 r">i</span>++)
+				{
+					<a href="#e976e6f436a1be77" class="i field">mBuffer</a>.<a href="@0@System/A.html#14c3cc45ceaf1566" class="i method">Enqueue</a>(<span class="r10 r">buffer</span>[<span class="r11 r">i</span>]);
+				}
+
+				<a href="@0@mscorlib/A.html#1bfe37ac9214200c" class="t t">Monitor</a>.<a href="@0@mscorlib/A.html#a6f1cd0fc54149df" class="i method">Pulse</a>(<a href="#e976e6f436a1be77" class="i field">mBuffer</a>); <span class="c">// signal that write has occured</span>
+			}
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, gets a value indicating whether the current stream supports reading.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">true if the stream supports reading; otherwise, false.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override bool</b> <a id="82655b052cc8470c" href="../R/82655b052cc8470c.html" target="n" data-glyph="102,1" class="i property">CanRead</a>
+		{
+			<b>get</b> { <b>return true</b>; }
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, gets a value indicating whether the current stream supports seeking.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">true if the stream supports seeking; otherwise, false.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override bool</b> <a id="f4504985184ebf53" href="../R/f4504985184ebf53.html" target="n" data-glyph="102,1" class="i property">CanSeek</a>
+		{
+			<b>get</b> { <b>return false</b>; }
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, gets a value indicating whether the current stream supports writing.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">true if the stream supports writing; otherwise, false.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override bool</b> <a id="95b2b8d1bedbec8a" href="../R/95b2b8d1bedbec8a.html" target="n" data-glyph="102,1" class="i property">CanWrite</a>
+		{
+			<b>get</b> { <b>return true</b>; }
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, gets the length in bytes of the stream.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">A long value representing the length of the stream in bytes.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">A class derived from Stream does not support seeking. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="1f0acb8ae9c23ebd" href="../R/1f0acb8ae9c23ebd.html" target="n" data-glyph="102,1" class="i property">Length</a>
+		{
+			<b>get</b> { <b>return</b> <a href="#e976e6f436a1be77" class="i field">mBuffer</a>.<a href="@0@System/A.html#2d2504e4ca700843" class="i property">Count</a>; }
+		}
+
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">When overridden in a derived class, gets or sets the position within the current stream.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">The current position within the stream.</span>
+		<span class="c">///</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.IO.IOException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">An I/O error occurs. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.NotSupportedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The stream does not support seeking. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="c">T:System.ObjectDisposedException</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Methods were called after the stream was closed. </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">filterpriority</span><span class="c">&gt;</span><span class="c">1</span><span class="c">&lt;/</span><span class="c">filterpriority</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="bf04352f606ecc62" href="../R/bf04352f606ecc62.html" target="n" data-glyph="102,1" class="i property">Position</a>
+		{
+			<b>get</b> { <b>return</b> 0; }
+			<b>set</b> { <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#085d4139ffb78d13" class="t constructor">NotImplementedException</a>(); }
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+}</pre></td></tr></table></div></body></html>

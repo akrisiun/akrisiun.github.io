@@ -1,0 +1,334 @@
+﻿<!DOCTYPE html>
+<html><head><title>PackIndexV2.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(325);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/PackIndexV2.cs" target="_top">PackIndexV2.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2008, Kevin Thompson &lt;kevin.thompson@theautomaters.com&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>.<span class="i n">Generic</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Exceptions</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Support for the pack index v2 format.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="a732ebbf70782cd8" href="R/a732ebbf70782cd8.html" target="n" data-glyph="0,0" class="t t">PackIndexV2</a> : <a href="PackIndex.cs.html#26faf8f6d573f6d1" class="t t">PackIndex</a>
+	{
+		<b>private const long</b> <a id="aa5174b6197948d6" href="R/aa5174b6197948d6.html" target="n" data-glyph="10,1" class="i field">IS_O64</a> = 1L &lt;&lt; 31;
+		<b>private const int</b> <a id="8a71d3db7c1f15fc" href="R/8a71d3db7c1f15fc.html" target="n" data-glyph="10,1" class="i field">FANOUT</a> = 256;
+		<b>private static readonly int</b>[] <a id="507c09a592e6c3d4" href="R/507c09a592e6c3d4.html" target="n" data-glyph="46,1" class="i field">NoInts</a> = { };
+		<b>private static readonly byte</b>[] <a id="730eb4e9582042bc" href="R/730eb4e9582042bc.html" target="n" data-glyph="46,1" class="i field">NoBytes</a> = { };
+		<b>private readonly long</b>[] <a id="e7319c3ae8fe7005" href="R/e7319c3ae8fe7005.html" target="n" data-glyph="46,1" class="i field">_fanoutTable</a>;
+
+		<span class="c">/**</span><span class="c"> 256 arrays of contiguous object names. </span><span class="c">*/</span>
+		<b>private readonly int</b>[][] <a id="0ae22cb416936631" href="R/0ae22cb416936631.html" target="n" data-glyph="46,1" class="i field">_names</a>;
+
+		<span class="c">/**</span><span class="c"> 256 arrays of the 32 bit offset data, matching {@link #names}. </span><span class="c">*/</span>
+		<b>private readonly byte</b>[][] <a id="23ea0eff3fdfc474" href="R/23ea0eff3fdfc474.html" target="n" data-glyph="46,1" class="i field">_offset32</a>;
+
+		<span class="c">/**</span><span class="c"> 256 arrays of the CRC-32 of objects, matching {@link #names}. </span><span class="c">*/</span>
+		<b>private readonly byte</b>[][] <a id="bc719f6071c7e741" href="R/bc719f6071c7e741.html" target="n" data-glyph="46,1" class="i field">_crc32</a>;
+
+		<span class="c">/**</span><span class="c"> 64 bit offset table. </span><span class="c">*/</span>
+		<b>private readonly byte</b>[] <a id="845fb6e3b1dfdeb8" href="R/845fb6e3b1dfdeb8.html" target="n" data-glyph="46,1" class="i field">_offset64</a>;
+
+		<b>public</b> <a id="0fd40ee47b087b08" href="R/0fd40ee47b087b08.html" target="n" data-glyph="72,1" class="i constructor">PackIndexV2</a>(<a href="@0@mscorlib/A.html#f956b0c07e86df64" class="t t">Stream</a> <span id="r0 rd" class="r0 r">fd</span>)
+		{
+			<b>var</b> <span id="r1 rd" class="r1 r">fanoutRaw</span> = <b>new</b> <b>byte</b>[4 * <a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>];
+			<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r0 r">fd</span>, <span class="r1 r">fanoutRaw</span>, 0, <span class="r1 r">fanoutRaw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			<a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a> = <b>new</b> <b>long</b>[<a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>];
+			<b>for</b> (<b>int</b> <span id="r2 rd" class="r2 r">k</span> = 0; <span class="r2 r">k</span> &lt; <a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>; <span class="r2 r">k</span>++)
+			{
+				<a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r2 r">k</span>] = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#dc878c15ac1b2839" class="i method">DecodeUInt32</a>(<span class="r1 r">fanoutRaw</span>, <span class="r2 r">k</span> * 4);
+			}
+			<a href="#67924b0efafaa6d2" class="i property">ObjectCount</a> = <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a> - 1];
+
+			<a href="#0ae22cb416936631" class="i field">_names</a> = <b>new</b> <b>int</b>[<a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>][];
+			<a href="#23ea0eff3fdfc474" class="i field">_offset32</a> = <b>new</b> <b>byte</b>[<a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>][];
+			<a href="#bc719f6071c7e741" class="i field">_crc32</a> = <b>new</b> <b>byte</b>[<a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>][];
+
+			<span class="c">// object name table. The size we can permit per fan-out bucket</span>
+			<span class="c">// is limited to Java&#39;s 2 GB per byte array limitation. That is</span>
+			<span class="c">// no more than 107,374,182 objects per fan-out.</span>
+			<span class="c">//</span>
+			<b>for</b> (<b>int</b> <span id="r3 rd" class="r3 r">k</span> = 0; <span class="r3 r">k</span> &lt; <a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>; <span class="r3 r">k</span>++)
+			{
+				<b>long</b> <span id="r4 rd" class="r4 r">bucketCnt</span>;
+				<b>if</b> (<span class="r3 r">k</span> == 0)
+				{
+					<span class="r4 r">bucketCnt</span> = <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r3 r">k</span>];
+				}
+				<b>else</b>
+				{
+					<span class="r4 r">bucketCnt</span> = <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r3 r">k</span>] - <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r3 r">k</span> - 1];
+				}
+
+				<b>if</b> (<span class="r4 r">bucketCnt</span> == 0)
+				{
+					<a href="#0ae22cb416936631" class="i field">_names</a>[<span class="r3 r">k</span>] = <a href="#507c09a592e6c3d4" class="i field">NoInts</a>;
+					<a href="#23ea0eff3fdfc474" class="i field">_offset32</a>[<span class="r3 r">k</span>] = <a href="#730eb4e9582042bc" class="i field">NoBytes</a>;
+					<a href="#bc719f6071c7e741" class="i field">_crc32</a>[<span class="r3 r">k</span>] = <a href="#730eb4e9582042bc" class="i field">NoBytes</a>;
+					<b>continue</b>;
+				}
+
+                <b>long</b> <span id="r5 rd" class="r5 r">nameLen</span> = <span class="r4 r">bucketCnt</span> * <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a>;
+				<b>if</b> (<span class="r5 r">nameLen</span> &gt; <b>int</b>.<a href="@0@mscorlib/A.html#c45153c0501d7122" class="i field">MaxValue</a>)
+				{
+					<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#db370b64091ac4df" class="t constructor">IOException</a>(<span class="s">&quot;Index file is too large&quot;</span>);
+				}
+
+				<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r6 rd" class="r6 r">intNameLen</span> = (<b>int</b>)<span class="r5 r">nameLen</span>;
+				<b>var</b> <span id="r7 rd" class="r7 r">raw</span> = <b>new</b> <b>byte</b>[<span class="r6 r">intNameLen</span>];
+				<b>var</b> <span id="r8 rd" class="r8 r">bin</span> = <b>new</b> <b>int</b>[<span class="r6 r">intNameLen</span> &gt;&gt; 2];
+				<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r0 r">fd</span>, <span class="r7 r">raw</span>, 0, <span class="r7 r">raw</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<b>for</b> (<b>int</b> <span id="r9 rd" class="r9 r">i</span> = 0; <span class="r9 r">i</span> &lt; <span class="r8 r">bin</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r9 r">i</span>++)
+				{
+					<span class="r8 r">bin</span>[<span class="r9 r">i</span>] = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#c7e59b50829b50ba" class="i method">DecodeInt32</a>(<span class="r7 r">raw</span>, <span class="r9 r">i</span> &lt;&lt; 2);
+				}
+
+				<a href="#0ae22cb416936631" class="i field">_names</a>[<span class="r3 r">k</span>] = <span class="r8 r">bin</span>;
+				<a href="#23ea0eff3fdfc474" class="i field">_offset32</a>[<span class="r3 r">k</span>] = <b>new</b> <b>byte</b>[(<b>int</b>)(<span class="r4 r">bucketCnt</span> * 4)];
+				<a href="#bc719f6071c7e741" class="i field">_crc32</a>[<span class="r3 r">k</span>] = <b>new</b> <b>byte</b>[(<b>int</b>)(<span class="r4 r">bucketCnt</span> * 4)];
+			}
+
+			<span class="c">// CRC32 table.</span>
+			<b>for</b> (<b>int</b> <span id="r10 rd" class="r10 r">k</span> = 0; <span class="r10 r">k</span> &lt; <a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>; <span class="r10 r">k</span>++)
+			{
+				<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r0 r">fd</span>, <a href="#bc719f6071c7e741" class="i field">_crc32</a>[<span class="r10 r">k</span>], 0, <a href="#bc719f6071c7e741" class="i field">_crc32</a>[<span class="r10 r">k</span>].<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			}
+
+			<span class="c">// 32 bit offset table. Any entries with the most significant bit</span>
+			<span class="c">// set require a 64 bit offset entry in another table.</span>
+			<span class="c">//</span>
+			<b>int</b> <span id="r11 rd" class="r11 r">o64cnt</span> = 0;
+			<b>for</b> (<b>int</b> <span id="r12 rd" class="r12 r">k</span> = 0; <span class="r12 r">k</span> &lt; <a href="#8a71d3db7c1f15fc" class="i field">FANOUT</a>; <span class="r12 r">k</span>++)
+			{
+				<b>byte</b>[] <span id="r13 rd" class="r13 r">ofs</span> = <a href="#23ea0eff3fdfc474" class="i field">_offset32</a>[<span class="r12 r">k</span>];
+				<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r0 r">fd</span>, <span class="r13 r">ofs</span>, 0, <span class="r13 r">ofs</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+				<b>for</b> (<b>int</b> <span id="r14 rd" class="r14 r">p</span> = 0; <span class="r14 r">p</span> &lt; <span class="r13 r">ofs</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r14 r">p</span> += 4)
+				{
+                    <b>if</b> (<a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#2195be6a30cd9c7c" class="i method">ConvertUnsignedByteToSigned</a>(<span class="r13 r">ofs</span>[<span class="r14 r">p</span>]) &lt; 0)
+					{
+						<span class="r11 r">o64cnt</span>++;
+					}
+				}
+			}
+
+			<span class="c">// 64 bit offset table. Most objects should not require an entry.</span>
+			<span class="c">//</span>
+			<b>if</b> (<span class="r11 r">o64cnt</span> &gt; 0)
+			{
+				<a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a> = <b>new</b> <b>byte</b>[<span class="r11 r">o64cnt</span> * 8];
+				<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r0 r">fd</span>, <a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a>, 0, <a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+			}
+			<b>else</b>
+			{
+				<a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a> = <a href="#730eb4e9582042bc" class="i field">NoBytes</a>;
+			}
+
+			<a href="PackIndex.cs.html#68da71ad2b3f6f65" class="i property">PackChecksum</a> = <b>new</b> <b>byte</b>[20];
+			<a href="Util/IO.cs.html#c5b28056aa00c433" class="t t">IO</a>.<a href="Util/IO.cs.html#6acc7883250740c5" class="i method">ReadFully</a>(<span class="r0 r">fd</span>, <a href="PackIndex.cs.html#68da71ad2b3f6f65" class="i property">PackChecksum</a>, 0, <a href="PackIndex.cs.html#68da71ad2b3f6f65" class="i property">PackChecksum</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>);
+		}
+
+		<b>public override</b> <a href="@0@mscorlib/A.html#893e8cdebffde2da" class="t t">IEnumerator</a>&lt;<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a>&gt; <a id="a73278dec78e849d" href="R/a73278dec78e849d.html" target="n" data-glyph="72,1" class="i method">GetEnumerator</a>()
+		{
+			<b>return</b> <b>new</b> <a href="#7fdba512eb1c2a2b" class="t constructor">EntriesEnumeratorV2</a>(<a href="#a732ebbf70782cd8" class="k">this</a>);
+		}
+
+		<b>public override long</b> <a id="67924b0efafaa6d2" href="R/67924b0efafaa6d2.html" target="n" data-glyph="102,1" class="i property">ObjectCount</a> { <b>get</b>; <b>internal set</b>; }
+
+		<b>public override long</b> <a id="2c03ebb23c37a238" href="R/2c03ebb23c37a238.html" target="n" data-glyph="102,1" class="i property">Offset64Count</a>
+		{
+			<b>get</b>  { <b>return</b> <a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> / 8; }
+		}
+
+		<b>public override</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="cd03e5afd4c47c4f" href="R/cd03e5afd4c47c4f.html" target="n" data-glyph="72,1" class="i method">GetObjectId</a>(<b>long</b> <span id="r15 rd" class="r15 r">nthPosition</span>)
+		{
+			<b>int</b> <span id="r16 rd" class="r16 r">levelOne</span> = <a href="@0@mscorlib/A.html#156e066ecc4ccedf" class="t t">Array</a>.<a href="@0@mscorlib/A.html#206c504d6cde0a21" class="i method">BinarySearch</a>(<a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>, <span class="r15 r">nthPosition</span> + 1);
+			<b>long</b> <span id="r17 rd" class="r17 r">lbase</span>;
+			<b>if</b> (<span class="r16 r">levelOne</span> &gt;= 0)
+			{
+				<span class="c">// If we hit the bucket exactly the item is in the bucket, or</span>
+				<span class="c">// any bucket before it which has the same object count.</span>
+				<span class="c">//</span>
+				<span class="r17 r">lbase</span> = <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r16 r">levelOne</span>];
+				<b>while</b> (<span class="r16 r">levelOne</span> &gt; 0 &amp;&amp; <span class="r17 r">lbase</span> == <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r16 r">levelOne</span> - 1])
+				{
+					<span class="r16 r">levelOne</span>--;
+				}
+			}
+			<b>else</b>
+			{
+				<span class="c">// The item is in the bucket we would insert it into.</span>
+				<span class="c">//</span>
+				<span class="r16 r">levelOne</span> = -(<span class="r16 r">levelOne</span> + 1);
+			}
+
+			<span class="r17 r">lbase</span> = <span class="r16 r">levelOne</span> &gt; 0 ? <a href="#e7319c3ae8fe7005" class="i field">_fanoutTable</a>[<span class="r16 r">levelOne</span> - 1] : 0;
+			<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r18 rd" class="r18 r">p</span> = (<b>int</b>)(<span class="r15 r">nthPosition</span> - <span class="r17 r">lbase</span>);
+			<b>int</b> <span id="r19 rd" class="r19 r">p4</span> = <span class="r18 r">p</span> &lt;&lt; 2;
+			<b>return</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#decee448ee58ba23" class="i method">FromRaw</a>(<a href="#0ae22cb416936631" class="i field">_names</a>[<span class="r16 r">levelOne</span>], <span class="r19 r">p4</span> + <span class="r18 r">p</span>); <span class="c">// p * 5</span>
+		}
+
+		<b>public override long</b> <a id="8e2b5e5401005b9f" href="R/8e2b5e5401005b9f.html" target="n" data-glyph="72,1" class="i method">FindOffset</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r20 rd" class="r20 r">objId</span>)
+		{
+			<b>int</b> <span id="r21 rd" class="r21 r">levelOne</span> = <span class="r20 r">objId</span>.<a href="AnyObjectId.cs.html#11cfb10994568bbe" class="i method">GetFirstByte</a>();
+			<b>int</b> <span id="r22 rd" class="r22 r">levelTwo</span> = <a href="#c4d480b8bb6a5eeb" class="i method">BinarySearchLevelTwo</a>(<span class="r20 r">objId</span>, <span class="r21 r">levelOne</span>);
+			<b>if</b> (<span class="r22 r">levelTwo</span> == -1)
+			{
+				<b>return</b> -1;
+			}
+
+			<b>long</b> <span id="r23 rd" class="r23 r">p</span> = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#dc878c15ac1b2839" class="i method">DecodeUInt32</a>(<a href="#23ea0eff3fdfc474" class="i field">_offset32</a>[<span class="r21 r">levelOne</span>], <span class="r22 r">levelTwo</span> &lt;&lt; 2);
+			<b>if</b> ((<span class="r23 r">p</span> &amp; <a href="#aa5174b6197948d6" class="i field">IS_O64</a>) != 0)
+			{
+				<b>return</b> <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#7ae313cc8ef9832a" class="i method">DecodeUInt64</a>(<a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a>, (8 * (<b>int</b>)(<span class="r23 r">p</span> &amp; ~<a href="#aa5174b6197948d6" class="i field">IS_O64</a>)));
+			}
+
+			<b>return</b> <span class="r23 r">p</span>;
+		}
+
+		<b>public override long</b> <a id="d4eda04bc5349704" href="R/d4eda04bc5349704.html" target="n" data-glyph="72,1" class="i method">FindCRC32</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r24 rd" class="r24 r">objId</span>)
+		{
+			<b>int</b> <span id="r25 rd" class="r25 r">levelOne</span> = <span class="r24 r">objId</span>.<a href="AnyObjectId.cs.html#11cfb10994568bbe" class="i method">GetFirstByte</a>();
+			<b>int</b> <span id="r26 rd" class="r26 r">levelTwo</span> = <a href="#c4d480b8bb6a5eeb" class="i method">BinarySearchLevelTwo</a>(<span class="r24 r">objId</span>, <span class="r25 r">levelOne</span>);
+			<b>if</b> (<span class="r26 r">levelTwo</span> == -1)
+			{
+				<b>throw</b> <b>new</b> <a href="Exceptions/MissingObjectException.cs.html#0d6db60bed07e3b0" class="t constructor">MissingObjectException</a>(<span class="r24 r">objId</span>.<a href="AnyObjectId.cs.html#8b7074ef6eeaaa2e" class="i method">Copy</a>(), <a href="ObjectType.cs.html#5e8a20915cce16e8" class="t t">ObjectType</a>.<a href="ObjectType.cs.html#211f07b904592554" class="i field">Unknown</a>);
+			}
+
+			<b>return</b> <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#dc878c15ac1b2839" class="i method">DecodeUInt32</a>(<a href="#bc719f6071c7e741" class="i field">_crc32</a>[<span class="r25 r">levelOne</span>], <span class="r26 r">levelTwo</span> &lt;&lt; 2);
+		}
+
+		<b>public override bool</b> <a id="71ea0eb6ee7a4745" href="R/71ea0eb6ee7a4745.html" target="n" data-glyph="102,1" class="i property">HasCRC32Support</a>
+		{
+			<b>get</b> { <b>return true</b>; }
+		}
+
+		<b>private int</b> <a id="c4d480b8bb6a5eeb" href="R/c4d480b8bb6a5eeb.html" target="n" data-glyph="76,1" class="i method">BinarySearchLevelTwo</a>(<a href="AnyObjectId.cs.html#26c90e71b2d0518a" class="t t">AnyObjectId</a> <span id="r27 rd" class="r27 r">objId</span>, <b>int</b> <span id="r28 rd" class="r28 r">levelOne</span>)
+		{
+			<b>int</b>[] <span id="r29 rd" class="r29 r">data</span> = <a href="#0ae22cb416936631" class="i field">_names</a>[<span class="r28 r">levelOne</span>];
+			<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r30 rd" class="r30 r">high</span> = (<b>int</b>)((<b>uint</b>)(<a href="#23ea0eff3fdfc474" class="i field">_offset32</a>[<span class="r28 r">levelOne</span>].<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>) &gt;&gt; 2);
+			<b>if</b> (<span class="r30 r">high</span> == 0)
+			{
+				<b>return</b> -1;
+			}
+
+			<b>int</b> <span id="r31 rd" class="r31 r">low</span> = 0;
+			<b>do</b>
+			{
+				<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r32 rd" class="r32 r">mid</span> = (<b>int</b>)((<b>uint</b>)(<span class="r31 r">low</span> + <span class="r30 r">high</span>) &gt;&gt; 1);
+				<b>int</b> <span id="r33 rd" class="r33 r">mid4</span> = <span class="r32 r">mid</span> &lt;&lt; 2;
+
+				<b>int</b> <span id="r34 rd" class="r34 r">cmp</span> = <span class="r27 r">objId</span>.<a href="AnyObjectId.cs.html#1a075cafe183f63b" class="i method">CompareTo</a>(<span class="r29 r">data</span>, <span class="r33 r">mid4</span> + <span class="r32 r">mid</span>);
+				<b>if</b> (<span class="r34 r">cmp</span> &lt; 0)
+				{
+					<span class="r30 r">high</span> = <span class="r32 r">mid</span>;
+				}
+				<b>else if</b> (<span class="r34 r">cmp</span> == 0)
+				{
+					<b>return</b> <span class="r32 r">mid</span>;
+				}
+				<b>else</b>
+				{
+					<span class="r31 r">low</span> = <span class="r32 r">mid</span> + 1;
+				}
+
+			} <b>while</b> (<span class="r31 r">low</span> &lt; <span class="r30 r">high</span>);
+			<b>return</b> -1;
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+        <b>private class</b> <a id="873104c38cf75e03" href="R/873104c38cf75e03.html" target="n" data-glyph="4,1" class="t t">EntriesEnumeratorV2</a> : <a href="PackIndex.cs.html#62f2dff8d1b22cbd" class="t t">EntriesIterator</a>
+        {
+            <b>private readonly</b> <a href="#a732ebbf70782cd8" class="t t">PackIndexV2</a> <a id="9d7f2bc0df525a39" href="R/9d7f2bc0df525a39.html" target="n" data-glyph="46,2" class="i field">_index</a>;
+            <b>private int</b> <a id="0c5d227a751381e4" href="R/0c5d227a751381e4.html" target="n" data-glyph="46,2" class="i field">_levelOne</a>;
+            <b>private int</b> <a id="d0d6cc7694a9443d" href="R/d0d6cc7694a9443d.html" target="n" data-glyph="46,2" class="i field">_levelTwo</a>;
+
+            <b>public</b> <a id="7fdba512eb1c2a2b" href="R/7fdba512eb1c2a2b.html" target="n" data-glyph="72,2" class="i constructor">EntriesEnumeratorV2</a>(<a href="#a732ebbf70782cd8" class="t t">PackIndexV2</a> <span id="r35 rd" class="r35 r">index</span>)
+                : <a href="PackIndex.cs.html#41912fa0c662920e" class="k">base</a>(<span class="r35 r">index</span>)
+            {
+                <a href="#9d7f2bc0df525a39" class="i field">_index</a> = <span class="r35 r">index</span>;
+            }
+
+            <b>protected override</b> <a href="MutableObjectId.cs.html#249d8d5daa481512" class="t t">MutableObjectId</a> <a id="399d2285a400c43c" href="R/399d2285a400c43c.html" target="n" data-glyph="75,2" class="i method">IdBufferBuilder</a>(<a href="MutableObjectId.cs.html#249d8d5daa481512" class="t t">MutableObjectId</a> <span id="r36 rd" class="r36 r">idBuffer</span>)
+            {
+                <span class="r36 r">idBuffer</span>.<a href="MutableObjectId.cs.html#d27d30fe42e789b0" class="i method">FromRaw</a>(<a href="#9d7f2bc0df525a39" class="i field">_index</a>.<a href="#0ae22cb416936631" class="i field">_names</a>[<a href="#0c5d227a751381e4" class="i field">_levelOne</a>], <a href="#d0d6cc7694a9443d" class="i field">_levelTwo</a> - <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a> / 4);
+                <b>return</b> <span class="r36 r">idBuffer</span>;
+            }
+
+            <b>protected override</b> <a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a> <a id="c70a3c9241af7dd2" href="R/c70a3c9241af7dd2.html" target="n" data-glyph="75,2" class="i method">InnerNext</a>(<a href="PackIndex.cs.html#cf51aeb3824d0d2a" class="t t">MutableEntry</a> <span id="r37 rd" class="r37 r">entry</span>)
+            {
+                <b>for</b> (; <a href="#0c5d227a751381e4" class="i field">_levelOne</a> &lt; <a href="#9d7f2bc0df525a39" class="i field">_index</a>.<a href="#0ae22cb416936631" class="i field">_names</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <a href="#0c5d227a751381e4" class="i field">_levelOne</a>++)
+                {
+                    <b>if</b> (<a href="#d0d6cc7694a9443d" class="i field">_levelTwo</a> &lt; <a href="#9d7f2bc0df525a39" class="i field">_index</a>.<a href="#0ae22cb416936631" class="i field">_names</a>[<a href="#0c5d227a751381e4" class="i field">_levelOne</a>].<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>)
+                    {
+                        <b>int</b> <span id="r38 rd" class="r38 r">idx</span> = <a href="#d0d6cc7694a9443d" class="i field">_levelTwo</a> / (<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a> / 4) * 4;
+                        <b>long</b> <span id="r39 rd" class="r39 r">offset</span> = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#dc878c15ac1b2839" class="i method">DecodeUInt32</a>(<a href="#9d7f2bc0df525a39" class="i field">_index</a>.<a href="#23ea0eff3fdfc474" class="i field">_offset32</a>[<a href="#0c5d227a751381e4" class="i field">_levelOne</a>], <span class="r38 r">idx</span>);
+                        <b>if</b> ((<span class="r39 r">offset</span> &amp; <a href="#aa5174b6197948d6" class="i field">IS_O64</a>) != 0)
+                        {
+                            <span class="r38 r">idx</span> = (8 * (<b>int</b>)(<span class="r39 r">offset</span> &amp; ~<a href="#aa5174b6197948d6" class="i field">IS_O64</a>));
+                            <span class="r39 r">offset</span> = <a href="Util/NB.cs.html#763d9567aacb339d" class="t t">NB</a>.<a href="Util/NB.cs.html#7ae313cc8ef9832a" class="i method">DecodeUInt64</a>(<a href="#9d7f2bc0df525a39" class="i field">_index</a>.<a href="#845fb6e3b1dfdeb8" class="i field">_offset64</a>, <span class="r38 r">idx</span>);
+                        }
+                        <span class="r37 r">entry</span>.<a href="PackIndex.cs.html#204793711264a814" class="i property">Offset</a> = <span class="r39 r">offset</span>;
+
+                        <a href="#d0d6cc7694a9443d" class="i field">_levelTwo</a> += <a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#fedb83f105bc630c" class="i field">OBJECT_ID_LENGTH</a> / 4;
+                        <a href="PackIndex.cs.html#f71c93dffce46e5a" class="i field">ReturnedNumber</a>++;
+                        <b>return</b> <span class="r37 r">entry</span>;
+                    }
+                    <a href="#d0d6cc7694a9443d" class="i field">_levelTwo</a> = 0;
+                }
+
+                <b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#b9c8ef7b0f7b8fbc" class="t constructor">IndexOutOfRangeException</a>();
+            }
+        }
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+}</pre></td></tr></table></div></body></html>

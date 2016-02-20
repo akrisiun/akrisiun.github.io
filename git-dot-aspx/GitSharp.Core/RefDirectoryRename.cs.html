@@ -1,0 +1,257 @@
+﻿<!DOCTYPE html>
+<html><head><title>RefDirectoryRename.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(248);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/RefDirectoryRename.cs" target="_top">RefDirectoryRename.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2010, Google Inc.
+ * Copyright (C) 2009, Robin Rosenberg
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Eclipse Foundation, Inc. nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>.<span class="i n">IO</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+    <span class="c">///</span><span class="c"> Rename any reference stored by {@link RefDirectory}.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This class works by first renaming the source reference to a temporary name,</span>
+    <span class="c">///</span><span class="c"> then renaming the temporary name to the destination reference.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+    <span class="c">///</span><span class="c"> This strategy permits switching a reference like {@code refs/heads/foo},</span>
+    <span class="c">///</span><span class="c"> which is a file, to {@code refs/heads/foo/bar}, which is stored inside a</span>
+    <span class="c">///</span><span class="c"> directory that happens to match the source name.</span>
+    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+    <b>public class</b> <a id="9930c154747baf0c" href="R/9930c154747baf0c.html" target="n" data-glyph="0,0" class="t t">RefDirectoryRename</a> : <a href="RefRename.cs.html#5fd7aa1b7decfdc1" class="t t">RefRename</a>
+    {
+        <b>private readonly</b> <a href="RefDirectory.cs.html#b7360b0f0070b3a6" class="t t">RefDirectory</a> <a id="2c339cc544d24b0b" href="R/2c339cc544d24b0b.html" target="n" data-glyph="46,1" class="i field">_refdb</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> The value of the source reference at the start of the rename.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c">/&gt;</span>
+        <span class="c">///</span><span class="c"> At the end of the rename the destination reference must have this same</span>
+        <span class="c">///</span><span class="c"> value, otherwise we have a concurrent update and the rename must fail</span>
+        <span class="c">///</span><span class="c"> without making any changes.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a> <a id="5ce9f1455829a1be" href="R/5ce9f1455829a1be.html" target="n" data-glyph="46,1" class="i field">_objId</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> True if HEAD must be moved to the destination reference.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private bool</b> <a id="bb8facc52a6060a7" href="R/bb8facc52a6060a7.html" target="n" data-glyph="46,1" class="i field">_updateHead</a>;
+
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+        <span class="c">///</span><span class="c"> A reference we backup {@link #objId} into during the rename.</span>
+        <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+        <b>private</b> <a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <a id="b834ed3571a60fec" href="R/b834ed3571a60fec.html" target="n" data-glyph="46,1" class="i field">_tmp</a>;
+
+        <b>public</b> <a id="c18928d7974d4922" href="R/c18928d7974d4922.html" target="n" data-glyph="72,1" class="i constructor">RefDirectoryRename</a>(<a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <span id="r0 rd" class="r0 r">src</span>, <a href="RefDirectoryUpdate.cs.html#39b7a4f30d1e417d" class="t t">RefDirectoryUpdate</a> <span id="r1 rd" class="r1 r">dst</span>)
+            : <a href="RefRename.cs.html#cb8cc58b068ed50c" class="k">base</a>(<span class="r0 r">src</span>, <span class="r1 r">dst</span>)
+        {
+            <a href="#2c339cc544d24b0b" class="i field">_refdb</a> = (<a href="RefDirectory.cs.html#b7360b0f0070b3a6" class="t t">RefDirectory</a>)<span class="r0 r">src</span>.<a href="RefDirectoryUpdate.cs.html#635eb5aec33e982e" class="i method">getRefDatabase</a>();
+        }
+
+        <b>protected override</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a> <a id="8fcd5c3f977898e1" href="R/8fcd5c3f977898e1.html" target="n" data-glyph="75,1" class="i method">doRename</a>()
+        {
+            <b>if</b> (<a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#ab06af3899704105" class="i method">getRef</a>().<a href="Ref.cs.html#e0d74549c1754ad2" class="i method">isSymbolic</a>())
+                <b>return</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#17934a80c224e1b2" class="i field">IO_FAILURE</a>; <span class="c">// not supported</span>
+
+            <a href="RevWalk/RevWalk.cs.html#3cdb1764ea58588b" class="k">var</a> <span id="r2 rd" class="r2 r">rw</span> = <b>new</b> <span class="i n">RevWalk</span>.<a href="RevWalk/RevWalk.cs.html#0b5400e3482eef62" class="t constructor">RevWalk</a>(<a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#a60fd92add2f90a6" class="i method">getRepository</a>());
+            <a href="#5ce9f1455829a1be" class="i field">_objId</a> = <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#f026b1be1a0cecc5" class="i method">getOldObjectId</a>();
+            <a href="#bb8facc52a6060a7" class="i field">_updateHead</a> = <a href="RefRename.cs.html#6838b3a2943bed30" class="i method">needToUpdateHEAD</a>();
+            <a href="#b834ed3571a60fec" class="i field">_tmp</a> = <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#8751cd3ffa32520e" class="i method">newTemporaryUpdate</a>();
+            <b>try</b>
+            {
+                <span class="c">// First backup the source so its never unreachable.</span>
+                <a href="#b834ed3571a60fec" class="i field">_tmp</a>.<a href="RefUpdate.cs.html#5d8a53c5cc3b978d" class="i method">setNewObjectId</a>(<a href="#5ce9f1455829a1be" class="i field">_objId</a>);
+                <a href="#b834ed3571a60fec" class="i field">_tmp</a>.<a href="RefUpdate.cs.html#44c307be9ab5f0f5" class="i method">setForceUpdate</a>(<b>true</b>);
+                <a href="#b834ed3571a60fec" class="i field">_tmp</a>.<a href="RefUpdate.cs.html#78a7f5bfcb17d569" class="i method">disableRefLog</a>();
+                <b>switch</b> (<a href="#b834ed3571a60fec" class="i field">_tmp</a>.<a href="RefUpdate.cs.html#b910e0234d3ba9a9" class="i method">update</a>(<span class="r2 r">rw</span>))
+                {
+                    <b>case</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#322bd9a54bd0d93d" class="i field">NEW</a>:
+                    <b>case</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#0fd82feb0b203f4a" class="i field">FORCED</a>:
+                    <b>case</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#98657261d2478f0a" class="i field">NO_CHANGE</a>:
+                        <b>break</b>;
+                    <b>default</b>:
+                        <b>return</b> <a href="#b834ed3571a60fec" class="i field">_tmp</a>.<a href="RefUpdate.cs.html#5d84c6f9a52f1ed5" class="i method">getResult</a>();
+                }
+
+                <span class="c">// Save the source&#39;s log under the temporary name, we must do</span>
+                <span class="c">// this before we delete the source, otherwise we lose the log.</span>
+                <b>if</b> (!<a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>, <a href="#b834ed3571a60fec" class="i field">_tmp</a>))
+                    <b>return</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#17934a80c224e1b2" class="i field">IO_FAILURE</a>;
+
+                <span class="c">// If HEAD has to be updated, link it now to destination.</span>
+                <span class="c">// We have to link before we delete, otherwise the delete</span>
+                <span class="c">// fails because its the current branch.</span>
+                <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r3 rd" class="r3 r">dst</span> = <a href="RefRename.cs.html#477c17ff00a2f934" class="i field">destination</a>;
+                <b>if</b> (<a href="#bb8facc52a6060a7" class="i field">_updateHead</a>)
+                {
+                    <b>if</b> (!<a href="#07bf30634e83b6e2" class="i method">linkHEAD</a>(<a href="RefRename.cs.html#477c17ff00a2f934" class="i field">destination</a>))
+                    {
+                        <a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>, <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                        <b>return</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#f004479ac1de290c" class="i field">LOCK_FAILURE</a>;
+                    }
+
+                    <span class="c">// Replace the update operation so HEAD will log the rename.</span>
+                    <span class="r3 r">dst</span> = <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#41f268dffa08abcd" class="i method">newUpdate</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>, <b>false</b>);
+                    <span class="r3 r">dst</span>.<a href="RefUpdate.cs.html#4993b193a645631b" class="i method">setRefLogIdent</a>(<a href="RefRename.cs.html#477c17ff00a2f934" class="i field">destination</a>.<a href="RefUpdate.cs.html#f8b52946c4e7ea88" class="i method">getRefLogIdent</a>());
+                    <span class="r3 r">dst</span>.<a href="RefUpdate.cs.html#b505192fc9e52fd5" class="i method">setRefLogMessage</a>(<a href="RefRename.cs.html#477c17ff00a2f934" class="i field">destination</a>.<a href="RefUpdate.cs.html#4b3138cd6eb7bf66" class="i method">getRefLogMessage</a>(), <b>false</b>);
+                }
+
+                <span class="c">// Delete the source name so its path is free for replacement.</span>
+                <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#21e677d94006cfda" class="i method">setExpectedOldObjectId</a>(<a href="#5ce9f1455829a1be" class="i field">_objId</a>);
+                <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#44c307be9ab5f0f5" class="i method">setForceUpdate</a>(<b>true</b>);
+                <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#78a7f5bfcb17d569" class="i method">disableRefLog</a>();
+                <b>if</b> (<a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#be1975cde238c9e4" class="i method">delete</a>(<span class="r2 r">rw</span>) != <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#0fd82feb0b203f4a" class="i field">FORCED</a>)
+                {
+                    <a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>, <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                    <b>if</b> (<a href="#bb8facc52a6060a7" class="i field">_updateHead</a>)
+                        <a href="#07bf30634e83b6e2" class="i method">linkHEAD</a>(<a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                    <b>return</b> <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#5d84c6f9a52f1ed5" class="i method">getResult</a>();
+                }
+
+                <span class="c">// Move the log to the destination.</span>
+                <b>if</b> (!<a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>, <a href="RefRename.cs.html#477c17ff00a2f934" class="i field">destination</a>))
+                {
+                    <a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>, <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                    <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#21e677d94006cfda" class="i method">setExpectedOldObjectId</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a6ee7b4e86a6eafa" class="i property">ZeroId</a>);
+                    <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#5d8a53c5cc3b978d" class="i method">setNewObjectId</a>(<a href="#5ce9f1455829a1be" class="i field">_objId</a>);
+                    <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#b910e0234d3ba9a9" class="i method">update</a>(<span class="r2 r">rw</span>);
+                    <b>if</b> (<a href="#bb8facc52a6060a7" class="i field">_updateHead</a>)
+                        <a href="#07bf30634e83b6e2" class="i method">linkHEAD</a>(<a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                    <b>return</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#17934a80c224e1b2" class="i field">IO_FAILURE</a>;
+                }
+
+                <span class="c">// Create the destination, logging the rename during the creation.</span>
+                <span class="r3 r">dst</span>.<a href="RefUpdate.cs.html#21e677d94006cfda" class="i method">setExpectedOldObjectId</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a6ee7b4e86a6eafa" class="i property">ZeroId</a>);
+                <span class="r3 r">dst</span>.<a href="RefUpdate.cs.html#5d8a53c5cc3b978d" class="i method">setNewObjectId</a>(<a href="#5ce9f1455829a1be" class="i field">_objId</a>);
+                <b>if</b> (<span class="r3 r">dst</span>.<a href="RefUpdate.cs.html#b910e0234d3ba9a9" class="i method">update</a>(<span class="r2 r">rw</span>) != <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#322bd9a54bd0d93d" class="i field">NEW</a>)
+                {
+                    <span class="c">// If we didn&#39;t create the destination we have to undo</span>
+                    <span class="c">// our work. Put the log back and restore source.</span>
+                    <b>if</b> (<a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="RefRename.cs.html#477c17ff00a2f934" class="i field">destination</a>, <a href="#b834ed3571a60fec" class="i field">_tmp</a>))
+                        <a href="#1eb6567af6cdcb1d" class="i method">renameLog</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>, <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                    <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#21e677d94006cfda" class="i method">setExpectedOldObjectId</a>(<a href="ObjectId.cs.html#a54807441779f4c5" class="t t">ObjectId</a>.<a href="ObjectId.cs.html#a6ee7b4e86a6eafa" class="i property">ZeroId</a>);
+                    <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#5d8a53c5cc3b978d" class="i method">setNewObjectId</a>(<a href="#5ce9f1455829a1be" class="i field">_objId</a>);
+                    <a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>.<a href="RefUpdate.cs.html#b910e0234d3ba9a9" class="i method">update</a>(<span class="r2 r">rw</span>);
+                    <b>if</b> (<a href="#bb8facc52a6060a7" class="i field">_updateHead</a>)
+                        <a href="#07bf30634e83b6e2" class="i method">linkHEAD</a>(<a href="RefRename.cs.html#3edbc18d160790a1" class="i field">source</a>);
+                    <b>return</b> <span class="r3 r">dst</span>.<a href="RefUpdate.cs.html#5d84c6f9a52f1ed5" class="i method">getResult</a>();
+                }
+
+                <b>return</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#d1cfa84af7b2d40a" class="i field">RENAMED</a>;
+            }
+            <b>finally</b>
+            {
+                <span class="c">// Always try to free the temporary name.</span>
+                <b>try</b>
+                {
+                    <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#1a481075b801ae03" class="i method">delete</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>);
+                }
+                <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+                {
+                    <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#c2cd6b852412d5cf" class="i method">fileFor</a>(<a href="#b834ed3571a60fec" class="i field">_tmp</a>.<a href="RefUpdate.cs.html#ba89a99e5cbf1929" class="i method">getName</a>()).<a href="@0@mscorlib/A.html#4624f270de002a1a" class="i method">Delete</a>();
+                }
+            }
+        }
+
+        <b>private bool</b> <a id="1eb6567af6cdcb1d" href="R/1eb6567af6cdcb1d.html" target="n" data-glyph="76,1" class="i method">renameLog</a>(<a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r4 rd" class="r4 r">src</span>, <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r5 rd" class="r5 r">dst</span>)
+        {
+            <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r6 rd" class="r6 r">srcLog</span> = <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#d6c378de6ec5080d" class="i method">logFor</a>(<span class="r4 r">src</span>.<a href="RefUpdate.cs.html#ba89a99e5cbf1929" class="i method">getName</a>());
+            <a href="@0@mscorlib/A.html#4ee673c1a4ecad41" class="t t">FileInfo</a> <span id="r7 rd" class="r7 r">dstLog</span> = <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#d6c378de6ec5080d" class="i method">logFor</a>(<span class="r5 r">dst</span>.<a href="RefUpdate.cs.html#ba89a99e5cbf1929" class="i method">getName</a>());
+
+            <b>if</b> (!<span class="r6 r">srcLog</span>.<a href="@0@mscorlib/A.html#1dcf92a404b7595d" class="i property">Exists</a>)
+                <b>return true</b>;
+
+            <b>if</b> (!<a href="#b95758805de427fe" class="i method">rename</a>(<span class="r6 r">srcLog</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="r7 r">dstLog</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>))
+                <b>return false</b>;
+
+            <span class="c">// There be dragons</span>
+
+
+
+            <b>try</b>
+            {
+                <b>int</b> <span id="r8 rd" class="r8 r">levels</span> = <a href="RefDirectory.cs.html#b7360b0f0070b3a6" class="t t">RefDirectory</a>.<a href="RefDirectory.cs.html#ab548fb86facdf67" class="i method">levelsIn</a>(<span class="r4 r">src</span>.<a href="RefUpdate.cs.html#ba89a99e5cbf1929" class="i method">getName</a>()) - 2;
+                <a href="RefDirectory.cs.html#b7360b0f0070b3a6" class="t t">RefDirectory</a>.<a href="RefDirectory.cs.html#b0ae23e83250c1c3" class="i method">delete</a>(<span class="r6 r">srcLog</span>, <span class="r8 r">levels</span>);
+                <b>return true</b>;
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+            {
+                <a href="#b95758805de427fe" class="i method">rename</a>(<span class="r7 r">dstLog</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>, <span class="r6 r">srcLog</span>.<a href="@0@mscorlib/A.html#0f9b506168f8cec0" class="i property">FullName</a>);
+                <b>return false</b>;
+            }
+        }
+
+        <b>private static bool</b> <a id="b95758805de427fe" href="R/b95758805de427fe.html" target="n" data-glyph="76,1" class="i method">rename</a>(<b>string</b> <span id="r9 rd" class="r9 r">src</span>, <b>string</b> <span id="r10 rd" class="r10 r">dst</span>)
+        {
+            <b>if</b> (<b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r9 r">src</span>).<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<span class="r10 r">dst</span>))
+                <b>return true</b>;
+
+            <a href="@0@mscorlib/A.html#30fa608717e5ce8e" class="t t">DirectoryInfo</a> <span id="r11 rd" class="r11 r">dir</span> = <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r10 r">dst</span>).<a href="@0@mscorlib/A.html#10d7d3740bb7ac87" class="i property">Directory</a>;
+            <b>if</b> ((<span class="r11 r">dir</span>.<a href="@0@mscorlib/A.html#6f88a05eb9231687" class="i property">Exists</a> || !<span class="r11 r">dir</span>.<a href="Util/Extensions.cs.html#60d87635fed6bc8e" class="i method">Mkdirs</a>()) &amp;&amp; !<span class="r11 r">dir</span>.<a href="Util/Extensions.cs.html#eddb078234863074" class="i method">IsDirectory</a>())
+                <b>return false</b>;
+            <b>return</b> <b>new</b> <a href="@0@mscorlib/A.html#1fe2c3953ba2a577" class="t constructor">FileInfo</a>(<span class="r9 r">src</span>).<a href="Util/Extensions.cs.html#15dbc22e555a7c3f" class="i method">RenameTo</a>(<span class="r10 r">dst</span>);
+        }
+
+        <b>private bool</b> <a id="07bf30634e83b6e2" href="R/07bf30634e83b6e2.html" target="n" data-glyph="76,1" class="i method">linkHEAD</a>(<a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r12 rd" class="r12 r">target</span>)
+        {
+            <b>try</b>
+            {
+                <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a> <span id="r13 rd" class="r13 r">u</span> = <a href="#2c339cc544d24b0b" class="i field">_refdb</a>.<a href="RefDirectory.cs.html#41f268dffa08abcd" class="i method">newUpdate</a>(<a href="Constants.cs.html#4c9cf80bf668e5fb" class="t t">Constants</a>.<a href="Constants.cs.html#53497694228e23bc" class="i field">HEAD</a>, <b>false</b>);
+                <span class="r13 r">u</span>.<a href="RefUpdate.cs.html#78a7f5bfcb17d569" class="i method">disableRefLog</a>();
+                <b>switch</b> (<span class="r13 r">u</span>.<a href="RefUpdate.cs.html#6a7017e890732529" class="i method">link</a>(<span class="r12 r">target</span>.<a href="RefUpdate.cs.html#ba89a99e5cbf1929" class="i method">getName</a>()))
+                {
+                    <b>case</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#322bd9a54bd0d93d" class="i field">NEW</a>:
+                    <b>case</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#0fd82feb0b203f4a" class="i field">FORCED</a>:
+                    <b>case</b> <a href="RefUpdate.cs.html#f7db734151ccbd14" class="t t">RefUpdate</a>.<a href="RefUpdate.cs.html#f4b61c197d6cd7d5" class="t t">RefUpdateResult</a>.<a href="RefUpdate.cs.html#98657261d2478f0a" class="i field">NO_CHANGE</a>:
+                        <b>return true</b>;
+                    <b>default</b>:
+                        <b>return false</b>;
+                }
+            }
+            <b>catch</b> (<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a>)
+            {
+                <b>return false</b>;
+            }
+        }
+    }
+}</pre></td></tr></table></div></body></html>

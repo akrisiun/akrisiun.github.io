@@ -1,0 +1,162 @@
+﻿<!DOCTYPE html>
+<html><head><title>TeeInputStream.cs</title><link rel="stylesheet" href="../../styles.css"><script src="../../scripts.js"></script></head>
+<body class="cB" onload="i(153);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#NGit/NGit.Util.IO/TeeInputStream.cs" target="_top">NGit.Util.IO\TeeInputStream.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#NGit" target="_top">lib\NGit\NGit\NGit.csproj</a> (NGit)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+This code is derived from jgit (http://eclipse.org/jgit).
+Copyright owners are documented in jgit&#39;s IP log.
+
+This program and the accompanying materials are made available
+under the terms of the Eclipse Distribution License v1.0 which
+accompanies this distribution, is reproduced below, and is
+available at http://www.eclipse.org/org/documents/edl-v10.php
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or
+without modification, are permitted provided that the following
+conditions are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+- Neither the name of the Eclipse Foundation, Inc. nor the
+  names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">Sharpen</span>;
+
+<b>namespace</b> <span class="i n">NGit</span>.<span class="i n">Util</span>.<span class="i n">IO</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Input stream that copies data read to another output stream.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Input stream that copies data read to another output stream.</span>
+	<span class="c">///</span><span class="c"> This stream is primarily useful with a</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="../NGit.Util/TemporaryBuffer.cs.html#aeb8269d005d0658" class="t t">TemporaryBuffer</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Util.TemporaryBuffer</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> , where any</span>
+	<span class="c">///</span><span class="c"> data read or skipped by the caller is also duplicated into the temporary</span>
+	<span class="c">///</span><span class="c"> buffer. Later the temporary buffer can then be used instead of the original</span>
+	<span class="c">///</span><span class="c"> source stream.</span>
+	<span class="c">///</span><span class="c"> During close this stream copies any remaining data from the source stream</span>
+	<span class="c">///</span><span class="c"> into the destination stream.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+	<b>public class</b> <a id="0cfa0eb2560c613f" href="../R/0cfa0eb2560c613f.html" target="n" data-glyph="0,0" class="t t">TeeInputStream</a> : <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a>
+	{
+		<b>private byte</b>[] <a id="404f4002b39ad01e" href="../R/404f4002b39ad01e.html" target="n" data-glyph="46,1" class="i field">skipBuffer</a>;
+
+		<b>private</b> <a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <a id="1b1ad79cddbb0825" href="../R/1b1ad79cddbb0825.html" target="n" data-glyph="46,1" class="i field">src</a>;
+
+		<b>private</b> <a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <a id="19135620f6840d3f" href="../R/19135620f6840d3f.html" target="n" data-glyph="46,1" class="i field">dst</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span><span class="c">Initialize a tee input stream.</span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">remarks</span><span class="c">&gt;</span><span class="c">Initialize a tee input stream.</span><span class="c">&lt;/</span><span class="c">remarks</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r">src</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">source stream to consume.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r">dst</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> destination to copy the source to as it is consumed. Typically</span>
+		<span class="c">///</span><span class="c"> this is a</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">NGit</span>.<span class="i n">Util</span>.<a href="../NGit.Util/TemporaryBuffer.cs.html#aeb8269d005d0658" class="t t">TemporaryBuffer</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">NGit.Util.TemporaryBuffer</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> .</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>public</b> <a id="97b24b18790e3769" href="../R/97b24b18790e3769.html" target="n" data-glyph="72,1" class="i constructor">TeeInputStream</a>(<a href="/Sharpen/A.html#5fe75b93f596f64a" class="t t">InputStream</a> <span id="r0 rd" class="r0 r">src</span>, <a href="/Sharpen/A.html#f960ef5651b4ede1" class="t t">OutputStream</a> <span id="r1 rd" class="r1 r">dst</span>)
+		{
+			<a href="#0cfa0eb2560c613f" class="k">this</a>.<a href="#1b1ad79cddbb0825" class="i field">src</a> = <span class="r0 r">src</span>;
+			<a href="#0cfa0eb2560c613f" class="k">this</a>.<a href="#19135620f6840d3f" class="i field">dst</a> = <span class="r1 r">dst</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override int</b> <a id="5e4f6a51f3bea940" href="../R/5e4f6a51f3bea940.html" target="n" data-glyph="72,1" class="i method">Read</a>()
+		{
+			<b>byte</b>[] <span id="r2 rd" class="r2 r">b</span> = <a href="#d4cdb6aabdd3ac63" class="i method">SkipBuffer</a>();
+			<b>int</b> <span id="r3 rd" class="r3 r">n</span> = <a href="#7e094821d6127204" class="i method">Read</a>(<span class="r2 r">b</span>, 0, 1);
+			<b>return</b> <span class="r3 r">n</span> == 1 ? <span class="r2 r">b</span>[0] &amp; <b>unchecked</b>((<b>int</b>)(0xff)) : -1;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override long</b> <a id="197e18f48a1344dc" href="../R/197e18f48a1344dc.html" target="n" data-glyph="72,1" class="i method">Skip</a>(<b>long</b> <span id="r4 rd" class="r4 r">cnt</span>)
+		{
+			<b>long</b> <span id="r5 rd" class="r5 r">skipped</span> = 0;
+			<b>byte</b>[] <span id="r6 rd" class="r6 r">b</span> = <a href="#d4cdb6aabdd3ac63" class="i method">SkipBuffer</a>();
+			<b>while</b> (0 &lt; <span class="r4 r">cnt</span>)
+			{
+				<b>int</b> <span id="r7 rd" class="r7 r">n</span> = <a href="#1b1ad79cddbb0825" class="i field">src</a>.<a href="/Sharpen/A.html#aed09ce58860ccfe" class="i method">Read</a>(<span class="r6 r">b</span>, 0, (<b>int</b>)<a href="@0@mscorlib/A.html#a4407e67b9a5afad" class="t t">Math</a>.<a href="@0@mscorlib/A.html#8cf0c6d1543ff08d" class="i method">Min</a>(<span class="r6 r">b</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>, <span class="r4 r">cnt</span>));
+				<b>if</b> (<span class="r7 r">n</span> &lt;= 0)
+				{
+					<b>break</b>;
+				}
+				<a href="#19135620f6840d3f" class="i field">dst</a>.<a href="/Sharpen/A.html#54b79431ffc12110" class="i method">Write</a>(<span class="r6 r">b</span>, 0, <span class="r7 r">n</span>);
+				<span class="r5 r">skipped</span> += <span class="r7 r">n</span>;
+				<span class="r4 r">cnt</span> -= <span class="r7 r">n</span>;
+			}
+			<b>return</b> <span class="r5 r">skipped</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override int</b> <a id="7e094821d6127204" href="../R/7e094821d6127204.html" target="n" data-glyph="72,1" class="i method">Read</a>(<b>byte</b>[] <span id="r8 rd" class="r8 r">b</span>, <b>int</b> <span id="r9 rd" class="r9 r">off</span>, <b>int</b> <span id="r10 rd" class="r10 r">len</span>)
+		{
+			<b>if</b> (<span class="r10 r">len</span> == 0)
+			{
+				<b>return</b> 0;
+			}
+			<b>int</b> <span id="r11 rd" class="r11 r">n</span> = <a href="#1b1ad79cddbb0825" class="i field">src</a>.<a href="/Sharpen/A.html#aed09ce58860ccfe" class="i method">Read</a>(<span class="r8 r">b</span>, <span class="r9 r">off</span>, <span class="r10 r">len</span>);
+			<b>if</b> (0 &lt; <span class="r11 r">n</span>)
+			{
+				<a href="#19135620f6840d3f" class="i field">dst</a>.<a href="/Sharpen/A.html#54b79431ffc12110" class="i method">Write</a>(<span class="r8 r">b</span>, <span class="r9 r">off</span>, <span class="r11 r">n</span>);
+			}
+			<b>return</b> <span class="r11 r">n</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><span class="i n">System</span>.<span class="i n">IO</span>.<a href="@0@mscorlib/A.html#bf546e435199e83c" class="t t">IOException</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>public override void</b> <a id="94d9cf3f460528da" href="../R/94d9cf3f460528da.html" target="n" data-glyph="72,1" class="i method">Close</a>()
+		{
+			<b>byte</b>[] <span id="r12 rd" class="r12 r">b</span> = <a href="#d4cdb6aabdd3ac63" class="i method">SkipBuffer</a>();
+			<b>for</b> (; ; )
+			{
+				<b>int</b> <span id="r13 rd" class="r13 r">n</span> = <a href="#1b1ad79cddbb0825" class="i field">src</a>.<a href="/Sharpen/A.html#054a500a244a1c39" class="i method">Read</a>(<span class="r12 r">b</span>);
+				<b>if</b> (<span class="r13 r">n</span> &lt;= 0)
+				{
+					<b>break</b>;
+				}
+				<a href="#19135620f6840d3f" class="i field">dst</a>.<a href="/Sharpen/A.html#54b79431ffc12110" class="i method">Write</a>(<span class="r12 r">b</span>, 0, <span class="r13 r">n</span>);
+			}
+			<a href="#19135620f6840d3f" class="i field">dst</a>.<a href="/Sharpen/A.html#6788f268a20b51ce" class="i method">Close</a>();
+			<a href="#1b1ad79cddbb0825" class="i field">src</a>.<a href="/Sharpen/A.html#33119cbb009fb311" class="i method">Close</a>();
+		}
+
+		<b>private byte</b>[] <a id="d4cdb6aabdd3ac63" href="../R/d4cdb6aabdd3ac63.html" target="n" data-glyph="76,1" class="i method">SkipBuffer</a>()
+		{
+			<b>if</b> (<a href="#404f4002b39ad01e" class="i field">skipBuffer</a> == <b>null</b>)
+			{
+				<a href="#404f4002b39ad01e" class="i field">skipBuffer</a> = <b>new</b> <b>byte</b>[2048];
+			}
+			<b>return</b> <a href="#404f4002b39ad01e" class="i field">skipBuffer</a>;
+		}
+	}
+}
+</pre></td></tr></table></div></body></html>

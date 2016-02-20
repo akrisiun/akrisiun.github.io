@@ -1,0 +1,260 @@
+﻿<!DOCTYPE html>
+<html><head><title>UnpackedObjectCache.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(251);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/UnpackedObjectCache.cs" target="_top">UnpackedObjectCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2008, Shawn O. Pearce &lt;spearce@spearce.org&gt;
+ * Copyright (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Runtime</span>.<span class="i n">CompilerServices</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+    <b>public static class</b> <a id="3625a455bac5bbf6" href="R/3625a455bac5bbf6.html" target="n" data-glyph="0,0" class="t t">UnpackedObjectCache</a>
+    {
+        <b>private const int</b> <a id="0698cf7e04a8dd6c" href="R/0698cf7e04a8dd6c.html" target="n" data-glyph="10,1" class="i field">CacheSize</a> = 1024;
+
+        <b>private static readonly</b> <a href="Util/WeakReference.cs.html#10a74e68e3fd748d" class="t t">WeakReference</a>&lt;<a href="#a7dd2ecbe69a9acd" class="t t">Entry</a>&gt; <a id="3e494fad188a455d" href="R/3e494fad188a455d.html" target="n" data-glyph="46,1" class="i field">Dead</a>;
+        <b>private static int</b> <a id="536c81a83ac4b00b" href="R/536c81a83ac4b00b.html" target="n" data-glyph="46,1" class="i field">_maxByteCount</a>;
+        <b>private static readonly</b> <a href="#224e2791a8398ab6" class="t t">Slot</a>[] <a id="017d44b814d6614f" href="R/017d44b814d6614f.html" target="n" data-glyph="46,1" class="i field">Cache</a>;
+        <b>private static</b> <a href="#224e2791a8398ab6" class="t t">Slot</a> <a id="ea61774e4a937d10" href="R/ea61774e4a937d10.html" target="n" data-glyph="46,1" class="i field">_lruHead</a>;
+        <b>private static</b> <a href="#224e2791a8398ab6" class="t t">Slot</a> <a id="aa1ff94e7559f5ec" href="R/aa1ff94e7559f5ec.html" target="n" data-glyph="46,1" class="i field">_lruTail</a>;
+        <b>private static int</b> <a id="590306c203109f9b" href="R/590306c203109f9b.html" target="n" data-glyph="46,1" class="i field">_openByteCount</a>;
+		
+		<b>private static</b> <a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="t t">Object</a> <a id="3d06bb364c445765" href="R/3d06bb364c445765.html" target="n" data-glyph="46,1" class="i field">locker</a> = <b>new</b> <a href="@0@mscorlib/A.html#38a0f6ea217e6f67" class="t constructor">Object</a>();
+
+        <b>private static int</b> <a id="457b7c49b8645f63" href="R/457b7c49b8645f63.html" target="n" data-glyph="76,1" class="i method">Hash</a>(<b>long</b> <span id="r0 rd" class="r0 r">position</span>)
+        {
+            <b>return</b> (<b>int</b>)((<b>uint</b>)(((<b>int</b>)<span class="r0 r">position</span>) &lt;&lt; 22) &gt;&gt; 22);
+        }
+
+        <b>static</b> <a id="9dff863c47be89e7" href="R/../../0000000000.html" target="n" data-glyph="76,1" class="i method">UnpackedObjectCache</a>()
+        {
+            <a href="#3e494fad188a455d" class="i field">Dead</a> = <b>new</b> <a href="Util/WeakReference.cs.html#f6dd6fb7c0845114" class="t constructor">WeakReference</a>&lt;<a href="#a7dd2ecbe69a9acd" class="t t">Entry</a>&gt;(<b>null</b>);
+            <a href="#536c81a83ac4b00b" class="i field">_maxByteCount</a> = <b>new</b> <a href="WindowCacheConfig.cs.html#b79d341459d7fd58" class="t constructor">WindowCacheConfig</a>().<a href="WindowCacheConfig.cs.html#f9ee79b0516f4045" class="i property">DeltaBaseCacheLimit</a>;
+
+            <a href="#017d44b814d6614f" class="i field">Cache</a> = <b>new</b> <a href="#224e2791a8398ab6" class="t t">Slot</a>[<a href="#0698cf7e04a8dd6c" class="i field">CacheSize</a>];
+            <b>for</b> (<b>int</b> <span id="r1 rd" class="r1 r">i</span> = 0; <span class="r1 r">i</span> &lt; <a href="#0698cf7e04a8dd6c" class="i field">CacheSize</a>; <span class="r1 r">i</span>++)
+            {
+                <a href="#017d44b814d6614f" class="i field">Cache</a>[<span class="r1 r">i</span>] = <b>new</b> <a href="#224e2791a8398ab6" class="t constructor">Slot</a>();
+            }
+        }
+
+        <b>public static void</b> <a id="fe701f6f172d5ab0" href="R/fe701f6f172d5ab0.html" target="n" data-glyph="72,1" class="i method">Reconfigure</a>(<a href="WindowCacheConfig.cs.html#7ccf4232b4c0baef" class="t t">WindowCacheConfig</a> <span id="r2 rd" class="r2 r">cfg</span>)
+        {
+			<b>if</b> (<span class="r2 r">cfg</span> == <b>null</b>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a> (<span class="s">&quot;cfg&quot;</span>);
+			<b>lock</b>(<a href="#3d06bb364c445765" class="i field">locker</a>)
+			{
+	            <b>int</b> <span id="r3 rd" class="r3 r">dbLimit</span> = <span class="r2 r">cfg</span>.<a href="WindowCacheConfig.cs.html#f9ee79b0516f4045" class="i property">DeltaBaseCacheLimit</a>;
+	            <b>if</b> (<a href="#536c81a83ac4b00b" class="i field">_maxByteCount</a> != <span class="r3 r">dbLimit</span>)
+	            {
+	                <a href="#536c81a83ac4b00b" class="i field">_maxByteCount</a> = <span class="r3 r">dbLimit</span>;
+	                <a href="#9aa3b766d37efa3f" class="i method">ReleaseMemory</a>();
+	            }
+			}
+        }
+
+        <b>public static</b> <a href="#a7dd2ecbe69a9acd" class="t t">Entry</a> <a id="453bc79e29439c81" href="R/453bc79e29439c81.html" target="n" data-glyph="72,1" class="i method">get</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r4 rd" class="r4 r">pack</span>, <b>long</b> <span id="r5 rd" class="r5 r">position</span>)
+        {
+			<b>lock</b>(<a href="#3d06bb364c445765" class="i field">locker</a>)
+			{
+	            <a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r6 rd" class="r6 r">e</span> = <a href="#017d44b814d6614f" class="i field">Cache</a>[<a href="#457b7c49b8645f63" class="i method">Hash</a>(<span class="r5 r">position</span>)];
+	            <b>if</b> (<span class="r6 r">e</span>.<a href="#7e3a939e7ba3f9de" class="i field">provider</a> == <span class="r4 r">pack</span> &amp;&amp; <span class="r6 r">e</span>.<a href="#7c1ee64e31a70452" class="i field">position</a> == <span class="r5 r">position</span>)
+	            {
+	                <a href="#a7dd2ecbe69a9acd" class="t t">Entry</a> <span id="r7 rd" class="r7 r">buf</span> = <span class="r6 r">e</span>.<a href="#e77d0f32fa399282" class="i field">data</a>.<a href="Util/WeakReference.cs.html#dd111c5e9cb37206" class="i method">get</a>();
+	                <b>if</b> (<span class="r7 r">buf</span> != <b>null</b>)
+	                {
+	                    <a href="#68476e527319c99a" class="i method">MoveToHead</a>(<span class="r6 r">e</span>);
+	                    <b>return</b> <span class="r7 r">buf</span>;
+	                }
+	            }
+	            <b>return null</b>;
+			}
+        }
+
+        <b>public static void</b> <a id="566bfbc85c0b7742" href="R/566bfbc85c0b7742.html" target="n" data-glyph="72,1" class="i method">store</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r8 rd" class="r8 r">pack</span>, <b>long</b> <span id="r9 rd" class="r9 r">position</span>,
+                 <b>byte</b>[] <span id="r10 rd" class="r10 r">data</span>, <b>int</b> <span id="r11 rd" class="r11 r">objectType</span>)
+        {
+			<b>if</b> (<span class="r10 r">data</span>==<b>null</b>)
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#8314938388254d5a" class="t constructor">ArgumentNullException</a>(<span class="s">&quot;data&quot;</span>);
+			<b>lock</b>(<a href="#3d06bb364c445765" class="i field">locker</a>)
+			{
+	            <b>if</b> (<span class="r10 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a> &gt; <a href="#536c81a83ac4b00b" class="i field">_maxByteCount</a>)
+	                <b>return</b>; <span class="c">// Too large to cache.</span>
+	
+	            <a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r12 rd" class="r12 r">e</span> = <a href="#017d44b814d6614f" class="i field">Cache</a>[<a href="#457b7c49b8645f63" class="i method">Hash</a>(<span class="r9 r">position</span>)];
+	            <a href="#50c0182661f37754" class="i method">ClearEntry</a>(<span class="r12 r">e</span>);
+	
+	            <a href="#590306c203109f9b" class="i field">_openByteCount</a> += <span class="r10 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+	            <a href="#9aa3b766d37efa3f" class="i method">ReleaseMemory</a>();
+	
+	            <span class="r12 r">e</span>.<a href="#7e3a939e7ba3f9de" class="i field">provider</a> = <span class="r8 r">pack</span>;
+	            <span class="r12 r">e</span>.<a href="#7c1ee64e31a70452" class="i field">position</a> = <span class="r9 r">position</span>;
+	            <span class="r12 r">e</span>.<a href="#8c50d4e911a0c76a" class="i field">sz</a> = <span class="r10 r">data</span>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>;
+	            <span class="r12 r">e</span>.<a href="#e77d0f32fa399282" class="i field">data</a> = <b>new</b> <a href="Util/WeakReference.cs.html#f6dd6fb7c0845114" class="t constructor">WeakReference</a>&lt;<a href="#a7dd2ecbe69a9acd" class="t t">Entry</a>&gt;(<b>new</b> <a href="#0501e450123893c4" class="t constructor">Entry</a>(<span class="r10 r">data</span>, <span class="r11 r">objectType</span>));
+	            <a href="#68476e527319c99a" class="i method">MoveToHead</a>(<span class="r12 r">e</span>);
+			}
+        }
+
+        <b>private static void</b> <a id="9aa3b766d37efa3f" href="R/9aa3b766d37efa3f.html" target="n" data-glyph="76,1" class="i method">ReleaseMemory</a>()
+        {
+            <b>while</b> (<a href="#590306c203109f9b" class="i field">_openByteCount</a> &gt; <a href="#536c81a83ac4b00b" class="i field">_maxByteCount</a> &amp;&amp; <a href="#aa1ff94e7559f5ec" class="i field">_lruTail</a> != <b>null</b>)
+            {
+                <a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r13 rd" class="r13 r">currOldest</span> = <a href="#aa1ff94e7559f5ec" class="i field">_lruTail</a>;
+                <a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r14 rd" class="r14 r">nextOldest</span> = <span class="r13 r">currOldest</span>.<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a>;
+
+                <a href="#50c0182661f37754" class="i method">ClearEntry</a>(<span class="r13 r">currOldest</span>);
+                <span class="r13 r">currOldest</span>.<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a> = <b>null</b>;
+                <span class="r13 r">currOldest</span>.<a href="#8f99f6906bf551ea" class="i field">lruNext</a> = <b>null</b>;
+
+                <b>if</b> (<span class="r14 r">nextOldest</span> == <b>null</b>)
+                {
+                    <a href="#ea61774e4a937d10" class="i field">_lruHead</a> = <b>null</b>;
+                }
+                <b>else</b>
+                {
+                    <span class="r14 r">nextOldest</span>.<a href="#8f99f6906bf551ea" class="i field">lruNext</a> = <b>null</b>;
+                }
+
+                <a href="#aa1ff94e7559f5ec" class="i field">_lruTail</a> = <span class="r14 r">nextOldest</span>;
+            }
+        }
+
+        <b>public static void</b> <a id="c699ed9db64649a6" href="R/c699ed9db64649a6.html" target="n" data-glyph="72,1" class="i method">purge</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r15 rd" class="r15 r">file</span>)
+        {
+			<b>lock</b>(<a href="#3d06bb364c445765" class="i field">locker</a>)
+			{
+	            <b>foreach</b> (<a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r16 rd" class="r16 r">e</span> <b>in</b> <a href="#017d44b814d6614f" class="i field">Cache</a>)
+	            {
+	                <b>if</b> (<span class="r16 r">e</span>.<a href="#7e3a939e7ba3f9de" class="i field">provider</a> == <span class="r15 r">file</span>)
+	                {
+	                    <a href="#50c0182661f37754" class="i method">ClearEntry</a>(<span class="r16 r">e</span>);
+	                    <a href="#ba5024e2e606c5d9" class="i method">Unlink</a>(<span class="r16 r">e</span>);
+	                }
+	            }
+			}
+        }
+
+        <b>private static void</b> <a id="68476e527319c99a" href="R/68476e527319c99a.html" target="n" data-glyph="76,1" class="i method">MoveToHead</a>(<a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r17 rd" class="r17 r">e</span>)
+        {
+            <a href="#ba5024e2e606c5d9" class="i method">Unlink</a>(<span class="r17 r">e</span>);
+            <span class="r17 r">e</span>.<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a> = <b>null</b>;
+            <span class="r17 r">e</span>.<a href="#8f99f6906bf551ea" class="i field">lruNext</a> = <a href="#ea61774e4a937d10" class="i field">_lruHead</a>;
+            <b>if</b> (<a href="#ea61774e4a937d10" class="i field">_lruHead</a> != <b>null</b>)
+            {
+                <a href="#ea61774e4a937d10" class="i field">_lruHead</a>.<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a> = <span class="r17 r">e</span>;
+            }
+            <b>else</b>
+            {
+                <a href="#aa1ff94e7559f5ec" class="i field">_lruTail</a> = <span class="r17 r">e</span>;
+            }
+            <a href="#ea61774e4a937d10" class="i field">_lruHead</a> = <span class="r17 r">e</span>;
+        }
+
+        <b>private static void</b> <a id="ba5024e2e606c5d9" href="R/ba5024e2e606c5d9.html" target="n" data-glyph="76,1" class="i method">Unlink</a>(<a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r18 rd" class="r18 r">e</span>)
+        {
+            <a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r19 rd" class="r19 r">prev</span> = <span class="r18 r">e</span>.<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a>;
+            <a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r20 rd" class="r20 r">next</span> = <span class="r18 r">e</span>.<a href="#8f99f6906bf551ea" class="i field">lruNext</a>;
+
+            <b>if</b> (<span class="r19 r">prev</span> != <b>null</b>)
+            {
+                <span class="r19 r">prev</span>.<a href="#8f99f6906bf551ea" class="i field">lruNext</a> = <span class="r20 r">next</span>;
+            }
+            <b>if</b> (<span class="r20 r">next</span> != <b>null</b>)
+            {
+                <span class="r20 r">next</span>.<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a> = <span class="r19 r">prev</span>;
+            }
+        }
+
+        <b>private static void</b> <a id="50c0182661f37754" href="R/50c0182661f37754.html" target="n" data-glyph="76,1" class="i method">ClearEntry</a>(<a href="#224e2791a8398ab6" class="t t">Slot</a> <span id="r21 rd" class="r21 r">e</span>)
+        {
+            <a href="#590306c203109f9b" class="i field">_openByteCount</a> -= <span class="r21 r">e</span>.<a href="#8c50d4e911a0c76a" class="i field">sz</a>;
+            <span class="r21 r">e</span>.<a href="#7e3a939e7ba3f9de" class="i field">provider</a> = <b>null</b>;
+            <span class="r21 r">e</span>.<a href="#e77d0f32fa399282" class="i field">data</a> = <a href="#3e494fad188a455d" class="i field">Dead</a>;
+            <span class="r21 r">e</span>.<a href="#8c50d4e911a0c76a" class="i field">sz</a> = 0;
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+        <b>public class</b> <a id="a7dd2ecbe69a9acd" href="R/a7dd2ecbe69a9acd.html" target="n" data-glyph="0,1" class="t t">Entry</a>
+        {
+            <b>public byte</b>[] <a id="45204dd4b222169d" href="R/45204dd4b222169d.html" target="n" data-glyph="42,2" class="i field">data</a>;
+
+            <b>public int</b> <a id="c4b70e3a124b33c9" href="R/c4b70e3a124b33c9.html" target="n" data-glyph="42,2" class="i field">type</a>;
+
+            <b>public</b> <a id="0501e450123893c4" href="R/0501e450123893c4.html" target="n" data-glyph="72,2" class="i constructor">Entry</a>(<b>byte</b>[] <span id="r22 rd" class="r22 r">aData</span>, <b>int</b> <span id="r23 rd" class="r23 r">aType</span>)
+            {
+                <a href="#45204dd4b222169d" class="i field">data</a> = <span class="r22 r">aData</span>;
+                <a href="#c4b70e3a124b33c9" class="i field">type</a> = <span class="r23 r">aType</span>;
+            }
+        }
+
+        <b>private class</b> <a id="224e2791a8398ab6" href="R/224e2791a8398ab6.html" target="n" data-glyph="4,1" class="t t"><span id="6ba12aa30c7a768f">Slot</span></a> : <a href="@0@mscorlib/A.html#1f55292c3174123d" class="t t">IDisposable</a>
+        {
+            <b>public</b> <a href="#224e2791a8398ab6" class="t t">Slot</a> <a id="97f0f5a1d0ef2e0d" href="R/97f0f5a1d0ef2e0d.html" target="n" data-glyph="42,2" class="i field">lruPrev</a>;
+
+            <b>public</b> <a href="#224e2791a8398ab6" class="t t">Slot</a> <a id="8f99f6906bf551ea" href="R/8f99f6906bf551ea.html" target="n" data-glyph="42,2" class="i field">lruNext</a>;
+
+            <b>public</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <a id="7e3a939e7ba3f9de" href="R/7e3a939e7ba3f9de.html" target="n" data-glyph="42,2" class="i field">provider</a>;
+
+            <b>public long</b> <a id="7c1ee64e31a70452" href="R/7c1ee64e31a70452.html" target="n" data-glyph="42,2" class="i field">position</a>;
+
+            <b>public int</b> <a id="8c50d4e911a0c76a" href="R/8c50d4e911a0c76a.html" target="n" data-glyph="42,2" class="i field">sz</a>;
+
+            <b>public</b> <a href="Util/WeakReference.cs.html#10a74e68e3fd748d" class="t t">WeakReference</a>&lt;<a href="#a7dd2ecbe69a9acd" class="t t">Entry</a>&gt; <a id="e77d0f32fa399282" href="R/e77d0f32fa399282.html" target="n" data-glyph="42,2" class="i field">data</a> = <a href="#3e494fad188a455d" class="i field">Dead</a>;
+			
+			<b>public void</b> <a id="a8b24a890cc2b469" href="R/a8b24a890cc2b469.html" target="n" data-glyph="72,2" class="i method">Dispose</a> ()
+			{
+				<a href="#7e3a939e7ba3f9de" class="i field">provider</a>.<a href="PackFile.cs.html#87545eb7a27a34b8" class="i method">Dispose</a>();
+				<a href="#8f99f6906bf551ea" class="i field">lruNext</a>.<a href="#a8b24a890cc2b469" class="i method">Dispose</a>();
+				<a href="#97f0f5a1d0ef2e0d" class="i field">lruPrev</a>.<a href="#a8b24a890cc2b469" class="i method">Dispose</a>();
+			}
+			
+        }
+
+        <span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+    }
+}
+</pre></td></tr></table></div></body></html>

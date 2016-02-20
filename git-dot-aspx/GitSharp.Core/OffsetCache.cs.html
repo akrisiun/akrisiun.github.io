@@ -1,0 +1,647 @@
+﻿<!DOCTYPE html>
+<html><head><title>OffsetCache.cs</title><link rel="stylesheet" href="../styles.css"><script src="../scripts.js"></script></head>
+<body class="cB" onload="i(638);"><div class="dH">
+<table style="width: 100%">
+<tr><td>File: <a id="filePath" class="blueLink" href="/#GitSharp.Core/OffsetCache.cs" target="_top">OffsetCache.cs</a><br/></td><td></td></tr>
+<tr><td>Project: <a id="projectPath" class="blueLink" href="/#GitSharp.Core" target="_top">lib\GitSharp\GitSharp.Core\GitSharp.Core.csproj</a> (GitSharp.Core)</td><td></td></tr>
+</table>
+</div>
+<div class="cz"><table class="tb" cellpadding="0" cellspacing="0"><tr><td valign="top" align="right"><pre id="ln"></pre></td><td valign="top" align="left"><pre id="code">
+<span class="c">/*
+ * Copyright (C) 2009, Google Inc.
+ * Copyrigth (C) 2009, Henon &lt;meinrad.recheis@gmail.com&gt;
+ * Copyright (C) 2009, Gil Ran &lt;gilrun@gmail.com&gt;
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ *
+ * - Neither the name of the Git Development Community nor the
+ *   names of its contributors may be used to endorse or promote
+ *   products derived from this software without specific prior
+ *   written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */</span>
+
+<b>using</b> <span class="i n">System</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Collections</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Runtime</span>.<span class="i n">CompilerServices</span>;
+<b>using</b> <span class="i n">System</span>.<span class="i n">Threading</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>;
+<b>using</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>.<span class="i n">Util</span>.<span class="i n">JavaHelper</span>;
+
+<b>namespace</b> <span class="i n">GitSharp</span>.<span class="i n">Core</span>
+{
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Least frequently used cache for objects specified by PackFile positions.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> This cache maps a </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(PackFile, position)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> tuple to an object.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> This cache is suitable for objects that are &quot;relative expensive&quot; to compute</span>
+	<span class="c">///</span><span class="c"> from the underlying PackFile, given some known position in that file.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> Whenever a cache miss occurs, </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> is invoked by</span>
+	<span class="c">///</span><span class="c"> exactly one thread for the given </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(PackFile,position)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> key tuple.</span>
+	<span class="c">///</span><span class="c"> This is ensured by an array of _locks, with the tuple hashed to a @lock instance.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> During a miss, older entries are evicted from the cache so long as</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d12755e58eb0dca2" class="i method">isFull</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> returns true.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> Its too expensive during object access to be 100% accurate with a least</span>
+	<span class="c">///</span><span class="c"> recently used (LRU) algorithm. Strictly ordering every read is a lot of</span>
+	<span class="c">///</span><span class="c"> overhead that typically doesn&#39;t yield a corresponding benefit to the</span>
+	<span class="c">///</span><span class="c"> application.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> This cache : a loose LRU policy by randomly picking a window</span>
+	<span class="c">///</span><span class="c"> comprised of roughly 10% of the cache, and evicting the oldest accessed entry</span>
+	<span class="c">///</span><span class="c"> within that window.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> Entities created by the cache are held under SoftReferences, permitting the</span>
+	<span class="c">///</span><span class="c"> Java runtime&#39;s garbage collector to evict entries when heap memory gets low.</span>
+	<span class="c">///</span><span class="c"> Most JREs implement a loose least recently used algorithm for this eviction.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> The internal hash table does not expand at runtime, instead it is fixed in</span>
+	<span class="c">///</span><span class="c"> size at cache creation time. The internal @lock table used to gate load</span>
+	<span class="c">///</span><span class="c"> invocations is also fixed in size.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> The key tuple is passed through to methods as a pair of parameters rather</span>
+	<span class="c">///</span><span class="c"> than as a single object, thus reducing the transient memory allocations of</span>
+	<span class="c">///</span><span class="c"> callers. It is more efficient to avoid the allocation, as we can&#39;t be 100%</span>
+	<span class="c">///</span><span class="c"> sure that a JIT would be able to stack-allocate a key tuple.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> This cache has an implementation rule such that:</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">list</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">item</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> is invoked by at most one thread at a time</span>
+	<span class="c">///</span><span class="c"> for a given </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(PackFile, position)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> tuple.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">item</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">item</span><span class="c">&gt;</span><span class="c">For every </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">load()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> invocation there is exactly one</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>, <span class="r0 r t">V</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> invocation to wrap a SoftReference</span>
+	<span class="c">///</span><span class="c"> around the cached entity.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">item</span><span class="c">&gt;</span><span class="c">&lt;</span><span class="c">item</span><span class="c">&gt;</span><span class="c">For every Reference created by </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">createRef()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> there will be</span>
+	<span class="c">///</span><span class="c"> exactly one call to </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r1 r t">R</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to cleanup any resources associated</span>
+	<span class="c">///</span><span class="c"> with the (now expired) cached entity.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">item</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">list</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> Therefore, it is safe to perform resource accounting increments during the</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> or </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>, <span class="r0 r t">V</span>)<span class="c">&quot;</span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> methods, and matching decrements during </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r1 r t">R</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">. Implementors may</span>
+	<span class="c">///</span><span class="c"> need to override </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>, <span class="r0 r t">V</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> in order to embed</span>
+	<span class="c">///</span><span class="c"> additional accounting information into an implementation specific</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparamref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r t">V</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> subclass, as the cached entity may have already been</span>
+	<span class="c">///</span><span class="c"> evicted by the JRE&#39;s garbage collector.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+	<span class="c">///</span><span class="c"> To maintain higher concurrency workloads, during eviction only one thread</span>
+	<span class="c">///</span><span class="c"> performs the eviction work, while other threads can continue to insert new</span>
+	<span class="c">///</span><span class="c"> objects in parallel. This means that the cache can be temporarily over limit,</span>
+	<span class="c">///</span><span class="c"> especially if the nominated eviction thread is being starved relative to the</span>
+	<span class="c">///</span><span class="c"> other threads.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r t">V</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Type of value stored in the cache.</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r t">R</span><span class="c">&quot;</span><span class="c">&gt;</span>
+	<span class="c">///</span><span class="c"> Subtype of </span><span class="c">&lt;</span><span class="c">typeparamref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r1 r t">R</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> subclass used by the cache.</span>
+	<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+	<b>internal abstract class</b> <a id="bf1665fcda70845b" href="R/bf1665fcda70845b.html" target="n" data-glyph="2,0" class="t t">OffsetCache</a>&lt;<span id="r0 rd t" class="r0 r t">V</span>, <span id="r1 rd t" class="r1 r t">R</span>&gt;
+		<b>where</b> <span class="r1 r t">R</span> : <a href="#bf1665fcda70845b" class="t t">OffsetCache</a>&lt;<span class="r0 r t">V</span>, <span class="r1 r t">R</span>&gt;.<a href="#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<span class="r0 r t">V</span>&gt;
+		<b>where</b> <span class="r0 r t">V</span> : <b>class</b>
+	{
+		<span class="c">// [ammachado] .NET Random is not thread safe</span>
+		<b>private static readonly</b> <a href="@0@mscorlib/A.html#bb77e610694e64ca" class="t t">Random</a> <a id="4b01a98fc98f2b76" href="R/4b01a98fc98f2b76.html" target="n" data-glyph="46,1" class="i field">Rng</a> = <b>new</b> <a href="@0@mscorlib/A.html#5d22f8880fc9f8d9" class="t constructor">Random</a>();
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Queue that </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>, <span class="r0 r t">V</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> must use.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>internal</b> <a href="@0@mscorlib/A.html#f7cdfd0f848ca249" class="t t">Queue</a> <a id="c1b4acfdac8b93e1" href="R/c1b4acfdac8b93e1.html" target="n" data-glyph="44,1" class="i field">queue</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of entries in </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7ff53100882a5ef7" class="i field">_table</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly int</b> <a id="2adde9e4be032b3d" href="R/2adde9e4be032b3d.html" target="n" data-glyph="46,1" class="i field">_tableSize</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Access clock for loose LRU.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#2c4e412995336284" class="t t">AtomicLong</a> <a id="4eb21944c02e7656" href="R/4eb21944c02e7656.html" target="n" data-glyph="46,1" class="i field">_clock</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Hash bucket directory; entries are chained below.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="Util/AtomicReferenceArray.cs.html#e767ff2d3041ad76" class="t t">AtomicReferenceArray</a>&lt;<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt;&gt; <a id="7ff53100882a5ef7" href="R/7ff53100882a5ef7.html" target="n" data-glyph="46,1" class="i field">_table</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Locks to prevent concurrent loads for same (PackFile, position).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="#e2610b7bb0c17dce" class="t t">LockTarget</a>[] <a id="0e87a23ed86fd748" href="R/0e87a23ed86fd748.html" target="n" data-glyph="46,1" class="i field">_locks</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Lock to elect the eviction thread after a load occurs.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly</b> <a href="@0@mscorlib/A.html#b5d828778d2b9227" class="t t">AutoResetEvent</a> <a id="6d3e75141b62dab8" href="R/6d3e75141b62dab8.html" target="n" data-glyph="46,1" class="i field">_evictLock</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Number of </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#7ff53100882a5ef7" class="i field">_table</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> buckets to scan for an eviction window.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>private readonly int</b> <a id="cd075c41bfb0eaa7" href="R/cd075c41bfb0eaa7.html" target="n" data-glyph="46,1" class="i field">_evictBatch</a>;
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Create a new cache with a fixed size entry table and @Lock table.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r2 r">tSize</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">number of entries in the entry hash table.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r3 r">lockCount</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> number of entries in the </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#e2610b7bb0c17dce" class="t t">LockTarget</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> table. This is the maximum</span>
+		<span class="c">///</span><span class="c"> concurrency rate for creation of new objects through</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> invocations.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>internal</b> <a id="c6353ba7ef8a6da8" href="R/c6353ba7ef8a6da8.html" target="n" data-glyph="74,1" class="i constructor">OffsetCache</a>(<b>int</b> <span id="r2 rd" class="r2 r">tSize</span>, <b>int</b> <span id="r3 rd" class="r3 r">lockCount</span>)
+		{
+			<b>if</b> (<span class="r2 r">tSize</span> &lt; 1)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;tSize must be &gt;= 1&quot;</span>);
+			}
+
+			<b>if</b> (<span class="r3 r">lockCount</span> &lt; 1)
+			{
+				<b>throw</b> <b>new</b> <a href="@0@mscorlib/A.html#eb98012a74461437" class="t constructor">ArgumentException</a>(<span class="s">&quot;lockCount must be &gt;= 1&quot;</span>);
+			}
+
+			<a href="#c1b4acfdac8b93e1" class="i field">queue</a> = <b>new</b> <a href="@0@mscorlib/A.html#adf87ce0e40b7f4c" class="t constructor">Queue</a>();
+			<a href="#2adde9e4be032b3d" class="i field">_tableSize</a> = <span class="r2 r">tSize</span>;
+			<a href="#4eb21944c02e7656" class="i field">_clock</a> = <b>new</b> <a href="Util/JavaHelper/AtomicInteger.cs.html#f3a141bf65e1a7ce" class="t constructor">AtomicLong</a>(1);
+			<a href="#7ff53100882a5ef7" class="i field">_table</a> = <b>new</b> <a href="Util/AtomicReferenceArray.cs.html#d248bd50c376aa38" class="t constructor">AtomicReferenceArray</a>&lt;<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt;&gt;(<a href="#2adde9e4be032b3d" class="i field">_tableSize</a>);
+			<a href="#0e87a23ed86fd748" class="i field">_locks</a> = <b>new</b> <a href="#e2610b7bb0c17dce" class="t t">LockTarget</a>[<span class="r3 r">lockCount</span>];
+
+			<b>for</b> (<b>int</b> <span id="r4 rd" class="r4 r">i</span> = 0; <span class="r4 r">i</span> &lt; <a href="#0e87a23ed86fd748" class="i field">_locks</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>; <span class="r4 r">i</span>++)
+			{
+				<a href="#0e87a23ed86fd748" class="i field">_locks</a>[<span class="r4 r">i</span>] = <b>new</b> <a href="#e2610b7bb0c17dce" class="t constructor">LockTarget</a>();
+			}
+
+			<a href="#6d3e75141b62dab8" class="i field">_evictLock</a> = <b>new</b> <a href="@0@mscorlib/A.html#3fceb706cf6c61c6" class="t constructor">AutoResetEvent</a>(<b>true</b>);
+
+			<a href="@0@mscorlib/A.html#225942ed7b7a3252" class="k">var</a> <span id="r5 rd" class="r5 r">eb</span> = (<b>int</b>)(<a href="#2adde9e4be032b3d" class="i field">_tableSize</a> * .1);
+
+			<b>if</b> (64 &lt; <span class="r5 r">eb</span>)
+			{
+				<span class="r5 r">eb</span> = 64;
+			}
+			<b>else if</b> (<span class="r5 r">eb</span> &lt; 4)
+			{
+				<span class="r5 r">eb</span> = 4;
+			}
+
+			<b>if</b> (<a href="#2adde9e4be032b3d" class="i field">_tableSize</a> &lt; <span class="r5 r">eb</span>)
+			{
+				<span class="r5 r">eb</span> = <a href="#2adde9e4be032b3d" class="i field">_tableSize</a>;
+			}
+
+			<a href="#cd075c41bfb0eaa7" class="i field">_evictBatch</a> = <span class="r5 r">eb</span>;
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Lookup a cached object, creating and loading it if it doesn&#39;t exist.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the pack that &quot;contains&quot; the cached object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r7 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">offset within </span><span class="c">&lt;</span><span class="c">paramref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r6 r">pack</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> of the object.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">The object reference.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The object reference was not in the cache and could not be</span>
+		<span class="c">///</span><span class="c"> obtained by </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal</b> <span class="r0 r t">V</span> <a id="b03188b09564a29c" href="R/b03188b09564a29c.html" target="n" data-glyph="74,1" class="i method">getOrLoad</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r6 rd" class="r6 r">pack</span>, <b>long</b> <span id="r7 rd" class="r7 r">position</span>)
+		{
+			<b>int</b> <span id="r8 rd" class="r8 r">slot</span> = <a href="#bf1665fcda70845b" class="k">this</a>.<a href="#51929af292705f2d" class="i method">Slot</a>(<span class="r6 r">pack</span>, <span class="r7 r">position</span>);
+			<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r9 rd" class="r9 r">e1</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r8 r">slot</span>);
+			<span class="r0 r t">V</span> <span id="r10 rd" class="r10 r">v</span> = <a href="#2c7f2ecc01decf6c" class="i method">Scan</a>(<span class="r9 r">e1</span>, <span class="r6 r">pack</span>, <span class="r7 r">position</span>);
+			<b>if</b> (<span class="r10 r">v</span> != <b>null</b>)
+				<b>return</b> <span class="r10 r">v</span>;
+
+			<b>lock</b> (<a href="#c8bf781b998f4aa9" class="i method">Lock</a>(<span class="r6 r">pack</span>, <span class="r7 r">position</span>))
+			{
+				<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r11 rd" class="r11 r">e2</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r8 r">slot</span>);
+				<b>if</b> (<span class="r11 r">e2</span> != <span class="r9 r">e1</span>)
+				{
+					<span class="r10 r">v</span> = <a href="#2c7f2ecc01decf6c" class="i method">Scan</a>(<span class="r11 r">e2</span>, <span class="r6 r">pack</span>, <span class="r7 r">position</span>);
+					<b>if</b> (<span class="r10 r">v</span> != <b>null</b>)
+						<b>return</b> <span class="r10 r">v</span>;
+				}
+
+				<span class="r10 r">v</span> = <a href="#d77e22bb6cd78ff0" class="i method">load</a>(<span class="r6 r">pack</span>, <span class="r7 r">position</span>);
+				<a href="#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r12 rd" class="r12 r">@ref</span> = <a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<span class="r6 r">pack</span>, <span class="r7 r">position</span>, <span class="r10 r">v</span>);
+				<a href="#1d7c9f1b4db5089c" class="i method">Hit</a>(<span class="r12 r">@ref</span>);
+
+				<b>while</b> (<b>true</b>)
+				{
+					<a href="#52d82c4107cbd45f" class="k">var</a> <span id="r13 rd" class="r13 r">n</span> = <b>new</b> <a href="#4467d145e0005533" class="t constructor">Entry</a>&lt;<span class="r0 r t">V</span>&gt;(<a href="#829eee8d9a894c4d" class="i method">Clean</a>(<span class="r11 r">e2</span>), <span class="r12 r">@ref</span>);
+					<b>if</b> (<a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#f09dca10d242f42a" class="i method">compareAndSet</a>(<span class="r8 r">slot</span>, <span class="r11 r">e2</span>, <span class="r13 r">n</span>)) <b>break</b>;
+					<span class="r11 r">e2</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r8 r">slot</span>);
+				}
+			}
+
+			<b>if</b> (<a href="#6d3e75141b62dab8" class="i field">_evictLock</a>.<a href="@0@mscorlib/A.html#8f366147dd3f5f63" class="i method">WaitOne</a>())
+			{
+				<b>try</b>
+				{
+					<a href="#b03b2f3b3b810fdb" class="i method">Gc</a>();
+					<a href="#e29963e9afc5d24a" class="i method">Evict</a>();
+				}
+				<b>finally</b>
+				{
+					<a href="#6d3e75141b62dab8" class="i field">_evictLock</a>.<a href="@0@mscorlib/A.html#63f3d76fa45ccc3d" class="i method">Set</a>();
+				}
+			}
+
+			<b>return</b> <span class="r10 r">v</span>;
+		}
+
+		<b>private</b> <span class="r0 r t">V</span> <a id="2c7f2ecc01decf6c" href="R/2c7f2ecc01decf6c.html" target="n" data-glyph="76,1" class="i method">Scan</a>(<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r14 rd" class="r14 r">n</span>, <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r15 rd" class="r15 r">pack</span>, <b>long</b> <span id="r16 rd" class="r16 r">position</span>)
+		{
+			<b>for</b> (; <span class="r14 r">n</span> != <b>null</b>; <span class="r14 r">n</span> = <span class="r14 r">n</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>)
+			{
+				<a href="#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r17 rd" class="r17 r">r</span> = <span class="r14 r">n</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>;
+				<b>if</b> (<span class="r17 r">r</span>.<a href="#f1ba50aca8206142" class="i field">pack</a> == <span class="r15 r">pack</span> &amp;&amp; <span class="r17 r">r</span>.<a href="#40fbb7b870fe4d40" class="i field">position</a> == <span class="r16 r">position</span>)
+				{
+					<span class="r0 r t">V</span> <span id="r18 rd" class="r18 r">v</span> = <span class="r17 r">r</span>.<a href="#0ec5751d7a1b4945" class="i method">get</a>();
+					<b>if</b> (<span class="r18 r">v</span> != <b>null</b>)
+					{
+						<a href="#1d7c9f1b4db5089c" class="i method">Hit</a>(<span class="r17 r">r</span>);
+						<b>return</b> <span class="r18 r">v</span>;
+					}
+					<span class="r14 r">n</span>.<a href="#6eccbfda4122b13f" class="i method">Kill</a>();
+					<b>break</b>;
+				}
+			}
+
+			<b>return null</b>;
+		}
+
+		<b>private void</b> <a id="1d7c9f1b4db5089c" href="R/1d7c9f1b4db5089c.html" target="n" data-glyph="76,1" class="i method">Hit</a>(<a href="#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r19 rd" class="r19 r">r</span>)
+		{
+			<span class="c">// We don&#39;t need to be 100% accurate here. Its sufficient that at least</span>
+			<span class="c">// one thread performs the increment. Any other concurrent access at</span>
+			<span class="c">// exactly the same time can simply use the same clock value.</span>
+			<span class="c">//</span>
+			<span class="c">// Consequently we attempt the set, but we don&#39;t try to recover should</span>
+			<span class="c">// it fail. This is why we don&#39;t use getAndIncrement() here.</span>
+			<span class="c">//</span>
+			<b>long</b> <span id="r20 rd" class="r20 r">c</span> = <a href="#4eb21944c02e7656" class="i field">_clock</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#2655510bfd9169d8" class="i method">get</a>();
+			<a href="#4eb21944c02e7656" class="i field">_clock</a>.<a href="Util/JavaHelper/AtomicReference.cs.html#82a8024e882ecaba" class="i method">compareAndSet</a>(<span class="r20 r">c</span>, <span class="r20 r">c</span> + 1);
+			<span class="r19 r">r</span>.<a href="#c1e2fe823f4cb520" class="i field">lastAccess</a> = <span class="r20 r">c</span>;
+		}
+
+        <b>private void</b> <a id="e29963e9afc5d24a" href="R/e29963e9afc5d24a.html" target="n" data-glyph="76,1" class="i method">Evict</a>()
+        {
+            <b>while</b> (<a href="#d12755e58eb0dca2" class="i method">isFull</a>())
+            {
+                <b>int</b> <span id="r21 rd" class="r21 r">ptr</span> = <a href="#4b01a98fc98f2b76" class="i field">Rng</a>.<a href="@0@mscorlib/A.html#8aeb183c03bdcdcf" class="i method">Next</a>(<a href="#2adde9e4be032b3d" class="i field">_tableSize</a>);
+                <a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r22 rd" class="r22 r">old</span> = <b>null</b>;
+                <b>int</b> <span id="r23 rd" class="r23 r">slot</span> = 0;
+                <b>for</b> (<b>int</b> <span id="r24 rd" class="r24 r">b</span> = <a href="#cd075c41bfb0eaa7" class="i field">_evictBatch</a> - 1; <span class="r24 r">b</span> &gt;= 0; <span class="r24 r">b</span>--, <span class="r21 r">ptr</span>++)
+                {
+                    <b>if</b> (<a href="#2adde9e4be032b3d" class="i field">_tableSize</a> &lt;= <span class="r21 r">ptr</span>)
+                        <span class="r21 r">ptr</span> = 0;
+                    <b>for</b> (<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r25 rd" class="r25 r">e</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r21 r">ptr</span>); <span class="r25 r">e</span> != <b>null</b>; <span class="r25 r">e</span> = <span class="r25 r">e</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>)
+                    {
+                        <b>if</b> (<span class="r25 r">e</span>.<a href="#8babccf0b750401c" class="i field">Dead</a>)
+                            <b>continue</b>;
+
+                        <b>if</b> (<span class="r22 r">old</span> == <b>null</b> || <span class="r25 r">e</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>.<a href="#c1e2fe823f4cb520" class="i field">lastAccess</a> &lt; <span class="r22 r">old</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>.<a href="#c1e2fe823f4cb520" class="i field">lastAccess</a>)
+                        {
+                            <span class="r22 r">old</span> = <span class="r25 r">e</span>;
+                            <span class="r23 r">slot</span> = <span class="r21 r">ptr</span>;
+                        }
+                    }
+                }
+
+                <b>if</b> (<span class="r22 r">old</span> != <b>null</b>)
+                {
+                    <span class="r22 r">old</span>.<a href="#6eccbfda4122b13f" class="i method">Kill</a>();
+                    <a href="#b03b2f3b3b810fdb" class="i method">Gc</a>();
+                    <a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r26 rd" class="r26 r">e1</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r23 r">slot</span>);
+                    <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#f09dca10d242f42a" class="i method">compareAndSet</a>(<span class="r23 r">slot</span>, <span class="r26 r">e1</span>, <a href="#829eee8d9a894c4d" class="i method">Clean</a>(<span class="r26 r">e1</span>));
+                }
+            }
+        }
+
+	    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Clear every entry from the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> This is a last-ditch effort to clear out the cache, such as before it</span>
+		<span class="c">///</span><span class="c"> gets replaced by another cache that is configured differently. This</span>
+		<span class="c">///</span><span class="c"> method tries to force every cached entry through </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r1 r t">R</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> to</span>
+		<span class="c">///</span><span class="c"> ensure that resources are correctly accounted for and cleaned up by the</span>
+		<span class="c">///</span><span class="c"> subclass. A concurrent reader loading entries while this method is</span>
+		<span class="c">///</span><span class="c"> running may cause resource accounting failures.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<b>internal void</b> <a id="e7f39fc02ecab103" href="R/e7f39fc02ecab103.html" target="n" data-glyph="74,1" class="i method">removeAll</a>()
+		{
+			<b>for</b> (<b>int</b> <span id="r27 rd" class="r27 r">s</span> = 0; <span class="r27 r">s</span> &lt; <a href="#2adde9e4be032b3d" class="i field">_tableSize</a>; <span class="r27 r">s</span>++)
+			{
+				<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r28 rd" class="r28 r">e1</span>;
+				<b>do</b>
+				{
+					<span class="r28 r">e1</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r27 r">s</span>);
+					<b>for</b> (<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r29 rd" class="r29 r">e</span> = <span class="r28 r">e1</span>; <span class="r29 r">e</span> != <b>null</b>; <span class="r29 r">e</span> = <span class="r29 r">e</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>)
+					{
+						<span class="r29 r">e</span>.<a href="#6eccbfda4122b13f" class="i method">Kill</a>();
+					}
+				} <b>while</b> (!<a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#f09dca10d242f42a" class="i method">compareAndSet</a>(<span class="r27 r">s</span>, <span class="r28 r">e1</span>, <b>null</b>));
+			}
+
+			<a href="#b03b2f3b3b810fdb" class="i method">Gc</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Clear all entries related to a single file.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Typically this method is invoked during </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>.<a href="PackFile.cs.html#7de83ea9bc1b508a" class="i method">Close</a>()<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">, when we</span>
+		<span class="c">///</span><span class="c"> know the pack is never going to be useful to us again (for example, it no</span>
+		<span class="c">///</span><span class="c"> longer exists on disk). A concurrent reader loading an entry from this</span>
+		<span class="c">///</span><span class="c"> same pack may cause the pack to become stuck in the cache anyway.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r30 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">the file to purge all entries of.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>internal void</b> <a id="d72599e650bbf0af" href="R/d72599e650bbf0af.html" target="n" data-glyph="74,1" class="i method">removeAll</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r30 rd" class="r30 r">pack</span>)
+		{
+			<b>for</b> (<b>int</b> <span id="r31 rd" class="r31 r">s</span> = 0; <span class="r31 r">s</span> &lt; <a href="#2adde9e4be032b3d" class="i field">_tableSize</a>; <span class="r31 r">s</span>++)
+			{
+				<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r32 rd" class="r32 r">e1</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r31 r">s</span>);
+				<b>bool</b> <span id="r33 rd" class="r33 r">hasDead</span> = <b>false</b>;
+				<b>for</b> (<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r34 rd" class="r34 r">e</span> = <span class="r32 r">e1</span>; <span class="r34 r">e</span> != <b>null</b>; <span class="r34 r">e</span> = <span class="r34 r">e</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>)
+				{
+					<b>if</b> (<span class="r34 r">e</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>.<a href="#f1ba50aca8206142" class="i field">pack</a> == <span class="r30 r">pack</span>)
+					{
+						<span class="r34 r">e</span>.<a href="#6eccbfda4122b13f" class="i method">Kill</a>();
+						<span class="r33 r">hasDead</span> = <b>true</b>;
+					}
+					<b>else if</b> (<span class="r34 r">e</span>.<a href="#8babccf0b750401c" class="i field">Dead</a>)
+						<span class="r33 r">hasDead</span> = <b>true</b>;
+				}
+				<b>if</b> (<span class="r33 r">hasDead</span>)
+					<a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#f09dca10d242f42a" class="i method">compareAndSet</a>(<span class="r31 r">s</span>, <span class="r32 r">e1</span>, <a href="#829eee8d9a894c4d" class="i method">Clean</a>(<span class="r32 r">e1</span>));
+			}
+			<a href="#b03b2f3b3b810fdb" class="i method">Gc</a>();
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Materialize an object that doesn&#39;t yet exist in the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> This method is invoked by </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#b03188b09564a29c" class="i method">getOrLoad</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> when the</span>
+		<span class="c">///</span><span class="c"> specified entity does not yet exist in the cache. Internal locking</span>
+		<span class="c">///</span><span class="c"> ensures that at most one thread can call this method for each unique</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(pack,position)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">, but multiple threads can call this method</span>
+		<span class="c">///</span><span class="c"> concurrently for different </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(pack,position)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> tuples.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r35 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The file to materialize the entry from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r36 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Offset within the file of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c"> the materialized object. Must never be null.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">exception</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#f092fb2b893a0162" class="t t">Exception</a><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The method was unable to materialize the object for this</span>
+		<span class="c">///</span><span class="c"> input pair. The usual reasons would be file corruption, file</span>
+		<span class="c">///</span><span class="c"> not found, out of file descriptors, etc.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">exception</span><span class="c">&gt;</span>
+		<b>internal abstract</b> <span class="r0 r t">V</span> <a id="d77e22bb6cd78ff0" href="R/d77e22bb6cd78ff0.html" target="n" data-glyph="74,1" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r35 rd" class="r35 r">pack</span>, <b>long</b> <span id="r36 rd" class="r36 r">position</span>);
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Construct a Ref (SoftReference) around a cached entity.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Implementing this is only necessary if the subclass is performing</span>
+		<span class="c">///</span><span class="c"> resource accounting during </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> and</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r1 r t">R</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> requires some information to update the accounting.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> Implementors </span><span class="c">&lt;</span><span class="c">b</span><span class="c">&gt;</span><span class="c">MUST</span><span class="c">&lt;/</span><span class="c">b</span><span class="c">&gt;</span><span class="c"> ensure that the returned reference uses the</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#c1b4acfdac8b93e1" class="i field">queue</a><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Queue</span><span class="c">&lt;/</span><span class="c">see</span><span class="c">&gt;</span><span class="c">, otherwise </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r1 r t">R</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> will not be</span>
+		<span class="c">///</span><span class="c"> invoked at the proper time.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r37 r">pack</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">The file to materialize the entry from.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r38 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Offset within the file of the entry.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r39 r">v</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> The object returned by </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A weak reference subclass wrapped around </span><span class="c">&lt;</span><span class="c">typeparamref</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r0 r t">V</span><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>internal virtual</b> <span class="r1 r t">R</span> <a id="a6a46274fdd0cb2e" href="R/a6a46274fdd0cb2e.html" target="n" data-glyph="74,1" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r37 rd" class="r37 r">pack</span>, <b>long</b> <span id="r38 rd" class="r38 r">position</span>, <span class="r0 r t">V</span> <span id="r39 rd" class="r39 r">v</span>)
+		{
+			<b>return</b> (<span class="r1 r t">R</span>)<b>new</b> <a href="#a622209deb5f6be5" class="t constructor">Ref</a>&lt;<span class="r0 r t">V</span>&gt;(<span class="r37 r">pack</span>, <span class="r38 r">position</span>, <span class="r39 r">v</span>, <a href="#c1b4acfdac8b93e1" class="i field">queue</a>);
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Update accounting information now that an object has left the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> This method is invoked exactly once for the combined</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> and</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>, <span class="r0 r t">V</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> invocation pair that was used</span>
+		<span class="c">///</span><span class="c"> to construct and insert an object into the cache.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r40 r">ref</span><span class="c">&quot;</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> the reference wrapped around the object. Implementations must</span>
+		<span class="c">///</span><span class="c"> be prepared for </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">@ref.get()</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> to return null.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<b>internal virtual void</b> <a id="10a6690f3dd8d5bc" href="R/10a6690f3dd8d5bc.html" target="n" data-glyph="74,1" class="i method">clear</a>(<span class="r1 r t">R</span> <span id="r40 rd" class="r40 r">@ref</span>)
+		{
+			<span class="c">// Do nothing by default.</span>
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Determine if the cache is full and requires eviction of entries.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> By default this method returns false. Implementors may override to</span>
+		<span class="c">///</span><span class="c"> consult with the accounting updated by </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#d77e22bb6cd78ff0" class="i method">load</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">,</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#a6a46274fdd0cb2e" class="i method">createRef</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a>, <b>long</b>, <span class="r0 r t">V</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> and </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r1 r t">R</span>)<span class="c">&quot;</span><span class="c">/&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> True if the cache is still over-limit and requires eviction of</span>
+		<span class="c">///</span><span class="c"> more entries.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>internal virtual bool</b> <a id="d12755e58eb0dca2" href="R/d12755e58eb0dca2.html" target="n" data-glyph="74,1" class="i method">isFull</a>()
+		{
+			<b>return false</b>;
+		}
+
+		<b>private void</b> <a id="b03b2f3b3b810fdb" href="R/b03b2f3b3b810fdb.html" target="n" data-glyph="76,1" class="i method">Gc</a>()
+		{
+			<span class="r1 r t">R</span> <span id="r41 rd" class="r41 r">r</span>;
+
+			<b>while</b> (<a href="#c1b4acfdac8b93e1" class="i field">queue</a>.<a href="@0@mscorlib/A.html#39eb0fdf0a2455e9" class="i property">Count</a> &gt; 0)
+			{
+				<span class="r41 r">r</span> = (<span class="r1 r t">R</span>)<a href="#c1b4acfdac8b93e1" class="i field">queue</a>.<a href="@0@mscorlib/A.html#26ae1179d4933f0a" class="i method">Dequeue</a>();
+				<span class="c">// Sun&#39;s Java 5 and 6 implementation have a bug where a Reference</span>
+				<span class="c">// can be enqueued and dequeued twice on the same reference queue</span>
+				<span class="c">// due to a race condition within Queue.enqueue(Reference).</span>
+				<span class="c">//</span>
+				<span class="c">// http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=6837858</span>
+				<span class="c">//</span>
+				<span class="c">// We CANNOT permit a Reference to come through us twice, as it will</span>
+				<span class="c">// skew the resource counters we maintain. Our canClear() check here</span>
+				<span class="c">// provides a way to skip the redundant dequeues, if any.</span>
+				<span class="c">//</span>
+				<b>if</b> (!<span class="r41 r">r</span>.<a href="#4558bd898fd4a8ed" class="i method">canClear</a>()) <b>continue</b>;
+
+				<a href="#10a6690f3dd8d5bc" class="i method">clear</a>(<span class="r41 r">r</span>);
+
+				<b>bool</b> <span id="r42 rd" class="r42 r">found</span> = <b>false</b>;
+				<b>int</b> <span id="r43 rd" class="r43 r">s</span> = <a href="#51929af292705f2d" class="i method">Slot</a>(<span class="r41 r">r</span>.<a href="#f1ba50aca8206142" class="i field">pack</a>, <span class="r41 r">r</span>.<a href="#40fbb7b870fe4d40" class="i field">position</a>);
+				<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r44 rd" class="r44 r">e1</span> = <a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#2d63652473840661" class="i method">get</a>(<span class="r43 r">s</span>);
+
+				<b>for</b> (<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r45 rd" class="r45 r">n</span> = <span class="r44 r">e1</span>; <span class="r45 r">n</span> != <b>null</b>; <span class="r45 r">n</span> = <span class="r45 r">n</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>)
+				{
+					<b>if</b> (!<span class="r45 r">n</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>.<a href="@0@mscorlib/A.html#517682d5f6f4f8b4" class="i method">Equals</a>(<span class="r41 r">r</span>)) <b>continue</b>;
+
+					<span class="c">//n.Dead = true;</span>
+					<span class="r42 r">found</span> = <b>true</b>;
+					<b>break</b>;
+				}
+
+				<b>if</b> (<span class="r42 r">found</span>)
+				{
+					<a href="#7ff53100882a5ef7" class="i field">_table</a>.<a href="Util/AtomicReferenceArray.cs.html#f09dca10d242f42a" class="i method">compareAndSet</a>(<span class="r43 r">s</span>, <span class="r44 r">e1</span>, <a href="#829eee8d9a894c4d" class="i method">Clean</a>(<span class="r44 r">e1</span>));
+				}
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> Compute the hash code value for a </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">(PackFile,position)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c"> tuple.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		<span class="c">///</span><span class="c"> For example, </span><span class="c">&lt;</span><span class="c">code</span><span class="c">&gt;</span><span class="c">return packHash + (int) (position &gt;&gt;&gt; 4)</span><span class="c">&lt;/</span><span class="c">code</span><span class="c">&gt;</span><span class="c">.</span>
+		<span class="c">///</span><span class="c"> Implementors must override with a suitable hash (for example, a different</span>
+		<span class="c">///</span><span class="c"> right shift on the position).</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r46 r">packHash</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">hash code for the file being accessed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">param</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r47 r">position</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">position within the file being accessed.</span><span class="c">&lt;/</span><span class="c">param</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">returns</span><span class="c">&gt;</span><span class="c">a reasonable hash code mixing the two values.</span><span class="c">&lt;/</span><span class="c">returns</span><span class="c">&gt;</span>
+		<b>internal abstract int</b> <a id="00f254641bab867c" href="R/00f254641bab867c.html" target="n" data-glyph="74,1" class="i method">hash</a>(<b>int</b> <span id="r46 rd" class="r46 r">packHash</span>, <b>long</b> <span id="r47 rd" class="r47 r">position</span>);
+
+		<b>private int</b> <a id="51929af292705f2d" href="R/51929af292705f2d.html" target="n" data-glyph="76,1" class="i method">Slot</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r48 rd" class="r48 r">pack</span>, <b>long</b> <span id="r49 rd" class="r49 r">position</span>)
+		{
+			<b>return</b> (<b>int</b>)((<b>uint</b>)<a href="#00f254641bab867c" class="i method">hash</a>(<span class="r48 r">pack</span>.<a href="PackFile.cs.html#d1b2e8ec10b52181" class="i property">Hash</a>, <span class="r49 r">position</span>) &gt;&gt; 1) % <a href="#2adde9e4be032b3d" class="i field">_tableSize</a>;
+		}
+
+		<b>private</b> <a href="#e2610b7bb0c17dce" class="t t">LockTarget</a> <a id="c8bf781b998f4aa9" href="R/c8bf781b998f4aa9.html" target="n" data-glyph="76,1" class="i method">Lock</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r50 rd" class="r50 r">pack</span>, <b>long</b> <span id="r51 rd" class="r51 r">position</span>)
+		{
+			<b>return</b> <a href="#0e87a23ed86fd748" class="i field">_locks</a>[(<b>int</b>)((<b>uint</b>)<a href="#00f254641bab867c" class="i method">hash</a>(<span class="r50 r">pack</span>.<a href="PackFile.cs.html#d1b2e8ec10b52181" class="i property">Hash</a>, <span class="r51 r">position</span>) &gt;&gt; 1) % <a href="#0e87a23ed86fd748" class="i field">_locks</a>.<a href="@0@mscorlib/A.html#42e9b7616956cf94" class="i property">Length</a>];
+		}
+
+		<b>private static</b> <a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <a id="829eee8d9a894c4d" href="R/829eee8d9a894c4d.html" target="n" data-glyph="76,1" class="i method">Clean</a>(<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r52 rd" class="r52 r">top</span>)
+		{
+			<b>while</b> (<span class="r52 r">top</span> != <b>null</b> &amp;&amp; <span class="r52 r">top</span>.<a href="#8babccf0b750401c" class="i field">Dead</a>)
+			{
+				<span class="r52 r">top</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>.<a href="#8c7951eac2ea3313" class="i method">enqueue</a>();
+				<span class="r52 r">top</span> = <span class="r52 r">top</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>;
+			}
+			<b>if</b> (<span class="r52 r">top</span> == <b>null</b>) <b>return null</b>;
+
+			<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r0 r t">V</span>&gt; <span id="r53 rd" class="r53 r">n</span> = <a href="#829eee8d9a894c4d" class="i method">Clean</a>(<span class="r52 r">top</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a>);
+			<b>return</b> <span class="r53 r">n</span> == <span class="r52 r">top</span>.<a href="#a64ca5f5d650f3cb" class="i field">Next</a> ? <span class="r52 r">top</span> : <b>new</b> <a href="#4467d145e0005533" class="t constructor">Entry</a>&lt;<span class="r0 r t">V</span>&gt;(<span class="r53 r">n</span>, <span class="r52 r">top</span>.<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>);
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">region</span> Nested Types
+
+		<b>private class</b> <a id="52d82c4107cbd45f" href="R/52d82c4107cbd45f.html" target="n" data-glyph="4,1" class="t t">Entry</a>&lt;<span id="r54 rd t" class="r54 r t">T</span>&gt;
+		{
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> Next entry in the hash table&#39;s chain list.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<b>public readonly</b> <a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r54 r t">T</span>&gt; <a id="a64ca5f5d650f3cb" href="R/a64ca5f5d650f3cb.html" target="n" data-glyph="42,2" class="i field">Next</a>;
+
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+			<span class="c">///</span><span class="c"> The referenced object.</span>
+			<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+			<b>public readonly</b> <a href="#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<span class="r54 r t">T</span>&gt; <a id="cb3cc6213d3ddf43" href="R/cb3cc6213d3ddf43.html" target="n" data-glyph="42,2" class="i field">Ref</a>;
+
+		    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		    <span class="c">///</span><span class="c"> Marked true when </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#cb3cc6213d3ddf43" class="i field">Ref</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> returns null and the </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="#cb3cc6213d3ddf43" class="i field">Ref</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> </span>
+		    <span class="c">///</span><span class="c"> is garbage collected.</span>
+		    <span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">para</span><span class="c"> </span><span class="c">/&gt;</span>
+		    <span class="c">///</span><span class="c"> A true here indicates that the @ref is no longer accessible, and that</span>
+		    <span class="c">///</span><span class="c"> we therefore need to eventually purge this Entry object out of the</span>
+		    <span class="c">///</span><span class="c"> bucket&#39;s chain.</span>
+		    <span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		    <b>public bool</b> <a id="8babccf0b750401c" href="R/8babccf0b750401c.html" target="n" data-glyph="42,2" class="i field">Dead</a>;
+
+			<b>public</b> <a id="4467d145e0005533" href="R/4467d145e0005533.html" target="n" data-glyph="72,2" class="i constructor">Entry</a>(<a href="#52d82c4107cbd45f" class="t t">Entry</a>&lt;<span class="r54 r t">T</span>&gt; <span id="r55 rd" class="r55 r">n</span>, <a href="#5b4c76f973a5e3a8" class="t t">Ref</a>&lt;<span class="r54 r t">T</span>&gt; <span id="r56 rd" class="r56 r">r</span>)
+			{
+				<a href="#a64ca5f5d650f3cb" class="i field">Next</a> = <span class="r55 r">n</span>;
+				<a href="#cb3cc6213d3ddf43" class="i field">Ref</a> = <span class="r56 r">r</span>;
+			}
+
+			<b>public void</b> <a id="6eccbfda4122b13f" href="R/6eccbfda4122b13f.html" target="n" data-glyph="72,2" class="i method">Kill</a>()
+			{
+			    <a href="#8babccf0b750401c" class="i field">Dead</a> = <b>true</b>;
+				<a href="#cb3cc6213d3ddf43" class="i field">Ref</a>.<a href="#8c7951eac2ea3313" class="i method">enqueue</a>();
+			}
+		}
+
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> A </span><span class="c">&lt;</span><span class="c">see</span><span class="c"> </span><span class="c">cref</span><span class="c">=</span><span class="c">&quot;</span><a href="@0@mscorlib/A.html#985a18841b9c6087" class="t t">WeakReference</a><span class="c">&quot;</span><span class="c">/&gt;</span><span class="c"> wrapped around a cached object.</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;/</span><span class="c">summary</span><span class="c">&gt;</span>
+		<span class="c">///</span><span class="c"> </span><span class="c">&lt;</span><span class="c">typeparam</span><span class="c"> </span><span class="c">name</span><span class="c">=</span><span class="c">&quot;</span><span class="r57 r t">T</span><span class="c">&quot;</span><span class="c">&gt;</span><span class="c">Type of the cached object.</span><span class="c">&lt;/</span><span class="c">typeparam</span><span class="c">&gt;</span>
+		<b>internal class</b> <a id="5b4c76f973a5e3a8" href="R/5b4c76f973a5e3a8.html" target="n" data-glyph="2,1" class="t t">Ref</a>&lt;<span id="r57 rd t" class="r57 r t">T</span>&gt; : <a href="@0@mscorlib/A.html#985a18841b9c6087" class="t t">WeakReference</a>
+		{
+			<b>private readonly</b> <a href="@0@mscorlib/A.html#f7cdfd0f848ca249" class="t t">Queue</a> <a id="fe6fb9bb2e30d8b4" href="R/fe6fb9bb2e30d8b4.html" target="n" data-glyph="46,2" class="i field">_queue</a>;	
+			<b>private</b> <a href="@0@mscorlib/A.html#d9262ceecc1719ab" class="t t">Object</a> <a id="303ba02f237cbac5" href="R/303ba02f237cbac5.html" target="n" data-glyph="46,2" class="i field">locker</a> = <b>new</b> <a href="@0@mscorlib/A.html#38a0f6ea217e6f67" class="t constructor">Object</a>();
+
+			<b>public</b> <a id="a622209deb5f6be5" href="R/a622209deb5f6be5.html" target="n" data-glyph="72,2" class="i constructor">Ref</a>(<a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <span id="r58 rd" class="r58 r">pack</span>, <b>long</b> <span id="r59 rd" class="r59 r">position</span>, <span class="r57 r t">T</span> <span id="r60 rd" class="r60 r">v</span>, <a href="@0@mscorlib/A.html#f7cdfd0f848ca249" class="t t">Queue</a> <span id="r61 rd" class="r61 r">queue</span>)
+				: <a href="@0@mscorlib/A.html#85dfe4b08772c72b" class="k">base</a>(<span class="r60 r">v</span>)
+			{
+				<a href="#fe6fb9bb2e30d8b4" class="i field">_queue</a> = <span class="r61 r">queue</span>;
+				<a href="#5b4c76f973a5e3a8" class="k">this</a>.<a href="#f1ba50aca8206142" class="i field">pack</a> = <span class="r58 r">pack</span>;
+				<a href="#5b4c76f973a5e3a8" class="k">this</a>.<a href="#40fbb7b870fe4d40" class="i field">position</a> = <span class="r59 r">position</span>;
+			}
+
+			<b>public</b> <a href="PackFile.cs.html#0c479d44fa7c3e9d" class="t t">PackFile</a> <a id="f1ba50aca8206142" href="R/f1ba50aca8206142.html" target="n" data-glyph="42,2" class="i field">pack</a>;
+			<b>public long</b> <a id="40fbb7b870fe4d40" href="R/40fbb7b870fe4d40.html" target="n" data-glyph="42,2" class="i field">position</a>;
+			<b>public long</b> <a id="c1e2fe823f4cb520" href="R/c1e2fe823f4cb520.html" target="n" data-glyph="42,2" class="i field">lastAccess</a>;
+			<b>private bool</b> <a id="6b36e4e1c20a8e22" href="R/6b36e4e1c20a8e22.html" target="n" data-glyph="46,2" class="i field">cleared</a>;
+
+			<b>public bool</b> <a id="8c7951eac2ea3313" href="R/8c7951eac2ea3313.html" target="n" data-glyph="72,2" class="i method">enqueue</a>()
+			{
+				<b>if</b> (<a href="#fe6fb9bb2e30d8b4" class="i field">_queue</a>.<a href="@0@mscorlib/A.html#b41b6576d4889765" class="i method">Contains</a>(<a href="#5b4c76f973a5e3a8" class="k">this</a>)) <b>return false</b>;
+				<a href="#fe6fb9bb2e30d8b4" class="i field">_queue</a>.<a href="@0@mscorlib/A.html#9f299e3c4b847191" class="i method">Enqueue</a>(<a href="#5b4c76f973a5e3a8" class="k">this</a>);
+				<b>return true</b>;
+			}
+
+			<b>public bool</b> <a id="4558bd898fd4a8ed" href="R/4558bd898fd4a8ed.html" target="n" data-glyph="72,2" class="i method">canClear</a>()
+			{
+				<b>lock</b>(<a href="#303ba02f237cbac5" class="i field">locker</a>)
+				{
+					<b>if</b> (<a href="#6b36e4e1c20a8e22" class="i field">cleared</a>)
+	                    <b>return false</b>;
+					<a href="#6b36e4e1c20a8e22" class="i field">cleared</a> = <b>true</b>;
+					<b>return true</b>;
+				}
+			}
+
+			<b>public</b> <span class="r57 r t">T</span> <a id="0ec5751d7a1b4945" href="R/0ec5751d7a1b4945.html" target="n" data-glyph="72,2" class="i method">get</a>()
+			{
+				<b>return</b> (<span class="r57 r t">T</span>)<a href="@0@mscorlib/A.html#7ec0249fd1fddd83" class="i property">Target</a>;
+			}
+		}
+
+		<b>private class</b> <a id="e2610b7bb0c17dce" href="R/e2610b7bb0c17dce.html" target="n" data-glyph="4,1" class="t t"><span id="91ce6c00cefd29f3">LockTarget</span></a>
+		{
+			<span class="c">// Used only as target for locking</span>
+		}
+
+		<span class="k preprocess">#</span><span class="k preprocess">endregion</span>
+	}
+}</pre></td></tr></table></div></body></html>
