@@ -1,3 +1,6 @@
+# xwininfo - XWindows server 
+
+```
 $ export DISPLAY=192.168.2.106:0
 $ xwininfo | awk '/Window id:/ {print $4}'
 
@@ -33,3 +36,4 @@ xwininfo: Window id: 0x800003 "Tux Commander  [/]"
 $ xkill -id 0x800003
 xkill:  killing creator of resource 0x800003
 
+```
